@@ -14,7 +14,7 @@ class ConfigLoader:
         "instance_type": "t3.medium",
         "disk_size": 50,
         "os_flavor": "ubuntu-22.04",
-        "port": 8888,
+        "ports": [8888],
         "include_vcs": False,
         "ignore": ["*.pyc", "__pycache__", "*.log", ".DS_Store"],
         "env_filter": ["AWS_.*"],
@@ -79,6 +79,13 @@ class ConfigLoader:
 
             if machine_name not in machines:
                 available = list(machines.keys())
+
+                if not available:
+                    raise ValueError(
+                        f"Machine '{machine_name}' not found in configuration. "
+                        f"No machines are defined in the config file."
+                    )
+
                 raise ValueError(
                     f"Machine '{machine_name}' not found in configuration. "
                     f"Available machines: {available}"
