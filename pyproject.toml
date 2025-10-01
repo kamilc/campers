@@ -17,3 +17,7 @@ dependencies = [
 dev = [
     "ruff>=0.13.2",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["tmp", ".git", ".venv", "__pycache__"]

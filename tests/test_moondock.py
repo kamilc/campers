@@ -31,17 +31,18 @@ def moondock_module():
         The Moondock class for testing.
 
     """
+    import importlib.util
     import sys
 
     project_root = Path(__file__).parent.parent
-    sys.path.insert(0, str(project_root))
+    moondock_script = project_root / "moondock.py"
 
-    try:
-        from moondock import Moondock
+    spec = importlib.util.spec_from_file_location("moondock_cli", moondock_script)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["moondock_cli"] = module
+    spec.loader.exec_module(module)
 
-        yield Moondock
-    finally:
-        sys.path.pop(0)
+    yield module.Moondock
 
 
 def test_moondock_class_exists(moondock_module) -> None:
