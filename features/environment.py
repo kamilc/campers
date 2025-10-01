@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from moto import mock_aws
+
 
 def before_all(context) -> None:
     """Setup executed before all tests."""
@@ -12,6 +14,49 @@ def before_all(context) -> None:
 
     context.project_root = project_root
     context.tmp_dir = tmp_dir
+
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    os.environ["MOONDOCK_TEST_MODE"] = "1"
+
+
+def before_scenario(context, scenario) -> None:
+    """Setup executed before each scenario."""
+    import boto3
+
+    if hasattr(context, "mock_aws_env") and context.mock_aws_env:
+        try:
+            context.mock_aws_env.stop()
+        except RuntimeError:
+            pass
+
+    context.mock_aws_env = mock_aws()
+    context.mock_aws_env.start()
+
+    if "AMI not found" not in scenario.name:
+        ec2_client = boto3.client("ec2", region_name="us-east-1")
+
+        ec2_client.register_image(
+            Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+            Description="Ubuntu 22.04 LTS",
+            Architecture="x86_64",
+            RootDeviceName="/dev/sda1",
+            VirtualizationType="hvm",
+        )
+
+        original_describe_images = ec2_client.describe_images
+
+        def mock_describe_images(**kwargs):
+            response = original_describe_images(**kwargs)
+
+            for image in response.get("Images", []):
+                image["OwnerId"] = "099720109477"
+
+            return response
+
+        ec2_client.describe_images = mock_describe_images
+        context.patched_ec2_client = ec2_client
 
 
 def after_scenario(context, scenario) -> None:
@@ -24,6 +69,33 @@ def after_scenario(context, scenario) -> None:
     scenario : behave.model.Scenario
         The scenario that just finished.
     """
+    if hasattr(context, "mock_aws_env") and context.mock_aws_env:
+        try:
+            context.mock_aws_env.stop()
+        except RuntimeError:
+            pass
+
+    if hasattr(context, "cleanup_key_file"):
+        if context.cleanup_key_file.exists():
+            context.cleanup_key_file.unlink()
+
+    if hasattr(context, "key_file"):
+        if context.key_file.exists():
+            context.key_file.unlink()
+
+    keys_dir = Path.home() / ".moondock" / "keys"
+
+    if keys_dir.exists() and not list(keys_dir.iterdir()):
+        keys_dir.rmdir()
+
+        if keys_dir.parent.exists() and not list(keys_dir.parent.iterdir()):
+            keys_dir.parent.rmdir()
+
+    if hasattr(context, "aws_keys_backup"):
+        for key, value in context.aws_keys_backup.items():
+            if value is not None:
+                os.environ[key] = value
+
     if hasattr(context, "temp_config_file"):
         if os.path.exists(context.temp_config_file):
             os.unlink(context.temp_config_file)
@@ -39,16 +111,23 @@ def after_scenario(context, scenario) -> None:
 def after_all(context) -> None:
     """Cleanup executed after all tests.
 
-    Currently no cleanup is required for skeleton tests as no persistent
-    resources are created. Future implementations may need to clean up:
-    - AWS resources (EC2 instances, security groups, key pairs)
-    - Temporary SSH keys
-    - Test artifacts beyond tmp/ directory
-
     Parameters
     ----------
     context : behave.runner.Context
         The Behave context object.
 
     """
-    pass
+    if hasattr(context, "mock_aws_env") and context.mock_aws_env:
+        try:
+            context.mock_aws_env.stop()
+        except RuntimeError:
+            pass
+
+    for key in [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+        "MOONDOCK_TEST_MODE",
+    ]:
+        if key in os.environ:
+            del os.environ[key]

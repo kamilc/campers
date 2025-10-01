@@ -4,6 +4,7 @@ import importlib.util
 import os
 from pathlib import Path
 from typing import Any, Generator
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -78,8 +79,8 @@ def write_config(config_file: Path):
 
 
 @pytest.fixture
-def moondock(moondock_module: Any) -> Any:
-    """Create Moondock instance.
+def mock_ec2_manager(moondock_module):
+    """Mock EC2Manager for CLI tests.
 
     Parameters
     ----------
@@ -88,7 +89,39 @@ def moondock(moondock_module: Any) -> Any:
 
     Returns
     -------
+    MagicMock
+        Mock EC2Manager with launch_instance returning test instance details
+    """
+    mock_instance_details = {
+        "instance_id": "i-1234567890abcdef0",
+        "public_ip": "1.2.3.4",
+        "state": "running",
+        "key_file": "/home/user/.moondock/keys/1234567890.pem",
+        "security_group_id": "sg-1234567890abcdef0",
+        "unique_id": "1234567890",
+    }
+
+    with patch.object(moondock_module, "EC2Manager") as MockEC2Manager:
+        mock_manager = MagicMock()
+        mock_manager.launch_instance.return_value = mock_instance_details
+        MockEC2Manager.return_value = mock_manager
+        yield mock_manager
+
+
+@pytest.fixture
+def moondock(moondock_module: Any, mock_ec2_manager: MagicMock) -> Any:
+    """Create Moondock instance with mocked EC2Manager.
+
+    Parameters
+    ----------
+    moondock_module : Any
+        The moondock module from moondock_module fixture
+    mock_ec2_manager : MagicMock
+        Mocked EC2Manager from mock_ec2_manager fixture
+
+    Returns
+    -------
     Any
-        Moondock instance
+        Moondock instance with EC2Manager mocked
     """
     return moondock_module.Moondock()

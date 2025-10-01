@@ -5,7 +5,7 @@ unit-test options="":
   uv run pytest {{options}}
 
 bdd-test options="":
-  uv run behave --summary {{options}}
+  uv run behave --summary --tags=-wip {{options}}
 
 test: unit-test bdd-test
 

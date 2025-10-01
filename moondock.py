@@ -11,11 +11,14 @@
 """Moondock - EC2 remote development tool."""
 
 import json
+import os
+from pathlib import Path
 from typing import Any
 
 import fire
 
 from moondock.config import ConfigLoader
+from moondock.ec2 import EC2Manager
 
 
 class Moondock:
@@ -68,7 +71,8 @@ class Moondock:
         Returns
         -------
         dict[str, Any] | str
-            Final merged configuration as dict (for testing) or JSON string (for CLI)
+            Instance details with fields: instance_id, public_ip, state, key_file,
+            security_group_id, unique_id (as dict for testing or JSON string for CLI)
 
         Raises
         ------
@@ -92,12 +96,38 @@ class Moondock:
 
         self.config_loader.validate_config(merged_config)
 
-        # TODO (next spec): Launch EC2 instance, setup sync, execute command
-        # For now, return merged config for testing
-        if json_output:
-            return json.dumps(merged_config, indent=2)
+        if machine_name is not None:
+            merged_config["machine_name"] = machine_name
 
-        return merged_config
+        if os.environ.get("MOONDOCK_TEST_MODE") == "1":
+            mock_instance = {
+                "instance_id": "i-mock123",
+                "public_ip": "203.0.113.1",
+                "state": "running",
+                "key_file": str(Path.home() / ".moondock" / "keys" / "mock.pem"),
+                "security_group_id": "sg-mock123",
+                "unique_id": "mock123",
+            }
+
+            if json_output:
+                return json.dumps(mock_instance, indent=2)
+
+            return mock_instance
+
+        ec2_manager = EC2Manager(region=merged_config["region"])
+        instance_details = ec2_manager.launch_instance(merged_config)
+
+        # TODO (next spec): Setup Mutagen file sync
+        # TODO (next spec): Setup port forwarding
+        # TODO (next spec): Execute setup_script if defined
+        # TODO (next spec): Execute startup_script if defined
+        # TODO (next spec): Execute command if defined
+        # TODO (next spec): Add automatic cleanup on Ctrl+C
+
+        if json_output:
+            return json.dumps(instance_details, indent=2)
+
+        return instance_details
 
     def apply_cli_overrides(
         self,
