@@ -22,17 +22,38 @@ def before_all(context) -> None:
 
 
 def before_scenario(context, scenario) -> None:
-    """Setup executed before each scenario."""
+    """Setup executed before each scenario.
+
+    Parameters
+    ----------
+    context : behave.runner.Context
+        The Behave context object.
+    scenario : behave.model.Scenario
+        The scenario about to run.
+    """
     import boto3
 
     if hasattr(context, "mock_aws_env") and context.mock_aws_env:
         try:
             context.mock_aws_env.stop()
-        except RuntimeError:
+        except (RuntimeError, Exception):
             pass
 
     context.mock_aws_env = mock_aws()
     context.mock_aws_env.start()
+
+    context.ec2_config = None
+    context._config = None
+    context.instance_details = None
+    context.exception = None
+    context.unique_id = None
+    context.security_group_id = None
+    context.instance_id = None
+    context.key_file = None
+    context.cleanup_key_file = None
+    context.ec2_client = None
+    context.ec2_manager = None
+    context.instance = None
 
     if "AMI not found" not in scenario.name:
         ec2_client = boto3.client("ec2", region_name="us-east-1")
@@ -69,43 +90,73 @@ def after_scenario(context, scenario) -> None:
     scenario : behave.model.Scenario
         The scenario that just finished.
     """
-    if hasattr(context, "mock_aws_env") and context.mock_aws_env:
-        try:
-            context.mock_aws_env.stop()
-        except RuntimeError:
-            pass
+    try:
+        if hasattr(context, "mock_aws_env") and context.mock_aws_env:
+            try:
+                context.mock_aws_env.stop()
+            except (RuntimeError, Exception):
+                pass
+    except Exception:
+        pass
 
-    if hasattr(context, "cleanup_key_file"):
-        if context.cleanup_key_file.exists():
-            context.cleanup_key_file.unlink()
+    try:
+        if hasattr(context, "cleanup_key_file") and context.cleanup_key_file:
+            if (
+                hasattr(context.cleanup_key_file, "exists")
+                and context.cleanup_key_file.exists()
+            ):
+                context.cleanup_key_file.unlink()
+    except Exception:
+        pass
 
-    if hasattr(context, "key_file"):
-        if context.key_file.exists():
-            context.key_file.unlink()
+    try:
+        if hasattr(context, "key_file") and context.key_file:
+            if hasattr(context.key_file, "exists") and context.key_file.exists():
+                context.key_file.unlink()
+    except Exception:
+        pass
 
-    keys_dir = Path.home() / ".moondock" / "keys"
+    try:
+        keys_dir = Path.home() / ".moondock" / "keys"
 
-    if keys_dir.exists() and not list(keys_dir.iterdir()):
-        keys_dir.rmdir()
+        if keys_dir.exists() and not list(keys_dir.iterdir()):
+            keys_dir.rmdir()
 
-        if keys_dir.parent.exists() and not list(keys_dir.parent.iterdir()):
-            keys_dir.parent.rmdir()
+            if keys_dir.parent.exists() and not list(keys_dir.parent.iterdir()):
+                keys_dir.parent.rmdir()
+    except Exception:
+        pass
 
-    if hasattr(context, "aws_keys_backup"):
-        for key, value in context.aws_keys_backup.items():
-            if value is not None:
-                os.environ[key] = value
+    try:
+        if hasattr(context, "aws_keys_backup"):
+            for key, value in context.aws_keys_backup.items():
+                try:
+                    if value is not None:
+                        os.environ[key] = value
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
-    if hasattr(context, "temp_config_file"):
-        if os.path.exists(context.temp_config_file):
-            os.unlink(context.temp_config_file)
+    try:
+        if hasattr(context, "temp_config_file"):
+            if os.path.exists(context.temp_config_file):
+                os.unlink(context.temp_config_file)
+    except Exception:
+        pass
 
-    if hasattr(context, "env_config_file"):
-        if os.path.exists(context.env_config_file):
-            os.unlink(context.env_config_file)
+    try:
+        if hasattr(context, "env_config_file"):
+            if os.path.exists(context.env_config_file):
+                os.unlink(context.env_config_file)
+    except Exception:
+        pass
 
-    if "MOONDOCK_CONFIG" in os.environ:
-        del os.environ["MOONDOCK_CONFIG"]
+    try:
+        if "MOONDOCK_CONFIG" in os.environ:
+            del os.environ["MOONDOCK_CONFIG"]
+    except Exception:
+        pass
 
 
 def after_all(context) -> None:

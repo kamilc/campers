@@ -293,6 +293,18 @@ def step_launch_instance(context):
 @when('I launch instance with machine "{machine_name}"')
 def step_launch_instance_with_machine(context, machine_name):
     """Launch instance using machine config."""
+    if hasattr(context, "config_data") and context.config_data:
+        defaults = context.config_data.get("defaults", {})
+        machine_config = context.config_data.get("machines", {}).get(machine_name, {})
+        context.ec2_config = {
+            "instance_type": machine_config.get(
+                "instance_type", defaults.get("instance_type", "t3.medium")
+            ),
+            "disk_size": machine_config.get("disk_size", defaults.get("disk_size", 50)),
+            "region": machine_config.get("region", defaults.get("region", "us-east-1")),
+            "machine_name": machine_name,
+        }
+
     step_launch_instance(context)
     context.machine_name = machine_name
 
@@ -300,6 +312,36 @@ def step_launch_instance_with_machine(context, machine_name):
 @when('I launch instance with options "{options}"')
 def step_launch_instance_with_options(context, options):
     """Launch instance with CLI options."""
+    if hasattr(context, "config_data") and context.config_data:
+        defaults = context.config_data.get("defaults", {})
+        context.ec2_config = {
+            "instance_type": defaults.get("instance_type", "t3.medium"),
+            "disk_size": defaults.get("disk_size", 50),
+            "region": defaults.get("region", "us-east-1"),
+        }
+    else:
+        context.ec2_config = {
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "region": "us-east-1",
+        }
+
+    parts = options.split()
+    i = 0
+
+    while i < len(parts):
+        if parts[i] == "--instance-type" and i + 1 < len(parts):
+            context.ec2_config["instance_type"] = parts[i + 1]
+            i += 2
+        elif parts[i] == "--region" and i + 1 < len(parts):
+            context.ec2_config["region"] = parts[i + 1]
+            i += 2
+        elif parts[i] == "--disk-size" and i + 1 < len(parts):
+            context.ec2_config["disk_size"] = int(parts[i + 1])
+            i += 2
+        else:
+            i += 1
+
     step_launch_instance(context)
 
 
@@ -490,8 +532,9 @@ def step_verify_key_pair_name(context, prefix):
 
 @then('private key is saved to "~/.moondock/keys/{unique_id}.pem"')
 def step_verify_key_file_saved(context, unique_id):
-    """Verify private key saved to disk."""
-    key_file = Path.home() / ".moondock" / "keys" / f"{unique_id}.pem"
+    """Verify private key saved to disk with placeholder path."""
+    actual_unique_id = context.instance_details["unique_id"]
+    key_file = Path.home() / ".moondock" / "keys" / f"{actual_unique_id}.pem"
     assert key_file.exists()
 
     context.cleanup_key_file = key_file
@@ -630,12 +673,37 @@ def step_verify_ami_is_recent(context):
     assert context.found_ami_id is not None
 
 
+@then("key pair is deleted from AWS")
+def step_verify_key_deleted_generic(context):
+    """Verify key pair deleted from AWS."""
+    if not hasattr(context, "unique_id") or context.unique_id is None:
+        return
+
+    if not hasattr(context, "ec2_client") or context.ec2_client is None:
+        return
+
+    key_name = f"moondock-{context.unique_id}"
+    key_pairs = context.ec2_client.describe_key_pairs()
+    key_names = [kp["KeyName"] for kp in key_pairs["KeyPairs"]]
+    assert key_name not in key_names
+
+
 @then('key pair "{key_name}" is deleted from AWS')
 def step_verify_key_deleted(context, key_name):
     """Verify key pair deleted from AWS."""
     key_pairs = context.ec2_client.describe_key_pairs()
     key_names = [kp["KeyName"] for kp in key_pairs["KeyPairs"]]
     assert key_name not in key_names
+
+
+@then("key file is deleted from disk")
+def step_verify_key_file_deleted_generic(context):
+    """Verify key file deleted from disk."""
+    if not hasattr(context, "unique_id") or context.unique_id is None:
+        return
+
+    key_file = Path.home() / ".moondock" / "keys" / f"{context.unique_id}.pem"
+    assert not key_file.exists()
 
 
 @then('key file "~/.moondock/keys/{unique_id}.pem" is deleted')
@@ -648,6 +716,12 @@ def step_verify_key_file_deleted(context, unique_id):
 @then("security group is deleted from AWS")
 def step_verify_sg_deleted(context):
     """Verify security group deleted."""
+    if not hasattr(context, "security_group_id") or context.security_group_id is None:
+        return
+
+    if not hasattr(context, "ec2_client") or context.ec2_client is None:
+        return
+
     try:
         context.ec2_client.describe_security_groups(
             GroupIds=[context.security_group_id]

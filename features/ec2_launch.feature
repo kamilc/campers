@@ -1,6 +1,6 @@
 Feature: EC2 Instance Launch
 
-@smoke @dry_run @wip
+@smoke @dry_run
 Scenario: Launch instance from machine config
   Given config file with machine "jupyter-lab" defined
   And machine "jupyter-lab" has instance_type "t3.medium"
@@ -12,7 +12,7 @@ Scenario: Launch instance from machine config
   And root disk size is 50
   And instance state is "running"
 
-@smoke @dry_run @wip
+@smoke @dry_run
 Scenario: Launch instance with CLI overrides
   Given config file with defaults section
   And defaults have instance_type "t3.medium"
@@ -20,7 +20,7 @@ Scenario: Launch instance with CLI overrides
   Then instance is created in region "us-west-2"
   And instance type is "m5.xlarge"
 
-@smoke @dry_run @wip
+@smoke @dry_run
 Scenario: Instance tagged correctly
   Given config file with machine "jupyter-lab" defined
   When I launch instance with machine "jupyter-lab"
@@ -28,7 +28,7 @@ Scenario: Instance tagged correctly
   And instance has tag "MachineConfig" with value "jupyter-lab"
   And instance has tag "Name" starting with "moondock-"
 
-@smoke @dry_run @wip
+@smoke @dry_run
 Scenario: Ad-hoc instance tagged without machine name
   Given config file with defaults section
   When I launch instance with options "--instance-type t3.medium"
