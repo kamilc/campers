@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, WaiterError
 
 logger = logging.getLogger(__name__)
 
@@ -371,10 +371,13 @@ class EC2Manager:
 
         instance.terminate()
 
-        waiter = self.ec2_client.get_waiter("instance_terminated")
-        waiter.wait(
-            InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 40}
-        )
+        try:
+            waiter = self.ec2_client.get_waiter("instance_terminated")
+            waiter.wait(
+                InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 40}
+            )
+        except WaiterError as e:
+            raise RuntimeError(f"Failed to terminate instance: {e}") from e
 
         if unique_id:
             try:

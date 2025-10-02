@@ -3,15 +3,32 @@
 import os
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import boto3
 from behave import given, then, when
 from behave.runner import Context
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
 from moto import mock_aws
 
 from moondock.ec2 import EC2Manager
+
+
+def setup_moto_environment(context: Context) -> None:
+    """Set up moto mock AWS environment and configure AWS credentials.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context to store mock_aws_env
+    """
+    if not hasattr(context, "mock_aws_env") or context.mock_aws_env is None:
+        context.mock_aws_env = mock_aws()
+        context.mock_aws_env.start()
+
+        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 
 def patch_ec2_manager_for_canonical_owner(ec2_manager: EC2Manager) -> None:
@@ -45,6 +62,59 @@ def patch_ec2_manager_for_canonical_owner(ec2_manager: EC2Manager) -> None:
         return response
 
     ec2_manager.ec2_client.describe_images = mock_describe_images
+
+
+def simulate_launch_timeout(context: Context) -> None:
+    """Simulate instance launch timeout scenario.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing ec2_config
+    """
+    ec2_manager = EC2Manager(region="us-east-1")
+    patch_ec2_manager_for_canonical_owner(ec2_manager)
+
+    waiter_mock = MagicMock()
+    waiter_mock.wait.side_effect = WaiterError(
+        name="InstanceRunning",
+        reason="Max attempts exceeded",
+        last_response={"Error": {"Code": "Timeout"}},
+    )
+
+    with patch.object(ec2_manager.ec2_client, "get_waiter", return_value=waiter_mock):
+        try:
+            ec2_manager.launch_instance(context.ec2_config)
+            context.exception = None
+        except RuntimeError as e:
+            context.exception = e
+
+    context.ec2_client = ec2_manager.ec2_client
+
+
+def simulate_termination_timeout(context: Context) -> None:
+    """Simulate instance termination timeout scenario.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing ec2_manager and instance_id
+    """
+    ec2_manager = context.ec2_manager
+
+    waiter_mock = MagicMock()
+    waiter_mock.wait.side_effect = WaiterError(
+        name="InstanceTerminated",
+        reason="Max attempts exceeded",
+        last_response={"Error": {"Code": "Timeout"}},
+    )
+
+    with patch.object(ec2_manager.ec2_client, "get_waiter", return_value=waiter_mock):
+        try:
+            ec2_manager.terminate_instance(context.instance_id)
+            context.exception = None
+        except RuntimeError as e:
+            context.exception = e
 
 
 @given("valid configuration")
@@ -99,13 +169,7 @@ def step_region_with_no_ami(context: Context) -> None:
 @given('running instance with unique_id "{unique_id}"')
 def step_running_instance_with_unique_id(context: Context, unique_id: str) -> None:
     """Create a running EC2 instance with specific unique_id."""
-    if not hasattr(context, "mock_aws_env") or context.mock_aws_env is None:
-        context.mock_aws_env = mock_aws()
-        context.mock_aws_env.start()
-
-        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    setup_moto_environment(context)
 
     ec2_client = boto3.client("ec2", region_name="us-east-1")
     ec2_resource = boto3.resource("ec2", region_name="us-east-1")
@@ -214,12 +278,7 @@ def step_instance_fails_to_reach_terminated(context: Context) -> None:
 @given('key pair "{key_name}" already exists')
 def step_key_pair_exists(context: Context, key_name: str) -> None:
     """Create an existing key pair."""
-    context.mock_aws_env = mock_aws()
-    context.mock_aws_env.start()
-
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    setup_moto_environment(context)
 
     ec2_client = boto3.client("ec2", region_name="us-east-1")
     ec2_client.create_key_pair(KeyName=key_name)
@@ -231,13 +290,7 @@ def step_key_pair_exists(context: Context, key_name: str) -> None:
 def step_security_group_exists(context: Context, sg_name: str) -> None:
     """Create an existing security group."""
     if not hasattr(context, "ec2_client"):
-        context.mock_aws_env = mock_aws()
-        context.mock_aws_env.start()
-
-        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-
+        setup_moto_environment(context)
         context.ec2_client = boto3.client("ec2", region_name="us-east-1")
 
     vpcs = context.ec2_client.describe_vpcs(
@@ -256,12 +309,7 @@ def step_security_group_exists(context: Context, sg_name: str) -> None:
 @given("key pair is created")
 def step_key_pair_is_created(context: Context) -> None:
     """Create a key pair (for rollback testing)."""
-    context.mock_aws_env = mock_aws()
-    context.mock_aws_env.start()
-
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    setup_moto_environment(context)
 
     context.ec2_client = boto3.client("ec2", region_name="us-east-1")
     context.ec2_client.register_image(
@@ -272,6 +320,7 @@ def step_key_pair_is_created(context: Context) -> None:
         VirtualizationType="hvm",
     )
 
+    context.unique_id = "test-rollback-key"
     context.ec2_config = {
         "instance_type": "invalid.type",
         "disk_size": 50,
@@ -281,20 +330,31 @@ def step_key_pair_is_created(context: Context) -> None:
 
 @given("security group is created")
 def step_security_group_is_created(context: Context) -> None:
-    """Set up security group creation for rollback testing."""
-    pass
+    """Set up security group creation for rollback testing.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    """
+    setup_moto_environment(context)
+
+    context.ec2_client = boto3.client("ec2", region_name="us-east-1")
+
+    initial_sgs = context.ec2_client.describe_security_groups()
+    context.initial_sg_ids = {sg["GroupId"] for sg in initial_sgs["SecurityGroups"]}
+
+    context.ec2_config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+    }
 
 
 @when("I launch instance")
 def step_launch_instance(context: Context) -> None:
     """Launch EC2 instance."""
-    if not hasattr(context, "mock_aws_env") or context.mock_aws_env is None:
-        context.mock_aws_env = mock_aws()
-        context.mock_aws_env.start()
-
-        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    setup_moto_environment(context)
 
     ec2_client = boto3.client("ec2", region_name="us-east-1")
     ec2_client.register_image(
@@ -373,12 +433,7 @@ def step_launch_instance_with_options(context: Context, options: str) -> None:
 @when("I lookup Ubuntu 22.04 AMI")
 def step_lookup_ubuntu_ami(context: Context) -> None:
     """Lookup Ubuntu 22.04 AMI."""
-    context.mock_aws_env = mock_aws()
-    context.mock_aws_env.start()
-
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    setup_moto_environment(context)
 
     ec2_client = boto3.client("ec2", region_name=context.region)
 
@@ -451,12 +506,7 @@ def step_attempt_to_launch_instance(context: Context) -> None:
 @when("instance launch fails")
 def step_instance_launch_fails(context: Context) -> None:
     """Simulate instance launch failure."""
-    context.mock_aws_env = mock_aws()
-    context.mock_aws_env.start()
-
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    setup_moto_environment(context)
 
     ec2_client = boto3.client("ec2", region_name="us-east-1")
     ec2_client.register_image(
@@ -470,11 +520,27 @@ def step_instance_launch_fails(context: Context) -> None:
     ec2_manager = EC2Manager(region="us-east-1")
     patch_ec2_manager_for_canonical_owner(ec2_manager)
 
-    try:
-        ec2_manager.launch_instance(context.ec2_config)
-        context.exception = None
-    except Exception as e:
-        context.exception = e
+    def failing_create_instances(*args, **kwargs):
+        raise ClientError(
+            {
+                "Error": {
+                    "Code": "InsufficientInstanceCapacity",
+                    "Message": "Insufficient capacity",
+                }
+            },
+            "RunInstances",
+        )
+
+    with patch.object(
+        ec2_manager.ec2_resource,
+        "create_instances",
+        side_effect=failing_create_instances,
+    ):
+        try:
+            ec2_manager.launch_instance(context.ec2_config)
+            context.exception = None
+        except Exception as e:
+            context.exception = e
 
     context.ec2_client = ec2_client
 
@@ -505,8 +571,19 @@ def step_launch_with_same_unique_id(context: Context) -> None:
 
 @when("{minutes:d} minutes elapse")
 def step_minutes_elapse(context: Context, minutes: int) -> None:
-    """Simulate timeout scenario."""
-    pass
+    """Simulate timeout scenario by mocking waiter.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    minutes : int
+        Minutes to elapse (5 for launch, 10 for termination)
+    """
+    if hasattr(context, "timeout_scenario") and context.timeout_scenario:
+        simulate_launch_timeout(context)
+    elif hasattr(context, "termination_timeout") and context.termination_timeout:
+        simulate_termination_timeout(context)
 
 
 @then('instance is created in region "{region}"')
@@ -527,8 +604,37 @@ def step_verify_instance_type(context: Context, instance_type: str) -> None:
 
 @then("root disk size is {disk_size:d}")
 def step_verify_disk_size(context: Context, disk_size: int) -> None:
-    """Verify root disk size."""
-    pass
+    """Verify root disk size matches configuration.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing ec2_client and instance_details
+    disk_size : int
+        Expected disk size in GB
+    """
+    ec2_client = context.ec2_client
+    instance_id = context.instance_details["instance_id"]
+
+    response = ec2_client.describe_instances(InstanceIds=[instance_id])
+    instance = response["Reservations"][0]["Instances"][0]
+
+    block_devices = instance["BlockDeviceMappings"]
+    root_device_name = instance["RootDeviceName"]
+
+    root_volume = next(
+        (bd for bd in block_devices if bd["DeviceName"] == root_device_name), None
+    )
+
+    assert root_volume is not None, f"Root volume {root_device_name} not found"
+
+    volume_id = root_volume["Ebs"]["VolumeId"]
+    volumes = ec2_client.describe_volumes(VolumeIds=[volume_id])
+    actual_size = volumes["Volumes"][0]["Size"]
+
+    assert actual_size == disk_size, (
+        f"Expected disk size {disk_size} GB, got {actual_size} GB"
+    )
 
 
 @then('instance state is "{state}"')
@@ -664,8 +770,34 @@ def step_verify_sg_inbound_rule(context: Context, port: int, cidr: str) -> None:
 
 @then("security group allows all outbound traffic")
 def step_verify_sg_outbound(context: Context) -> None:
-    """Verify security group allows outbound traffic."""
-    pass
+    """Verify security group allows all outbound traffic.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing ec2_client and instance_details
+    """
+    ec2_client = context.ec2_client
+    sg_id = context.instance_details["security_group_id"]
+
+    response = ec2_client.describe_security_groups(GroupIds=[sg_id])
+    security_group = response["SecurityGroups"][0]
+    egress_rules = security_group.get("IpPermissionsEgress", [])
+
+    all_traffic_rule = next(
+        (
+            rule
+            for rule in egress_rules
+            if rule.get("IpProtocol") == "-1"
+            and any(
+                ip_range.get("CidrIp") == "0.0.0.0/0"
+                for ip_range in rule.get("IpRanges", [])
+            )
+        ),
+        None,
+    )
+
+    assert all_traffic_rule is not None, "No rule allowing all outbound traffic found"
 
 
 @then("instance is launched with security group ID")
@@ -700,22 +832,32 @@ def step_verify_ami_owner(context: Context, owner_id: str) -> None:
 def step_verify_ami_arch(context: Context, arch: str) -> None:
     """Verify AMI architecture."""
     images = context.ec2_client.describe_images(ImageIds=[context.found_ami_id])
+    image = images["Images"][0]
 
-    if "Architecture" in images["Images"][0]:
-        assert images["Images"][0]["Architecture"] == arch
+    if "Architecture" in image:
+        assert image["Architecture"] == arch, (
+            f"Expected architecture {arch}, got {image['Architecture']}"
+        )
     else:
-        pass
+        assert os.environ.get("MOONDOCK_TEST_MODE") == "1", (
+            "Architecture attribute missing from AMI (only acceptable in test mode)"
+        )
 
 
 @then('AMI virtualization is "{virt_type}"')
 def step_verify_ami_virt(context: Context, virt_type: str) -> None:
     """Verify AMI virtualization type."""
     images = context.ec2_client.describe_images(ImageIds=[context.found_ami_id])
+    image = images["Images"][0]
 
-    if "VirtualizationType" in images["Images"][0]:
-        assert images["Images"][0]["VirtualizationType"] == virt_type
+    if "VirtualizationType" in image:
+        assert image["VirtualizationType"] == virt_type, (
+            f"Expected virtualization {virt_type}, got {image['VirtualizationType']}"
+        )
     else:
-        pass
+        assert os.environ.get("MOONDOCK_TEST_MODE") == "1", (
+            "VirtualizationType attribute missing from AMI (only acceptable in test mode)"
+        )
 
 
 @then("AMI is most recent available")
@@ -727,11 +869,10 @@ def step_verify_ami_is_recent(context: Context) -> None:
 @then("key pair is deleted from AWS")
 def step_verify_key_deleted_generic(context: Context) -> None:
     """Verify key pair deleted from AWS."""
-    if not hasattr(context, "unique_id") or context.unique_id is None:
-        return
-
-    if not hasattr(context, "ec2_client") or context.ec2_client is None:
-        return
+    assert hasattr(context, "unique_id"), "unique_id not found in context"
+    assert context.unique_id is not None, "unique_id is None"
+    assert hasattr(context, "ec2_client"), "ec2_client not found in context"
+    assert context.ec2_client is not None, "ec2_client is None"
 
     key_name = f"moondock-{context.unique_id}"
     key_pairs = context.ec2_client.describe_key_pairs()
@@ -750,8 +891,8 @@ def step_verify_key_deleted(context: Context, key_name: str) -> None:
 @then("key file is deleted from disk")
 def step_verify_key_file_deleted_generic(context: Context) -> None:
     """Verify key file deleted from disk."""
-    if not hasattr(context, "unique_id") or context.unique_id is None:
-        return
+    assert hasattr(context, "unique_id"), "unique_id not found in context"
+    assert context.unique_id is not None, "unique_id is None"
 
     moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
     key_file = Path(moondock_dir) / "keys" / f"{context.unique_id}.pem"
@@ -769,37 +910,116 @@ def step_verify_key_file_deleted(context: Context, unique_id: str) -> None:
 @then("security group is deleted from AWS")
 def step_verify_sg_deleted(context: Context) -> None:
     """Verify security group deleted."""
-    if not hasattr(context, "security_group_id") or context.security_group_id is None:
-        return
+    assert hasattr(context, "ec2_client"), "ec2_client not found in context"
+    assert context.ec2_client is not None, "ec2_client is None"
 
-    if not hasattr(context, "ec2_client") or context.ec2_client is None:
-        return
-
-    try:
-        context.ec2_client.describe_security_groups(
-            GroupIds=[context.security_group_id]
+    if hasattr(context, "security_group_id") and context.security_group_id is not None:
+        try:
+            context.ec2_client.describe_security_groups(
+                GroupIds=[context.security_group_id]
+            )
+            assert False, "Security group should be deleted"
+        except ClientError as e:
+            assert "InvalidGroup.NotFound" in str(e)
+    elif hasattr(context, "initial_sg_ids"):
+        current_sgs = context.ec2_client.describe_security_groups()
+        current_sg_ids = {sg["GroupId"] for sg in current_sgs["SecurityGroups"]}
+        new_sgs = current_sg_ids - context.initial_sg_ids
+        assert len(new_sgs) == 0, (
+            f"Found {len(new_sgs)} security groups that were not cleaned up after failed launch"
         )
-        assert False, "Security group should be deleted"
-    except ClientError as e:
-        assert "InvalidGroup.NotFound" in str(e)
+    else:
+        assert False, (
+            "Either security_group_id or initial_sg_ids must be set in context"
+        )
 
 
 @then('termination waits for "{state}" state')
 def step_verify_termination_waits(context: Context, state: str) -> None:
-    """Verify termination waits for state."""
-    pass
+    """Verify instance reaches expected terminated state.
+
+    NOTE: This is a pragmatic state-check approach. It verifies the instance
+    reached the expected state, which implies waiting worked, but doesn't
+    directly verify that waiter.wait() was called.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing ec2_client and instance_details or instance_id
+    state : str
+        Expected instance state (e.g., "terminated")
+    """
+    ec2_client = context.ec2_client
+
+    if (
+        hasattr(context, "instance_details")
+        and context.instance_details
+        and "instance_id" in context.instance_details
+    ):
+        instance_id = context.instance_details["instance_id"]
+    else:
+        instance_id = context.instance_id
+
+    response = ec2_client.describe_instances(InstanceIds=[instance_id])
+    instance = response["Reservations"][0]["Instances"][0]
+    actual_state = instance["State"]["Name"]
+
+    assert actual_state == state, f"Expected state '{state}', got '{actual_state}'"
 
 
 @then("security group cleanup happens after termination")
 def step_verify_cleanup_after_termination(context: Context) -> None:
-    """Verify cleanup order."""
-    pass
+    """Verify security group was deleted after instance termination.
+
+    NOTE: This verifies both operations completed and cleanup succeeded.
+    It doesn't track exact operation order but confirms the end state.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing ec2_client and instance_details or instance_id/security_group_id
+    """
+    ec2_client = context.ec2_client
+
+    if (
+        hasattr(context, "instance_details")
+        and context.instance_details
+        and "instance_id" in context.instance_details
+    ):
+        instance_id = context.instance_details["instance_id"]
+        sg_id = context.instance_details["security_group_id"]
+    else:
+        instance_id = context.instance_id
+        sg_id = context.security_group_id
+
+    response = ec2_client.describe_instances(InstanceIds=[instance_id])
+    instance_state = response["Reservations"][0]["Instances"][0]["State"]["Name"]
+
+    assert instance_state == "terminated", f"Instance not terminated: {instance_state}"
+
+    try:
+        ec2_client.describe_security_groups(GroupIds=[sg_id])
+        assert False, f"Security group {sg_id} still exists after termination"
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        assert error_code == "InvalidGroup.NotFound", f"Unexpected error: {error_code}"
 
 
 @then("command fails with NoCredentialsError")
 def step_verify_no_credentials_error(context: Context) -> None:
-    """Verify NoCredentialsError raised."""
-    pass
+    """Verify NoCredentialsError raised.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing exception
+    """
+    assert hasattr(context, "exception"), "exception not found in context"
+    assert context.exception is not None, "No exception was raised"
+    assert isinstance(context.exception, NoCredentialsError), (
+        f"Expected NoCredentialsError, got {type(context.exception).__name__}: "
+        f"{context.exception}"
+    )
 
 
 @then("command fails with ClientError")
@@ -810,26 +1030,146 @@ def step_verify_client_error(context: Context) -> None:
 
 @then("RuntimeError is raised with timeout message")
 def step_verify_runtime_error_timeout(context: Context) -> None:
-    """Verify RuntimeError with timeout."""
-    pass
+    """Verify RuntimeError with timeout message.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing exception
+    """
+    assert hasattr(context, "exception"), "exception not found in context"
+    assert context.exception is not None, "No exception was raised"
+    assert isinstance(context.exception, RuntimeError), (
+        f"Expected RuntimeError, got {type(context.exception).__name__}: "
+        f"{context.exception}"
+    )
+
+    error_message = str(context.exception).lower()
+    assert "failed" in error_message, (
+        f"Exception message doesn't indicate failure: {context.exception}"
+    )
+    assert (
+        "terminate" in error_message
+        or "timeout" in error_message
+        or "max attempts exceeded" in error_message
+    ), (
+        f"Exception message doesn't indicate timeout/termination/max attempts: "
+        f"{context.exception}"
+    )
 
 
 @then("rollback cleanup is attempted")
 def step_verify_rollback_cleanup(context: Context) -> None:
-    """Verify rollback cleanup attempted."""
-    pass
+    """Verify rollback cleanup attempted by checking no resources remain.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing ec2_client
+    """
+    assert hasattr(context, "ec2_client"), "ec2_client not found in context"
+    assert context.ec2_client is not None, "ec2_client is None"
+
+    key_pairs = context.ec2_client.describe_key_pairs()
+    moondock_keys = [
+        kp for kp in key_pairs["KeyPairs"] if kp["KeyName"].startswith("moondock-")
+    ]
+    assert len(moondock_keys) == 0, (
+        f"Rollback failed: Found orphaned key pairs: "
+        f"{[k['KeyName'] for k in moondock_keys]}"
+    )
+
+    try:
+        sgs = context.ec2_client.describe_security_groups(
+            Filters=[{"Name": "group-name", "Values": ["moondock-*"]}]
+        )
+        moondock_sgs = [
+            sg
+            for sg in sgs.get("SecurityGroups", [])
+            if sg["GroupName"].startswith("moondock-")
+        ]
+        assert len(moondock_sgs) == 0, (
+            f"Rollback failed: Found orphaned security groups: "
+            f"{[sg['GroupName'] for sg in moondock_sgs]}"
+        )
+    except ClientError:
+        pass
+
+    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
+    keys_dir = Path(moondock_dir) / "keys"
+
+    if keys_dir.exists():
+        pem_files = list(keys_dir.glob("*.pem"))
+        assert len(pem_files) == 0, (
+            f"Rollback failed: Found orphaned key files: {[str(f) for f in pem_files]}"
+        )
 
 
 @then("existing key pair is deleted")
 def step_verify_existing_key_deleted(context: Context) -> None:
-    """Verify existing key pair deleted."""
-    pass
+    """Verify existing key pair was deleted and recreated during conflict resolution.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing existing_key_name and instance_details
+
+    Notes
+    -----
+    When unique_id is the same, the old key is deleted and a new one with the
+    same name is created. This step verifies that a key pair with the expected
+    name exists (proving conflict was handled, even though we can't distinguish
+    old vs new in moto).
+    """
+    assert hasattr(context, "existing_key_name"), (
+        "existing_key_name not found in context"
+    )
+
+    key_pairs = context.ec2_client.describe_key_pairs()
+    key_names = [kp["KeyName"] for kp in key_pairs["KeyPairs"]]
+
+    if hasattr(context, "instance_details") and context.instance_details:
+        new_key_name = f"moondock-{context.instance_details['unique_id']}"
+        assert new_key_name in key_names, (
+            f"Key pair '{new_key_name}' not found after conflict resolution"
+        )
 
 
 @then("existing security group is deleted")
 def step_verify_existing_sg_deleted(context: Context) -> None:
-    """Verify existing security group deleted."""
-    pass
+    """Verify existing security group was deleted and recreated during conflict resolution.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing existing_sg_id and instance_details
+
+    Notes
+    -----
+    The production code deletes security groups by name, then creates new ones.
+    Since SGs get new IDs each time, we can verify the old ID no longer exists
+    and a new one was created.
+    """
+    assert hasattr(context, "existing_sg_id"), "existing_sg_id not found in context"
+
+    try:
+        context.ec2_client.describe_security_groups(GroupIds=[context.existing_sg_id])
+        assert False, (
+            f"Existing security group '{context.existing_sg_id}' was not deleted"
+        )
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        assert error_code == "InvalidGroup.NotFound", (
+            f"Unexpected error checking old SG: {error_code}"
+        )
+
+    if hasattr(context, "instance_details") and context.instance_details:
+        new_sg_id = context.instance_details["security_group_id"]
+
+        response = context.ec2_client.describe_security_groups(GroupIds=[new_sg_id])
+        assert len(response["SecurityGroups"]) == 1, (
+            f"New security group '{new_sg_id}' not found in AWS"
+        )
 
 
 @then("new resources are created")
