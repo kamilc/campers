@@ -385,3 +385,99 @@ def test_execute_command_remaining_output(
     assert exit_code == 0
     assert mock_stdout.readlines.call_count == 1
     assert mock_stderr.readlines.call_count == 1
+
+
+@patch("moondock.ssh.paramiko.SSHClient")
+@patch("moondock.ssh.paramiko.RSAKey.from_private_key_file")
+def test_execute_command_raw_without_connection(
+    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+) -> None:
+    """Test execute_command_raw raises error when not connected."""
+    with pytest.raises(RuntimeError) as exc_info:
+        ssh_manager.execute_command_raw("cd /tmp && ls")
+
+    assert "SSH connection not established" in str(exc_info.value)
+
+
+@patch("moondock.ssh.paramiko.SSHClient")
+@patch("moondock.ssh.paramiko.RSAKey.from_private_key_file")
+def test_execute_command_raw_success(
+    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+) -> None:
+    """Test execute_command_raw executes command without wrapping."""
+    mock_client = MagicMock()
+    mock_ssh_client.return_value = mock_client
+    ssh_manager.client = mock_client
+
+    mock_stdin = MagicMock()
+    mock_stdout = MagicMock()
+    mock_stderr = MagicMock()
+
+    mock_stdout.readline.side_effect = ["output line\n", ""]
+    mock_stdout.readlines.return_value = []
+    mock_stderr.readline.return_value = ""
+    mock_stderr.readlines.return_value = []
+    mock_stdout.channel.exit_status_ready.side_effect = [False, True]
+    mock_stdout.channel.recv_exit_status.return_value = 0
+
+    mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+
+    exit_code = ssh_manager.execute_command_raw("cd /tmp && ls -la")
+
+    assert exit_code == 0
+    mock_client.exec_command.assert_called_once_with("cd /tmp && ls -la")
+
+
+@patch("moondock.ssh.paramiko.SSHClient")
+@patch("moondock.ssh.paramiko.RSAKey.from_private_key_file")
+def test_execute_command_raw_with_keyboard_interrupt(
+    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+) -> None:
+    """Test execute_command_raw handles Ctrl+C gracefully."""
+    mock_client = MagicMock()
+    mock_ssh_client.return_value = mock_client
+    ssh_manager.client = mock_client
+
+    mock_stdin = MagicMock()
+    mock_stdout = MagicMock()
+    mock_stderr = MagicMock()
+
+    mock_stdout.readline.side_effect = KeyboardInterrupt()
+    mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+
+    with pytest.raises(KeyboardInterrupt):
+        ssh_manager.execute_command_raw("sleep 300")
+
+    mock_client.close.assert_called_once()
+    assert ssh_manager.client is None
+
+
+def test_execute_command_raw_empty_command(ssh_manager: SSHManager) -> None:
+    """Test execute_command_raw raises ValueError for empty command."""
+    ssh_manager.client = MagicMock()
+
+    with pytest.raises(ValueError) as exc_info:
+        ssh_manager.execute_command_raw("")
+
+    assert "Command cannot be empty" in str(exc_info.value)
+
+
+def test_execute_command_raw_whitespace_only(ssh_manager: SSHManager) -> None:
+    """Test execute_command_raw raises ValueError for whitespace-only command."""
+    ssh_manager.client = MagicMock()
+
+    with pytest.raises(ValueError) as exc_info:
+        ssh_manager.execute_command_raw("   ")
+
+    assert "Command cannot be empty" in str(exc_info.value)
+
+
+def test_execute_command_raw_exceeds_max_length(ssh_manager: SSHManager) -> None:
+    """Test execute_command_raw raises ValueError for commands over 10000 chars."""
+    ssh_manager.client = MagicMock()
+    long_command = "a" * 10001
+
+    with pytest.raises(ValueError) as exc_info:
+        ssh_manager.execute_command_raw(long_command)
+
+    assert "exceeds maximum of 10000 characters" in str(exc_info.value)

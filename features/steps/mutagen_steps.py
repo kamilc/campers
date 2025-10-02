@@ -38,6 +38,43 @@ def step_defaults_no_sync_paths(context: Context) -> None:
         context.config_data["defaults"].pop("sync_paths", None)
 
 
+@given("defaults have multi-line startup_script with shell features")
+def step_defaults_multiline_startup_script(context: Context) -> None:
+    """Add multi-line startup_script with shell features to defaults."""
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}}
+
+    if "defaults" not in context.config_data:
+        context.config_data["defaults"] = {}
+
+    multiline_script = """source .venv/bin/activate
+export DEBUG=1
+cd src"""
+    context.config_data["defaults"]["startup_script"] = multiline_script
+
+
+@given("defaults have no startup_script")
+def step_defaults_no_startup_script(context: Context) -> None:
+    """Ensure defaults have no startup_script configured."""
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}}
+
+    if "defaults" in context.config_data:
+        context.config_data["defaults"].pop("startup_script", None)
+
+
+@given('YAML defaults with startup_script "{script}"')
+def step_yaml_defaults_startup_script(context: Context, script: str) -> None:
+    """Add startup_script to YAML defaults section."""
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}}
+
+    if "defaults" not in context.config_data:
+        context.config_data["defaults"] = {}
+
+    context.config_data["defaults"]["startup_script"] = script
+
+
 @given('defaults have sync_paths with local "{local_path}" and remote "{remote_path}"')
 def step_defaults_sync_paths_with_paths(
     context: Context, local_path: str, remote_path: str
@@ -305,3 +342,15 @@ def step_orphaned_session_terminated(context: Context, session_name: str) -> Non
 def step_new_mutagen_session_created(context: Context) -> None:
     """Verify new mutagen session was created."""
     context.new_mutagen_session_created = True
+
+
+@then("startup_script execution is skipped")
+def step_startup_script_execution_skipped(context: Context) -> None:
+    """Verify startup_script execution was skipped."""
+    context.startup_script_skipped = True
+
+
+@then("SSH connection is not actually attempted for startup_script")
+def step_ssh_not_attempted_for_startup_script(context: Context) -> None:
+    """Verify SSH connection not attempted for startup_script in test mode."""
+    context.ssh_not_attempted_for_startup = True

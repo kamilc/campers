@@ -253,9 +253,19 @@ class SSHManager:
         ------
         RuntimeError
             If SSH connection is not established
+        ValueError
+            If command is empty or exceeds maximum length
         KeyboardInterrupt
             If user presses Ctrl+C during command execution
         """
+        if not command or not command.strip():
+            raise ValueError("Command cannot be empty")
+
+        if len(command) > 10000:
+            raise ValueError(
+                f"Command length ({len(command)}) exceeds maximum of 10000 characters"
+            )
+
         return self._execute_with_streaming(command)
 
     def close(self) -> None:

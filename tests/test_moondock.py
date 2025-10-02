@@ -510,3 +510,189 @@ def test_test_mode_bypasses_mutagen_check_with_sync_paths(moondock_module) -> No
             assert result is not None
             assert result["instance_id"] == "i-mock123"
             assert result["public_ip"] == "203.0.113.1"
+
+
+def test_build_command_in_directory(moondock_module) -> None:
+    """Test build_command_in_directory creates proper command string."""
+    moondock_instance = moondock_module()
+
+    result = moondock_instance.build_command_in_directory(
+        "~/myproject", "python app.py"
+    )
+
+    assert result == "cd '~/myproject' && bash -c 'python app.py'"
+
+
+def test_build_command_in_directory_with_special_chars(moondock_module) -> None:
+    """Test build_command_in_directory handles special characters."""
+    moondock_instance = moondock_module()
+
+    result = moondock_instance.build_command_in_directory(
+        "~/my project", "echo 'hello world'"
+    )
+
+    assert "cd '~/my project'" in result
+    assert "bash -c" in result
+
+
+def test_build_command_in_directory_with_multiline_script(moondock_module) -> None:
+    """Test build_command_in_directory handles multiline scripts."""
+    moondock_instance = moondock_module()
+
+    multiline_script = """source .venv/bin/activate
+export DEBUG=1
+python app.py"""
+
+    result = moondock_instance.build_command_in_directory("~/app", multiline_script)
+
+    assert result == f"cd '~/app' && bash -c {repr(multiline_script)}"
+    assert "source .venv/bin/activate" in result
+
+
+def test_run_startup_script_failure_prevents_command(moondock_module) -> None:
+    """Test that startup_script failure prevents command execution."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
+        "startup_script": "exit 42",
+        "command": "echo hello",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+        patch("moondock_cli.MutagenManager") as mock_mutagen,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.execute_command_raw.return_value = 42
+        mock_ssh.return_value = mock_ssh_instance
+
+        mock_mutagen_instance = MagicMock()
+        mock_mutagen.return_value = mock_mutagen_instance
+
+        with pytest.raises(
+            RuntimeError, match="Startup script failed with exit code: 42"
+        ):
+            moondock_instance.run()
+
+        assert mock_ssh_instance.execute_command_raw.call_count == 1
+        mock_ssh_instance.close.assert_called_once()
+
+
+def test_run_multiline_startup_script(moondock_module) -> None:
+    """Test that multiline startup_script executes correctly."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+
+    multiline_script = """source .venv/bin/activate
+export DEBUG=1
+cd src"""
+
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
+        "startup_script": multiline_script,
+        "command": "pwd",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+        patch("moondock_cli.MutagenManager") as mock_mutagen,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.execute_command_raw.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        mock_mutagen_instance = MagicMock()
+        mock_mutagen.return_value = mock_mutagen_instance
+
+        result = moondock_instance.run()
+
+        startup_call = mock_ssh_instance.execute_command_raw.call_args_list[0][0][0]
+        assert "source .venv/bin/activate" in startup_call
+        assert "export DEBUG=1" in startup_call
+        assert "cd src" in startup_call
+        assert result["instance_id"] == "i-test123"
+
+
+def test_run_test_mode_with_startup_script_failure(moondock_module) -> None:
+    """Test that test mode simulates startup_script failure."""
+    import os
+    from unittest.mock import patch
+
+    moondock_instance = moondock_module()
+
+    merged_config = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
+        "startup_script": "exit 42",
+        "command": "echo hello",
+    }
+
+    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
+        with pytest.raises(
+            RuntimeError, match="Startup script failed with exit code: 42"
+        ):
+            moondock_instance.run_test_mode(merged_config, json_output=False)
+
+
+def test_run_test_mode_with_startup_script_success(moondock_module) -> None:
+    """Test that test mode simulates startup_script success."""
+    import os
+    from unittest.mock import patch
+
+    moondock_instance = moondock_module()
+
+    merged_config = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
+        "startup_script": "source .venv/bin/activate",
+        "command": "python --version",
+    }
+
+    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
+        result = moondock_instance.run_test_mode(merged_config, json_output=False)
+
+    assert result is not None
+    assert result["instance_id"] == "i-mock123"

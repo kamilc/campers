@@ -14,6 +14,7 @@
 import json
 import logging
 import os
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -37,6 +38,25 @@ class Moondock:
         merging, and validation.
         """
         self.config_loader = ConfigLoader()
+
+    def extract_exit_code_from_script(self, script: str) -> int:
+        """Extract exit code from script if it contains 'exit N' command.
+
+        Parameters
+        ----------
+        script : str
+            Script content to analyze
+
+        Returns
+        -------
+        int
+            Exit code if found, otherwise 0
+        """
+        if "exit " not in script:
+            return 0
+
+        match = re.search(r"exit\s+(\d+)", script)
+        return int(match.group(1)) if match else 0
 
     def run_test_mode(
         self, merged_config: dict[str, Any], json_output: bool
@@ -101,16 +121,9 @@ class Moondock:
             if merged_config.get("setup_script", "").strip():
                 logging.info("Running setup_script...")
 
-                script = merged_config["setup_script"]
-                script_exit_code = 0
-
-                if "exit " in script:
-                    import re
-
-                    match = re.search(r"exit\s+(\d+)", script)
-
-                    if match:
-                        script_exit_code = int(match.group(1))
+                script_exit_code = self.extract_exit_code_from_script(
+                    merged_config["setup_script"]
+                )
 
                 if script_exit_code != 0:
                     raise RuntimeError(
@@ -134,16 +147,9 @@ class Moondock:
             if merged_config.get("startup_script"):
                 logging.info("Running startup_script...")
 
-                script = merged_config["startup_script"]
-                script_exit_code = 0
-
-                if "exit " in script:
-                    import re
-
-                    match = re.search(r"exit\s+(\d+)", script)
-
-                    if match:
-                        script_exit_code = int(match.group(1))
+                script_exit_code = self.extract_exit_code_from_script(
+                    merged_config["startup_script"]
+                )
 
                 if script_exit_code != 0:
                     raise RuntimeError(
@@ -154,15 +160,7 @@ class Moondock:
 
             if merged_config.get("command"):
                 cmd = merged_config["command"]
-                exit_code = 0
-
-                if "exit " in cmd:
-                    import re
-
-                    match = re.search(r"exit\s+(\d+)", cmd)
-
-                    if match:
-                        exit_code = int(match.group(1))
+                exit_code = self.extract_exit_code_from_script(cmd)
 
                 logging.info(f"Executing command: {cmd}")
                 logging.info(f"Command completed with exit code: {exit_code}")
