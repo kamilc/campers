@@ -73,35 +73,54 @@ class Moondock:
             "unique_id": "mock123",
         }
 
-        if merged_config.get("command"):
+        need_ssh = merged_config.get("setup_script") or merged_config.get("command")
+
+        if need_ssh:
             if mock_instance["public_ip"] is None:
                 raise ValueError(
                     "Instance does not have a public IP address. "
                     "SSH connection requires public networking configuration."
                 )
 
-            cmd = merged_config["command"]
-            exit_code = 0
-
-            if "exit " in cmd:
-                import re
-
-                match = re.search(r"exit\s+(\d+)", cmd)
-
-                if match:
-                    exit_code = int(match.group(1))
-
             logging.info("Waiting for SSH to be ready...")
             logging.info("SSH connection established")
-            logging.info(f"Executing command: {cmd}")
 
-            if "pwd" in cmd:
-                print("[stdout] /home/ubuntu", file=sys.stderr)
-            elif "echo hello" in cmd:
-                print("[stdout] hello", file=sys.stderr)
+            if merged_config.get("setup_script", "").strip():
+                logging.info("Running setup_script...")
 
-            logging.info(f"Command completed with exit code: {exit_code}")
-            mock_instance["command_exit_code"] = exit_code
+                script = merged_config["setup_script"]
+                script_exit_code = 0
+
+                if "exit " in script:
+                    import re
+
+                    match = re.search(r"exit\s+(\d+)", script)
+
+                    if match:
+                        script_exit_code = int(match.group(1))
+
+                if script_exit_code != 0:
+                    raise RuntimeError(
+                        f"Setup script failed with exit code: {script_exit_code}"
+                    )
+
+                logging.info("Setup script completed successfully")
+
+            if merged_config.get("command"):
+                cmd = merged_config["command"]
+                exit_code = 0
+
+                if "exit " in cmd:
+                    import re
+
+                    match = re.search(r"exit\s+(\d+)", cmd)
+
+                    if match:
+                        exit_code = int(match.group(1))
+
+                logging.info(f"Executing command: {cmd}")
+                logging.info(f"Command completed with exit code: {exit_code}")
+                mock_instance["command_exit_code"] = exit_code
 
         if json_output:
             return json.dumps(mock_instance, indent=2)
@@ -181,25 +200,45 @@ class Moondock:
         ec2_manager = EC2Manager(region=merged_config["region"])
         instance_details = ec2_manager.launch_instance(merged_config)
 
-        if merged_config.get("command"):
-            if instance_details["public_ip"] is None:
-                raise ValueError(
-                    "Instance does not have a public IP address. "
-                    "SSH connection requires public networking configuration."
-                )
+        need_ssh = merged_config.get("setup_script") or merged_config.get("command")
 
-            logging.info("Waiting for SSH to be ready...")
+        if not need_ssh:
+            if json_output:
+                return json.dumps(instance_details, indent=2)
 
-            ssh_manager = SSHManager(
-                host=instance_details["public_ip"],
-                key_file=instance_details["key_file"],
-                username="ubuntu",
+            return instance_details
+
+        if instance_details["public_ip"] is None:
+            raise ValueError(
+                "Instance does not have a public IP address. "
+                "SSH connection requires public networking configuration."
             )
 
-            try:
-                ssh_manager.connect(max_retries=10)
-                logging.info("SSH connection established")
+        logging.info("Waiting for SSH to be ready...")
 
+        ssh_manager = SSHManager(
+            host=instance_details["public_ip"],
+            key_file=instance_details["key_file"],
+            username="ubuntu",
+        )
+
+        try:
+            ssh_manager.connect(max_retries=10)
+            logging.info("SSH connection established")
+
+            if merged_config.get("setup_script", "").strip():
+                logging.info("Running setup_script...")
+
+                exit_code = ssh_manager.execute_command(merged_config["setup_script"])
+
+                if exit_code != 0:
+                    raise RuntimeError(
+                        f"Setup script failed with exit code: {exit_code}"
+                    )
+
+                logging.info("Setup script completed successfully")
+
+            if merged_config.get("command"):
                 cmd = merged_config["command"]
                 logging.info(f"Executing command: {cmd}")
 
@@ -208,13 +247,12 @@ class Moondock:
 
                 instance_details["command_exit_code"] = exit_code
 
-            finally:
-                ssh_manager.close()
+        finally:
+            ssh_manager.close()
 
         # TODO (next spec): Setup Mutagen file sync
+        # TODO (Mutagen spec): Execute startup_script (after sync)
         # TODO (next spec): Setup port forwarding
-        # TODO (next spec): Execute setup_script if defined
-        # TODO (next spec): Execute startup_script if defined
         # TODO (next spec): Add automatic cleanup on Ctrl+C
 
         if json_output:

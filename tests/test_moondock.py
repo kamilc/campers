@@ -77,3 +77,237 @@ def test_hello_command_via_uv_run() -> None:
 
     assert result.returncode == 0, f"Command failed: {result.stderr}"
     assert "moondock v0.1.0 - skeleton ready" in result.stdout
+
+
+def test_run_test_mode_with_setup_script(moondock_module) -> None:
+    """Test that test mode handles setup_script execution."""
+    import os
+    from unittest.mock import patch
+
+    moondock_instance = moondock_module()
+
+    merged_config = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "setup_script": "sudo apt update",
+        "command": "echo hello",
+    }
+
+    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
+        result = moondock_instance.run_test_mode(merged_config, json_output=False)
+
+    assert result is not None
+    assert result["instance_id"] == "i-mock123"
+    assert result["public_ip"] == "203.0.113.1"
+
+
+def test_run_test_mode_setup_script_without_command(moondock_module) -> None:
+    """Test that test mode handles setup_script without command."""
+    import os
+    from unittest.mock import patch
+
+    moondock_instance = moondock_module()
+
+    merged_config = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "setup_script": "sudo apt update",
+    }
+
+    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
+        result = moondock_instance.run_test_mode(merged_config, json_output=False)
+
+    assert result is not None
+    assert result["instance_id"] == "i-mock123"
+
+
+def test_run_test_mode_no_ssh_operations(moondock_module) -> None:
+    """Test that test mode skips SSH when no setup_script or command."""
+    import os
+    from unittest.mock import patch
+
+    moondock_instance = moondock_module()
+
+    merged_config = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+    }
+
+    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
+        result = moondock_instance.run_test_mode(merged_config, json_output=False)
+
+    assert result is not None
+    assert result["instance_id"] == "i-mock123"
+    assert "command_exit_code" not in result
+
+
+def test_run_executes_setup_script_before_command(moondock_module) -> None:
+    """Test that run() executes setup_script before command."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "setup_script": "echo setup",
+        "command": "echo command",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    execution_order = []
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+
+        def track_execute_command(cmd: str) -> int:
+            execution_order.append(cmd)
+            return 0
+
+        mock_ssh_instance.execute_command.side_effect = track_execute_command
+        mock_ssh.return_value = mock_ssh_instance
+
+        result = moondock_instance.run()
+
+    assert len(execution_order) == 2
+    assert execution_order[0] == "echo setup"
+    assert execution_order[1] == "echo command"
+    assert result["instance_id"] == "i-test123"
+
+
+def test_run_setup_script_failure_prevents_command(moondock_module) -> None:
+    """Test that setup_script failure prevents command execution."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "setup_script": "exit 1",
+        "command": "echo command",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.execute_command.return_value = 1
+        mock_ssh.return_value = mock_ssh_instance
+
+        with pytest.raises(RuntimeError, match="Setup script failed with exit code: 1"):
+            moondock_instance.run()
+
+        assert mock_ssh_instance.execute_command.call_count == 1
+        mock_ssh_instance.close.assert_called_once()
+
+
+def test_run_skips_ssh_when_no_setup_script_or_command(moondock_module) -> None:
+    """Test that run() skips SSH when no setup_script or command."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        result = moondock_instance.run()
+
+        mock_ssh.assert_not_called()
+        assert result["instance_id"] == "i-test123"
+
+
+def test_run_only_setup_script_no_command(moondock_module) -> None:
+    """Test that run() executes setup_script without command."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "setup_script": "sudo apt update",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.execute_command.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        result = moondock_instance.run()
+
+        mock_ssh_instance.execute_command.assert_called_once_with("sudo apt update")
+        mock_ssh_instance.close.assert_called_once()
+        assert result["instance_id"] == "i-test123"

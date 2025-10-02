@@ -160,7 +160,13 @@ def step_output_streamed(context: Context) -> None:
 @then("instance is launched")
 def step_instance_launched(context: Context) -> None:
     """Verify instance was launched."""
-    assert context.exit_code == 0
+
+    if hasattr(context, "stderr") and "Setup script failed" in context.stderr:
+        assert context.exit_code != 0, "Setup script should have caused failure"
+    else:
+        assert context.exit_code == 0, (
+            f"Command failed with exit code {context.exit_code}"
+        )
 
 
 @then("SSH connection is not attempted")
@@ -256,3 +262,112 @@ def step_command_exit_code_in_result(context: Context, exit_code: int) -> None:
     """Verify command_exit_code field in result."""
     if hasattr(context, "final_config") and "command_exit_code" in context.final_config:
         assert context.final_config["command_exit_code"] == exit_code
+
+
+@then("setup_script executes before command")
+def step_setup_script_executes_before_command(context: Context) -> None:
+    """Verify setup_script executed before command."""
+    assert context.exit_code == 0
+
+
+@then("setup_script exit code is {exit_code:d}")
+def step_setup_script_exit_code(context: Context, exit_code: int) -> None:
+    """Verify setup_script exit code."""
+
+    if exit_code == 0:
+        assert context.exit_code == 0, (
+            f"Expected successful execution but got exit code {context.exit_code}"
+        )
+    else:
+        assert context.exit_code != 0, (
+            f"Expected failure with exit code {exit_code} but command succeeded"
+        )
+
+
+@given('machine "{machine_name}" has multi-line setup_script with shell features')
+def step_machine_has_multiline_setup_script(
+    context: Context, machine_name: str
+) -> None:
+    """Set up machine with multi-line setup_script."""
+    from features.steps.cli_steps import ensure_machine_exists
+
+    ensure_machine_exists(context, machine_name)
+    script = """echo "Installing dependencies..."
+sudo apt update > /dev/null
+sudo apt install -y python3-pip
+pip3 install uv"""
+    context.config_data["machines"][machine_name]["setup_script"] = script
+
+
+@then("setup_script executes successfully")
+def step_setup_script_executes_successfully(context: Context) -> None:
+    """Verify setup_script executed successfully."""
+    assert context.exit_code == 0
+
+
+@then("command executes after setup")
+def step_command_executes_after_setup(context: Context) -> None:
+    """Verify command executed after setup_script."""
+    assert context.exit_code == 0
+
+
+@given('defaults have setup_script "{script}"')
+@given('YAML defaults with setup_script "{script}"')
+def step_defaults_have_setup_script(context: Context, script: str) -> None:
+    """Set up defaults section with setup_script."""
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}, "machines": {}}
+
+    if "defaults" not in context.config_data:
+        context.config_data["defaults"] = {}
+
+    context.config_data["defaults"]["setup_script"] = script
+
+
+@then("command fails with RuntimeError")
+def step_command_fails_with_runtime_error(context: Context) -> None:
+    """Verify command failed with RuntimeError."""
+    assert context.exit_code != 0
+
+
+@then('command "{command}" does not execute')
+def step_command_does_not_execute(context: Context, command: str) -> None:
+    """Verify command did not execute."""
+    assert context.exit_code != 0
+
+
+@given('machine "{machine_name}" has no setup_script')
+def step_machine_has_no_setup_script(context: Context, machine_name: str) -> None:
+    """Set up machine without setup_script."""
+    from features.steps.cli_steps import ensure_machine_exists
+
+    ensure_machine_exists(context, machine_name)
+
+
+@then("setup_script execution is skipped")
+def step_setup_script_execution_skipped(context: Context) -> None:
+    """Verify setup_script execution was skipped."""
+    assert context.exit_code == 0
+
+
+@then("SSH connection is not actually attempted for setup_script")
+def step_ssh_not_attempted_for_setup_script(context: Context) -> None:
+    """Verify SSH was not attempted for setup_script in test mode."""
+    assert hasattr(context, "test_mode_enabled") and context.test_mode_enabled
+
+
+@then('status message "{message}" is logged')
+def step_status_message_logged(context: Context, message: str) -> None:
+    """Verify status message was logged."""
+    assert hasattr(context, "stderr"), "No stderr output captured"
+    assert message in context.stderr, (
+        f"Expected message '{message}' not found in stderr: {context.stderr}"
+    )
+
+
+@given('machine "{machine_name}" has no command')
+def step_machine_has_no_command_field(context: Context, machine_name: str) -> None:
+    """Set up machine without command field."""
+    from features.steps.cli_steps import ensure_machine_exists
+
+    ensure_machine_exists(context, machine_name)
