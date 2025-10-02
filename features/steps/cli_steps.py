@@ -22,7 +22,7 @@ def ensure_machine_exists(context: Context, machine_name: str) -> None:
         Name of the machine configuration
     """
 
-    if not hasattr(context, "config_data"):
+    if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {"defaults": {}}
 
     if "machines" not in context.config_data:
@@ -34,7 +34,7 @@ def ensure_machine_exists(context: Context, machine_name: str) -> None:
 
 @given("config file with defaults section only")
 def step_config_with_defaults_section_only(context: Context) -> None:
-    context.config_data = {"defaults": {}}
+    context.config_data = {"defaults": {}, "machines": {}}
 
 
 @given('config file with machine "{machine_name}" defined')
@@ -119,24 +119,24 @@ def step_config_with_machines(context: Context, machine_list: str) -> None:
 
 @given('YAML defaults with region "{region}"')
 def step_yaml_defaults_with_region(context: Context, region: str) -> None:
-    if not hasattr(context, "config_data"):
-        context.config_data = {"defaults": {}}
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}, "machines": {}}
 
     context.config_data["defaults"]["region"] = region
 
 
 @given('YAML defaults with instance_type "{instance_type}"')
 def step_yaml_defaults_with_instance_type(context: Context, instance_type: str) -> None:
-    if not hasattr(context, "config_data"):
-        context.config_data = {"defaults": {}}
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}, "machines": {}}
 
     context.config_data["defaults"]["instance_type"] = instance_type
 
 
 @given('defaults section has region "{region}"')
 def step_defaults_section_has_region(context: Context, region: str) -> None:
-    if not hasattr(context, "config_data"):
-        context.config_data = {"defaults": {}}
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}, "machines": {}}
 
     if "defaults" not in context.config_data:
         context.config_data["defaults"] = {}
@@ -146,8 +146,8 @@ def step_defaults_section_has_region(context: Context, region: str) -> None:
 
 @given('defaults have instance_type "{instance_type}"')
 def step_defaults_have_instance_type(context: Context, instance_type: str) -> None:
-    if not hasattr(context, "config_data"):
-        context.config_data = {"defaults": {}}
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}, "machines": {}}
 
     context.config_data["defaults"]["instance_type"] = instance_type
 

@@ -110,8 +110,33 @@ def mock_ec2_manager(moondock_module):
 
 
 @pytest.fixture
-def moondock(moondock_module: Any, mock_ec2_manager: MagicMock) -> Any:
-    """Create Moondock instance with mocked EC2Manager.
+def mock_ssh_manager(moondock_module):
+    """Mock SSHManager for CLI tests.
+
+    Parameters
+    ----------
+    moondock_module : Any
+        The moondock module from moondock_module fixture
+
+    Returns
+    -------
+    MagicMock
+        Mock SSHManager with connect and execute_command methods
+    """
+    with patch.object(moondock_module, "SSHManager") as MockSSHManager:
+        mock_manager = MagicMock()
+        mock_manager.connect.return_value = None
+        mock_manager.execute_command.return_value = 0
+        mock_manager.close.return_value = None
+        MockSSHManager.return_value = mock_manager
+        yield mock_manager
+
+
+@pytest.fixture
+def moondock(
+    moondock_module: Any, mock_ec2_manager: MagicMock, mock_ssh_manager: MagicMock
+) -> Any:
+    """Create Moondock instance with mocked EC2Manager and SSHManager.
 
     Parameters
     ----------
@@ -119,10 +144,12 @@ def moondock(moondock_module: Any, mock_ec2_manager: MagicMock) -> Any:
         The moondock module from moondock_module fixture
     mock_ec2_manager : MagicMock
         Mocked EC2Manager from mock_ec2_manager fixture
+    mock_ssh_manager : MagicMock
+        Mocked SSHManager from mock_ssh_manager fixture
 
     Returns
     -------
     Any
-        Moondock instance with EC2Manager mocked
+        Moondock instance with EC2Manager and SSHManager mocked
     """
     return moondock_module.Moondock()

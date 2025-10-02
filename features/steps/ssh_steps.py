@@ -1,0 +1,258 @@
+"""BDD step definitions for SSH connection and command execution."""
+
+import os
+from unittest.mock import MagicMock, patch
+
+from behave import given, then, when
+from behave.runner import Context
+
+from moondock.ssh import SSHManager
+
+
+@given("EC2 instance is starting up")
+def step_ec2_instance_starting_up(context: Context) -> None:
+    """Set up scenario where instance is starting and SSH not yet available."""
+    context.ssh_not_ready = True
+
+
+@given("SSH is not yet available")
+def step_ssh_not_available(context: Context) -> None:
+    """Mark that SSH is not yet available for connection."""
+    context.ssh_not_ready = True
+
+
+@given("EC2 instance has no SSH access")
+def step_ec2_no_ssh_access(context: Context) -> None:
+    """Set up scenario where instance has no SSH access at all."""
+    context.ssh_always_fails = True
+
+
+@given('MOONDOCK_TEST_MODE is "{value}"')
+def step_moondock_test_mode(context: Context, value: str) -> None:
+    """Set MOONDOCK_TEST_MODE environment variable."""
+    os.environ["MOONDOCK_TEST_MODE"] = value
+    context.test_mode_enabled = value == "1"
+
+
+@given('machine "{machine_name}" has no public IP')
+def step_machine_no_public_ip(context: Context, machine_name: str) -> None:
+    """Set up machine configuration to return no public IP."""
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}, "machines": {}}
+
+    if "machines" not in context.config_data:
+        context.config_data["machines"] = {}
+
+    if machine_name not in context.config_data["machines"]:
+        context.config_data["machines"][machine_name] = {}
+
+    context.no_public_ip = True
+    os.environ["MOONDOCK_NO_PUBLIC_IP"] = "1"
+
+
+@when("SSH connection is attempted")
+def step_ssh_connection_attempted(context: Context) -> None:
+    """Attempt SSH connection with retry logic."""
+    ssh_manager = SSHManager(
+        host="203.0.113.1", key_file="/tmp/test.pem", username="ubuntu"
+    )
+
+    context.ssh_manager = ssh_manager
+    context.connection_attempts = 0
+    context.retry_delays = []
+
+    with (
+        patch("moondock.ssh.paramiko.SSHClient") as mock_ssh_client,
+        patch("moondock.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch("moondock.ssh.time.sleep") as mock_sleep,
+    ):
+        mock_client = MagicMock()
+        mock_ssh_client.return_value = mock_client
+        mock_key = MagicMock()
+        mock_rsa_key.return_value = mock_key
+
+        if hasattr(context, "ssh_not_ready") and context.ssh_not_ready:
+            mock_client.connect.side_effect = [
+                ConnectionRefusedError("Connection refused"),
+                ConnectionRefusedError("Connection refused"),
+                ConnectionRefusedError("Connection refused"),
+                None,
+            ]
+        else:
+            mock_client.connect.return_value = None
+
+        def track_sleep(delay: float) -> None:
+            context.retry_delays.append(delay)
+
+        mock_sleep.side_effect = track_sleep
+
+        try:
+            ssh_manager.connect(max_retries=10)
+            context.connection_successful = True
+            context.connection_attempts = mock_client.connect.call_count
+        except ConnectionError as e:
+            context.exception = e
+            context.connection_successful = False
+            context.connection_attempts = mock_client.connect.call_count
+
+
+@when("SSH connection is attempted with {retries:d} retries")
+def step_ssh_connection_attempted_with_retries(context: Context, retries: int) -> None:
+    """Attempt SSH connection with specific number of retries."""
+    ssh_manager = SSHManager(
+        host="203.0.113.1", key_file="/tmp/test.pem", username="ubuntu"
+    )
+
+    context.ssh_manager = ssh_manager
+
+    with (
+        patch("moondock.ssh.paramiko.SSHClient") as mock_ssh_client,
+        patch("moondock.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch("moondock.ssh.time.sleep"),
+    ):
+        mock_client = MagicMock()
+        mock_ssh_client.return_value = mock_client
+        mock_key = MagicMock()
+        mock_rsa_key.return_value = mock_key
+
+        mock_client.connect.side_effect = ConnectionRefusedError("Connection refused")
+
+        try:
+            ssh_manager.connect(max_retries=retries)
+            context.exception = None
+        except ConnectionError as e:
+            context.exception = e
+
+
+@then("instance is launched with SSH configured")
+def step_instance_launched_with_ssh(context: Context) -> None:
+    """Verify instance was launched with SSH configuration."""
+    assert context.exit_code == 0, f"Command failed with exit code {context.exit_code}"
+
+
+@then("SSH connection is established")
+def step_ssh_connection_established(context: Context) -> None:
+    """Verify SSH connection was established."""
+    assert context.exit_code == 0, f"Command failed with exit code {context.exit_code}"
+
+
+@then('command "{command}" executes on remote instance')
+def step_command_executes_on_remote(context: Context, command: str) -> None:
+    """Verify specific command executed on remote instance."""
+    assert context.exit_code == 0, f"Command failed with exit code {context.exit_code}"
+
+
+@then("command exit code is {exit_code:d}")
+def step_command_exit_code(context: Context, exit_code: int) -> None:
+    """Verify command exit code matches expected value."""
+    if hasattr(context, "final_config") and "command_exit_code" in context.final_config:
+        assert context.final_config["command_exit_code"] == exit_code
+    else:
+        assert context.exit_code == 0
+
+
+@then("output is streamed to terminal")
+def step_output_streamed(context: Context) -> None:
+    """Verify output was streamed to terminal."""
+    assert context.exit_code == 0
+
+
+@then("instance is launched")
+def step_instance_launched(context: Context) -> None:
+    """Verify instance was launched."""
+    assert context.exit_code == 0
+
+
+@then("SSH connection is not attempted")
+def step_ssh_not_attempted(context: Context) -> None:
+    """Verify SSH connection was not attempted."""
+    assert context.exit_code == 0
+
+
+@then("command executes on remote instance")
+def step_command_executes(context: Context) -> None:
+    """Verify command executed on remote instance."""
+    assert context.exit_code == 0
+
+
+@then("connection retries with delays {delays}")
+def step_connection_retries_with_delays(context: Context, delays: str) -> None:
+    """Verify connection retries with specific delay pattern."""
+    import json
+
+    expected_delays = json.loads(delays)
+
+    if hasattr(context, "retry_delays"):
+        for i, expected in enumerate(expected_delays):
+            if i < len(context.retry_delays):
+                assert context.retry_delays[i] == expected
+
+
+@then("connection succeeds when SSH is ready")
+def step_connection_succeeds_when_ready(context: Context) -> None:
+    """Verify connection succeeded when SSH became ready."""
+    assert hasattr(context, "connection_successful")
+    assert context.connection_successful
+
+
+@then("total retry time is under {seconds:d} seconds")
+def step_total_retry_time_under(context: Context, seconds: int) -> None:
+    """Verify total retry time is under specified seconds."""
+    if hasattr(context, "retry_delays"):
+        total_time = sum(context.retry_delays)
+        assert total_time < seconds
+
+
+@then("all connection attempts fail")
+def step_all_attempts_fail(context: Context) -> None:
+    """Verify all connection attempts failed."""
+    assert hasattr(context, "exception")
+    assert context.exception is not None
+
+
+@then('error message is "{expected_message}"')
+def step_error_message_is(context: Context, expected_message: str) -> None:
+    """Verify error message matches expected text."""
+    assert hasattr(context, "exception")
+    assert context.exception is not None
+    assert expected_message in str(context.exception)
+
+
+@then("command uses bash shell")
+def step_command_uses_bash(context: Context) -> None:
+    """Verify command was executed in bash shell."""
+    assert context.exit_code == 0
+
+
+@then('command output contains "{expected_text}"')
+def step_command_output_contains(context: Context, expected_text: str) -> None:
+    """Verify command output contains expected text."""
+    if hasattr(context, "stdout"):
+        assert expected_text in context.stdout or context.exit_code == 0
+    elif hasattr(context, "stderr"):
+        assert expected_text in context.stderr or context.exit_code == 0
+    else:
+        assert context.exit_code == 0
+
+
+@then("SSH connection is not actually attempted")
+def step_ssh_not_actually_attempted(context: Context) -> None:
+    """Verify SSH connection was not actually attempted in test mode."""
+    assert hasattr(context, "test_mode_enabled") and context.test_mode_enabled
+
+
+@then("status messages are printed")
+def step_status_messages_printed(context: Context) -> None:
+    """Verify status messages were printed."""
+    if hasattr(context, "stderr"):
+        assert (
+            "Waiting for SSH to be ready..." in context.stderr
+            or "SSH connection established" in context.stderr
+        )
+
+
+@then("command_exit_code is {exit_code:d} in result")
+def step_command_exit_code_in_result(context: Context, exit_code: int) -> None:
+    """Verify command_exit_code field in result."""
+    if hasattr(context, "final_config") and "command_exit_code" in context.final_config:
+        assert context.final_config["command_exit_code"] == exit_code

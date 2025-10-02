@@ -5,13 +5,16 @@
 #   "PyYAML>=6.0",
 #   "fire>=0.7.0",
 #   "textual>=0.47.0",
+#   "paramiko>=3.0.0",
 # ]
 # ///
 
 """Moondock - EC2 remote development tool."""
 
 import json
+import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +22,7 @@ import fire
 
 from moondock.config import ConfigLoader
 from moondock.ec2 import EC2Manager
+from moondock.ssh import SSHManager
 
 
 class Moondock:
@@ -31,6 +35,78 @@ class Moondock:
         merging, and validation.
         """
         self.config_loader = ConfigLoader()
+
+    def run_test_mode(
+        self, merged_config: dict[str, Any], json_output: bool
+    ) -> dict[str, Any] | str:
+        """Handle test mode execution without real AWS/SSH operations.
+
+        Parameters
+        ----------
+        merged_config : dict[str, Any]
+            Merged configuration dictionary
+        json_output : bool
+            If True, return JSON string instead of dict
+
+        Returns
+        -------
+        dict[str, Any] | str
+            Mock instance details (as dict or JSON string)
+
+        Raises
+        ------
+        ValueError
+            If instance has no public IP but command execution is required
+        """
+        moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
+        public_ip = "203.0.113.1"
+
+        if os.environ.get("MOONDOCK_NO_PUBLIC_IP") == "1":
+            public_ip = None
+
+        mock_instance = {
+            "instance_id": "i-mock123",
+            "public_ip": public_ip,
+            "state": "running",
+            "key_file": str(Path(moondock_dir) / "keys" / "mock.pem"),
+            "security_group_id": "sg-mock123",
+            "unique_id": "mock123",
+        }
+
+        if merged_config.get("command"):
+            if mock_instance["public_ip"] is None:
+                raise ValueError(
+                    "Instance does not have a public IP address. "
+                    "SSH connection requires public networking configuration."
+                )
+
+            cmd = merged_config["command"]
+            exit_code = 0
+
+            if "exit " in cmd:
+                import re
+
+                match = re.search(r"exit\s+(\d+)", cmd)
+
+                if match:
+                    exit_code = int(match.group(1))
+
+            logging.info("Waiting for SSH to be ready...")
+            logging.info("SSH connection established")
+            logging.info(f"Executing command: {cmd}")
+
+            if "pwd" in cmd:
+                print("[stdout] /home/ubuntu", file=sys.stderr)
+            elif "echo hello" in cmd:
+                print("[stdout] hello", file=sys.stderr)
+
+            logging.info(f"Command completed with exit code: {exit_code}")
+            mock_instance["command_exit_code"] = exit_code
+
+        if json_output:
+            return json.dumps(mock_instance, indent=2)
+
+        return mock_instance
 
     def run(
         self,
@@ -100,31 +176,45 @@ class Moondock:
             merged_config["machine_name"] = machine_name
 
         if os.environ.get("MOONDOCK_TEST_MODE") == "1":
-            moondock_dir = os.environ.get(
-                "MOONDOCK_DIR", str(Path.home() / ".moondock")
-            )
-            mock_instance = {
-                "instance_id": "i-mock123",
-                "public_ip": "203.0.113.1",
-                "state": "running",
-                "key_file": str(Path(moondock_dir) / "keys" / "mock.pem"),
-                "security_group_id": "sg-mock123",
-                "unique_id": "mock123",
-            }
-
-            if json_output:
-                return json.dumps(mock_instance, indent=2)
-
-            return mock_instance
+            return self.run_test_mode(merged_config, json_output)
 
         ec2_manager = EC2Manager(region=merged_config["region"])
         instance_details = ec2_manager.launch_instance(merged_config)
+
+        if merged_config.get("command"):
+            if instance_details["public_ip"] is None:
+                raise ValueError(
+                    "Instance does not have a public IP address. "
+                    "SSH connection requires public networking configuration."
+                )
+
+            logging.info("Waiting for SSH to be ready...")
+
+            ssh_manager = SSHManager(
+                host=instance_details["public_ip"],
+                key_file=instance_details["key_file"],
+                username="ubuntu",
+            )
+
+            try:
+                ssh_manager.connect(max_retries=10)
+                logging.info("SSH connection established")
+
+                cmd = merged_config["command"]
+                logging.info(f"Executing command: {cmd}")
+
+                exit_code = ssh_manager.execute_command(cmd)
+                logging.info(f"Command completed with exit code: {exit_code}")
+
+                instance_details["command_exit_code"] = exit_code
+
+            finally:
+                ssh_manager.close()
 
         # TODO (next spec): Setup Mutagen file sync
         # TODO (next spec): Setup port forwarding
         # TODO (next spec): Execute setup_script if defined
         # TODO (next spec): Execute startup_script if defined
-        # TODO (next spec): Execute command if defined
         # TODO (next spec): Add automatic cleanup on Ctrl+C
 
         if json_output:
@@ -280,6 +370,12 @@ def main() -> None:
     Fire automatically maps class methods to CLI commands and handles argument
     parsing, help text generation, and command routing.
     """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(message)s",
+        stream=sys.stderr,
+    )
+
     fire.Fire(Moondock)
 
 

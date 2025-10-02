@@ -79,6 +79,51 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.ec2_client = None
     context.ec2_manager = None
     context.instance = None
+    context.exit_code = None
+    context.stdout = None
+    context.stderr = None
+    context.final_config = None
+    context.error = None
+    context.config_data = None
+    context.temp_config_file = None
+    context.env_config_file = None
+    context.env_config_path = None
+    context.validation_error = None
+    context.config_path = None
+    context.config_to_validate = None
+    context.yaml_config = None
+    context.merged_config = None
+    context.test_mode_enabled = None
+    context.no_public_ip = None
+    context.ssh_always_fails = None
+    context.patched_ec2_client = None
+    context.ami_id = None
+    context.connection_attempts = None
+    context.connection_successful = None
+    context.existing_key_name = None
+    context.existing_sg_id = None
+    context.found_ami_id = None
+    context.has_debug_logging = None
+    context.has_error_logging = None
+    context.has_logger = None
+    context.has_logging_import = None
+    context.infrastructure_check = None
+    context.initial_sg_ids = None
+    context.keys_dir = None
+    context.machine_name = None
+    context.moondock_path = None
+    context.no_ami_found = None
+    context.rapid_test_execution = None
+    context.region = None
+    context.result = None
+    context.retry_delays = None
+    context.scenario_completed = None
+    context.ssh_manager = None
+    context.ssh_not_ready = None
+    context.termination_timeout = None
+    context.timeout_scenario = None
+    context.uses_hex_format = None
+    context.uses_uuid = None
 
     if "no_credentials" not in scenario.tags:
         ec2_client = boto3.client("ec2", region_name="us-east-1")
@@ -196,7 +241,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
             for key, value in context.aws_keys_backup.items():
                 if value is not None:
                     os.environ[key] = value
-    except (KeyError, AttributeError) as e:
+    except AttributeError as e:
         logger.debug(f"Expected error with AWS credentials restoration: {e}")
     except Exception as e:
         logger.error(
@@ -204,7 +249,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         )
 
     try:
-        if hasattr(context, "temp_config_file"):
+        if hasattr(context, "temp_config_file") and context.temp_config_file:
             if os.path.exists(context.temp_config_file):
                 os.unlink(context.temp_config_file)
     except (RuntimeError, AttributeError, OSError) as e:
@@ -213,7 +258,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         logger.error(f"Unexpected error deleting temp_config_file: {e}", exc_info=True)
 
     try:
-        if hasattr(context, "env_config_file"):
+        if hasattr(context, "env_config_file") and context.env_config_file:
             if os.path.exists(context.env_config_file):
                 os.unlink(context.env_config_file)
     except (RuntimeError, AttributeError, OSError) as e:
@@ -224,10 +269,31 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     try:
         if "MOONDOCK_CONFIG" in os.environ:
             del os.environ["MOONDOCK_CONFIG"]
-    except (KeyError, AttributeError) as e:
+    except KeyError as e:
         logger.debug(f"Expected error removing MOONDOCK_CONFIG: {e}")
     except Exception as e:
         logger.error(f"Unexpected error removing MOONDOCK_CONFIG: {e}", exc_info=True)
+
+    try:
+        if "MOONDOCK_NO_PUBLIC_IP" in os.environ:
+            del os.environ["MOONDOCK_NO_PUBLIC_IP"]
+    except KeyError as e:
+        logger.debug(f"Expected error removing MOONDOCK_NO_PUBLIC_IP: {e}")
+    except Exception as e:
+        logger.error(
+            f"Unexpected error removing MOONDOCK_NO_PUBLIC_IP: {e}", exc_info=True
+        )
+
+    try:
+        if "MOONDOCK_TEST_MODE" in os.environ:
+            if os.environ.get("MOONDOCK_TEST_MODE") != "1":
+                os.environ["MOONDOCK_TEST_MODE"] = "1"
+    except KeyError as e:
+        logger.debug(f"Expected error restoring MOONDOCK_TEST_MODE: {e}")
+    except Exception as e:
+        logger.error(
+            f"Unexpected error restoring MOONDOCK_TEST_MODE: {e}", exc_info=True
+        )
 
 
 def after_all(context: Context) -> None:
