@@ -1,0 +1,146 @@
+Feature: Mutagen File Synchronization
+
+@error @dry_run
+Scenario: Mutagen not installed with sync_paths configured
+  Given MOONDOCK_TEST_MODE is "0"
+  And config file with defaults section
+  And defaults have sync_paths configured
+  And mutagen is not installed locally
+  When I run moondock command "run -c 'echo test'"
+  Then command fails with RuntimeError
+  And error message contains "Mutagen is not installed locally"
+  And error message contains "https://github.com/mutagen-io/mutagen"
+
+@smoke @dry_run
+Scenario: No sync_paths skips mutagen operations
+  Given config file with defaults section
+  And defaults have no sync_paths
+  When I run moondock command "run -c 'echo test'"
+  Then mutagen installation check is skipped
+  And mutagen session is not created
+  And command executes from home directory
+
+@smoke @dry_run
+Scenario: Create mutagen sync session
+  Given config file with defaults section
+  And defaults have sync_paths with local "~/myproject" and remote "~/myproject"
+  When I run moondock command "run -c 'echo test'"
+  Then mutagen session is created with name pattern "moondock-"
+  And sync mode is "two-way-resolved"
+  And sync local path is "~/myproject"
+  And sync remote path is "ubuntu@{host}:~/myproject"
+
+@smoke @dry_run
+Scenario: Wait for initial sync completion
+  Given config file with defaults section
+  And defaults have sync_paths configured
+  When I run moondock command "run -c 'echo test'"
+  Then command exit code is 0
+
+@error @dry_run
+Scenario: Initial sync timeout
+  Given config file with defaults section
+  And defaults have sync_paths configured
+  And sync does not complete within timeout
+  When I run moondock command "run -c 'echo test'"
+  Then command fails with RuntimeError
+  And error message contains "Mutagen sync timed out"
+  And mutagen session is terminated
+  And instance remains running
+
+@smoke @dry_run
+Scenario: Execute startup_script after sync completes
+  Given config file with defaults section
+  And defaults have startup_script "source .venv/bin/activate && python --version"
+  And defaults have sync_paths with local "~/myproject" and remote "~/myproject"
+  When I run moondock command "run -c 'echo test'"
+  Then command exit code is 0
+  And status message "Running startup_script..." is logged
+  And status message "Startup script completed successfully" is logged
+
+@error @dry_run
+Scenario: startup_script without sync_paths raises error
+  Given config file with defaults section
+  And defaults have startup_script "echo test"
+  And defaults have no sync_paths
+  When I run moondock command "run"
+  Then command fails with ValueError
+  And error message contains "startup_script is defined but no sync_paths configured"
+
+@smoke @dry_run
+Scenario: Command executes from synced directory
+  Given config file with defaults section
+  And defaults have sync_paths with local "~/myproject" and remote "~/myproject"
+  And mutagen sync completes
+  When I run moondock command "run -c 'pwd'"
+  Then working directory is sync remote path
+  And command exit code is 0
+
+@smoke @dry_run
+Scenario: Ignore patterns excluded from sync
+  Given config file with defaults section
+  And defaults have ignore patterns ["*.pyc", "__pycache__", "*.log"]
+  And defaults have sync_paths configured
+  When mutagen sync session is created
+  Then ignore pattern "*.pyc" is configured
+  And ignore pattern "__pycache__" is configured
+  And ignore pattern "*.log" is configured
+
+@smoke @dry_run
+Scenario: VCS files excluded by default
+  Given config file with defaults section
+  And defaults have sync_paths configured
+  And defaults have include_vcs false
+  When mutagen sync session is created
+  Then ignore pattern ".git" is configured
+  And ignore pattern ".gitignore" is configured
+
+@smoke @dry_run
+Scenario: VCS files included when enabled
+  Given config file with defaults section
+  And defaults have sync_paths configured
+  And defaults have include_vcs true
+  When mutagen sync session is created
+  Then ignore pattern ".git" is not configured
+  And ignore pattern ".gitignore" is not configured
+
+@integration @dry_run
+Scenario: Mutagen session cleanup on normal exit
+  Given mutagen sync session is running
+  When command completes normally
+  Then mutagen session is terminated
+  And session is removed from mutagen list
+
+@integration @dry_run
+Scenario: Mutagen session cleanup on error
+  Given mutagen sync session is running
+  And startup_script is configured
+  When startup_script fails with exit code 1
+  Then command fails with RuntimeError
+  And mutagen session is terminated
+  And SSH connection is closed
+  And instance remains running
+
+@smoke @dry_run
+Scenario: Test mode simulates mutagen sync
+  Given MOONDOCK_TEST_MODE is "1"
+  And config file with defaults section
+  And defaults have sync_paths configured
+  And defaults have startup_script "echo test"
+  When I run moondock command "run -c 'echo done'"
+  Then mutagen installation check is skipped
+  And mutagen session creation is skipped
+  And status message "Starting Mutagen file sync..." is logged
+  And status message "Waiting for initial file sync to complete..." is logged
+  And status message "File sync completed" is logged
+  And status message "Running startup_script..." is logged
+  And status message "Startup script completed successfully" is logged
+
+@smoke @dry_run
+Scenario: Orphaned session cleanup before new session
+  Given orphaned mutagen session exists with name "moondock-123"
+  And config file with defaults section
+  And defaults have sync_paths configured
+  When I run moondock command "run -c 'echo test'"
+  Then orphaned session "moondock-123" is terminated
+  And new mutagen session is created

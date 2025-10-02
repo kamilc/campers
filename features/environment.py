@@ -295,6 +295,27 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
             f"Unexpected error restoring MOONDOCK_TEST_MODE: {e}", exc_info=True
         )
 
+    try:
+        if "MOONDOCK_SYNC_TIMEOUT" in os.environ:
+            del os.environ["MOONDOCK_SYNC_TIMEOUT"]
+    except KeyError as e:
+        logger.debug(f"Expected error removing MOONDOCK_SYNC_TIMEOUT: {e}")
+    except Exception as e:
+        logger.error(
+            f"Unexpected error removing MOONDOCK_SYNC_TIMEOUT: {e}", exc_info=True
+        )
+
+    try:
+        if "MOONDOCK_MUTAGEN_NOT_INSTALLED" in os.environ:
+            del os.environ["MOONDOCK_MUTAGEN_NOT_INSTALLED"]
+    except KeyError as e:
+        logger.debug(f"Expected error removing MOONDOCK_MUTAGEN_NOT_INSTALLED: {e}")
+    except Exception as e:
+        logger.error(
+            f"Unexpected error removing MOONDOCK_MUTAGEN_NOT_INSTALLED: {e}",
+            exc_info=True,
+        )
+
 
 def after_all(context: Context) -> None:
     """Cleanup executed after all tests.

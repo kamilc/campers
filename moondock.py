@@ -14,6 +14,7 @@
 import json
 import logging
 import os
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ import fire
 from moondock.config import ConfigLoader
 from moondock.ec2 import EC2Manager
 from moondock.ssh import SSHManager
+from moondock.sync import MutagenManager
 
 
 class Moondock:
@@ -57,7 +59,14 @@ class Moondock:
         ------
         ValueError
             If instance has no public IP but command execution is required
+            If startup_script defined but no sync_paths configured
         """
+        if merged_config.get("startup_script") and not merged_config.get("sync_paths"):
+            raise ValueError(
+                "startup_script is defined but no sync_paths configured. "
+                "startup_script requires a synced directory to run in."
+            )
+
         moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
         public_ip = "203.0.113.1"
 
@@ -73,7 +82,11 @@ class Moondock:
             "unique_id": "mock123",
         }
 
-        need_ssh = merged_config.get("setup_script") or merged_config.get("command")
+        need_ssh = (
+            merged_config.get("setup_script")
+            or merged_config.get("startup_script")
+            or merged_config.get("command")
+        )
 
         if need_ssh:
             if mock_instance["public_ip"] is None:
@@ -105,6 +118,39 @@ class Moondock:
                     )
 
                 logging.info("Setup script completed successfully")
+
+            if merged_config.get("sync_paths"):
+                logging.info("Starting Mutagen file sync...")
+                logging.info("Waiting for initial file sync to complete...")
+
+                if os.environ.get("MOONDOCK_SYNC_TIMEOUT") == "1":
+                    raise RuntimeError(
+                        "Mutagen sync timed out after 300 seconds. "
+                        "Initial sync did not complete."
+                    )
+
+                logging.info("File sync completed")
+
+            if merged_config.get("startup_script"):
+                logging.info("Running startup_script...")
+
+                script = merged_config["startup_script"]
+                script_exit_code = 0
+
+                if "exit " in script:
+                    import re
+
+                    match = re.search(r"exit\s+(\d+)", script)
+
+                    if match:
+                        script_exit_code = int(match.group(1))
+
+                if script_exit_code != 0:
+                    raise RuntimeError(
+                        f"Startup script failed with exit code: {script_exit_code}"
+                    )
+
+                logging.info("Startup script completed successfully")
 
             if merged_config.get("command"):
                 cmd = merged_config["command"]
@@ -194,37 +240,76 @@ class Moondock:
         if machine_name is not None:
             merged_config["machine_name"] = machine_name
 
+        if merged_config.get("startup_script") and not merged_config.get("sync_paths"):
+            raise ValueError(
+                "startup_script is defined but no sync_paths configured. "
+                "startup_script requires a synced directory to run in."
+            )
+
+        self.validate_sync_paths_config(merged_config.get("sync_paths"))
+
         if os.environ.get("MOONDOCK_TEST_MODE") == "1":
             return self.run_test_mode(merged_config, json_output)
+
+        mutagen_mgr = MutagenManager()
+
+        if merged_config.get("sync_paths"):
+            mutagen_mgr.check_mutagen_installed()
 
         ec2_manager = EC2Manager(region=merged_config["region"])
         instance_details = ec2_manager.launch_instance(merged_config)
 
-        need_ssh = merged_config.get("setup_script") or merged_config.get("command")
-
-        if not need_ssh:
-            if json_output:
-                return json.dumps(instance_details, indent=2)
-
-            return instance_details
-
-        if instance_details["public_ip"] is None:
-            raise ValueError(
-                "Instance does not have a public IP address. "
-                "SSH connection requires public networking configuration."
-            )
-
-        logging.info("Waiting for SSH to be ready...")
-
-        ssh_manager = SSHManager(
-            host=instance_details["public_ip"],
-            key_file=instance_details["key_file"],
-            username="ubuntu",
-        )
+        ssh_manager = None
+        mutagen_session_name = None
 
         try:
+            need_ssh = (
+                merged_config.get("setup_script")
+                or merged_config.get("startup_script")
+                or merged_config.get("command")
+            )
+
+            if not need_ssh:
+                if json_output:
+                    return json.dumps(instance_details, indent=2)
+
+                return instance_details
+
+            if instance_details["public_ip"] is None:
+                raise ValueError(
+                    "Instance does not have a public IP address. "
+                    "SSH connection requires public networking configuration."
+                )
+
+            logging.info("Waiting for SSH to be ready...")
+
+            ssh_manager = SSHManager(
+                host=instance_details["public_ip"],
+                key_file=instance_details["key_file"],
+                username="ubuntu",
+            )
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
+
+            if merged_config.get("sync_paths"):
+                mutagen_session_name = f"moondock-{instance_details['unique_id']}"
+                mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)
+
+            if merged_config.get("sync_paths"):
+                sync_config = merged_config["sync_paths"][0]
+
+                logging.info("Starting Mutagen file sync...")
+
+                mutagen_mgr.create_sync_session(
+                    session_name=mutagen_session_name,
+                    local_path=sync_config["local"],
+                    remote_path=sync_config["remote"],
+                    host=instance_details["public_ip"],
+                    key_file=instance_details["key_file"],
+                    username="ubuntu",
+                    ignore_patterns=merged_config.get("ignore"),
+                    include_vcs=merged_config.get("include_vcs", False),
+                )
 
             if merged_config.get("setup_script", "").strip():
                 logging.info("Running setup_script...")
@@ -238,20 +323,50 @@ class Moondock:
 
                 logging.info("Setup script completed successfully")
 
+            if merged_config.get("sync_paths"):
+                logging.info("Waiting for initial file sync to complete...")
+                mutagen_mgr.wait_for_initial_sync(mutagen_session_name, timeout=300)
+                logging.info("File sync completed")
+
+            if merged_config.get("startup_script"):
+                working_dir = merged_config["sync_paths"][0]["remote"]
+
+                logging.info("Running startup_script...")
+
+                startup_command = self.build_command_in_directory(
+                    working_dir, merged_config["startup_script"]
+                )
+                exit_code = ssh_manager.execute_command_raw(startup_command)
+
+                if exit_code != 0:
+                    raise RuntimeError(
+                        f"Startup script failed with exit code: {exit_code}"
+                    )
+
+                logging.info("Startup script completed successfully")
+
             if merged_config.get("command"):
                 cmd = merged_config["command"]
                 logging.info(f"Executing command: {cmd}")
 
-                exit_code = ssh_manager.execute_command(cmd)
-                logging.info(f"Command completed with exit code: {exit_code}")
+                if merged_config.get("sync_paths"):
+                    working_dir = merged_config["sync_paths"][0]["remote"]
+                    full_command = self.build_command_in_directory(working_dir, cmd)
+                    exit_code = ssh_manager.execute_command_raw(full_command)
+                else:
+                    exit_code = ssh_manager.execute_command(cmd)
 
+                logging.info(f"Command completed with exit code: {exit_code}")
                 instance_details["command_exit_code"] = exit_code
 
         finally:
-            ssh_manager.close()
+            if ssh_manager:
+                ssh_manager.close()
 
-        # TODO (next spec): Setup Mutagen file sync
-        # TODO (Mutagen spec): Execute startup_script (after sync)
+            if mutagen_session_name:
+                logging.info("Terminating Mutagen sync session...")
+                mutagen_mgr.terminate_session(mutagen_session_name)
+
         # TODO (next spec): Setup port forwarding
         # TODO (next spec): Add automatic cleanup on Ctrl+C
 
@@ -384,6 +499,50 @@ class Moondock:
             List of ignore patterns
         """
         return [pattern.strip() for pattern in ignore.split(",") if pattern.strip()]
+
+    def validate_sync_paths_config(self, sync_paths: list | None) -> None:
+        """Validate sync_paths configuration structure.
+
+        Parameters
+        ----------
+        sync_paths : list | None
+            Sync paths configuration to validate
+
+        Raises
+        ------
+        ValueError
+            If sync_paths is not a list or missing required keys in entries
+        """
+        if not sync_paths:
+            return
+
+        if not isinstance(sync_paths, list):
+            raise ValueError("sync_paths must be a list")
+
+        sync_config = sync_paths[0]
+
+        if "local" not in sync_config or "remote" not in sync_config:
+            raise ValueError(
+                "sync_paths entry must have both 'local' and 'remote' keys. "
+                f"Got: {sync_config}"
+            )
+
+    def build_command_in_directory(self, working_dir: str, command: str) -> str:
+        """Build command that executes in specific working directory.
+
+        Parameters
+        ----------
+        working_dir : str
+            Directory path to execute command in
+        command : str
+            Command to execute
+
+        Returns
+        -------
+        str
+            Full command with directory change and proper escaping
+        """
+        return f"cd {shlex.quote(working_dir)} && bash -c {repr(command)}"
 
     def hello(self) -> str:
         """Test command to validate Fire CLI works.

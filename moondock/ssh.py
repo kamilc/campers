@@ -5,6 +5,7 @@ import socket
 import time
 
 import paramiko
+from paramiko.channel import ChannelFile
 
 logger = logging.getLogger(__name__)
 
@@ -111,12 +112,12 @@ class SSHManager:
                         f"Failed to establish SSH connection after {max_retries} attempts"
                     ) from e
 
-    def stream_remaining_output(self, stream, prefix: str) -> None:
+    def stream_remaining_output(self, stream: ChannelFile, prefix: str) -> None:
         """Stream remaining output from a channel stream.
 
         Parameters
         ----------
-        stream
+        stream : ChannelFile
             Channel stream to read from (stdout or stderr)
         prefix : str
             Prefix to add to output lines (e.g., "[stdout]" or "[stderr]")
@@ -124,14 +125,14 @@ class SSHManager:
         for line in stream.readlines():
             print(f"{prefix} {line}", end="", flush=True)
 
-    def stream_output_realtime(self, stdout, stderr) -> None:
+    def stream_output_realtime(self, stdout: ChannelFile, stderr: ChannelFile) -> None:
         """Stream stdout and stderr in real-time until command completes.
 
         Parameters
         ----------
-        stdout
+        stdout : ChannelFile
             SSH channel stdout stream
-        stderr
+        stderr : ChannelFile
             SSH channel stderr stream
         """
         while True:
@@ -147,6 +148,58 @@ class SSHManager:
 
             if stdout.channel.exit_status_ready():
                 break
+
+    def _execute_with_streaming(self, command: str) -> int:
+        """Execute command with streaming output (common logic).
+
+        Parameters
+        ----------
+        command : str
+            Command to execute on remote host
+
+        Returns
+        -------
+        int
+            Command exit code
+
+        Raises
+        ------
+        RuntimeError
+            If SSH connection is not established
+        KeyboardInterrupt
+            If user interrupts execution
+        """
+        if not self.client:
+            raise RuntimeError("SSH connection not established")
+
+        stdin = None
+        stdout = None
+        stderr = None
+
+        try:
+            stdin, stdout, stderr = self.client.exec_command(command)
+
+            self.stream_output_realtime(stdout, stderr)
+
+            self.stream_remaining_output(stdout, "[stdout]")
+            self.stream_remaining_output(stderr, "[stderr]")
+
+            exit_code = stdout.channel.recv_exit_status()
+            return exit_code
+
+        except KeyboardInterrupt:
+            self.close()
+            raise
+
+        finally:
+            if stdin:
+                stdin.close()
+
+            if stdout:
+                stdout.close()
+
+            if stderr:
+                stderr.close()
 
     def execute_command(self, command: str) -> int:
         """Execute command and stream output in real-time.
@@ -170,9 +223,6 @@ class SSHManager:
         KeyboardInterrupt
             If user presses Ctrl+C during command execution
         """
-        if not self.client:
-            raise RuntimeError("SSH connection not established")
-
         if not command or not command.strip():
             raise ValueError("Command cannot be empty")
 
@@ -181,35 +231,32 @@ class SSHManager:
                 f"Command length ({len(command)}) exceeds maximum of 10000 characters"
             )
 
-        stdin = None
-        stdout = None
-        stderr = None
+        shell_command = f"cd ~ && bash -c {repr(command)}"
+        return self._execute_with_streaming(shell_command)
 
-        try:
-            shell_command = f"cd ~ && bash -c {repr(command)}"
-            stdin, stdout, stderr = self.client.exec_command(shell_command)
+    def execute_command_raw(self, command: str) -> int:
+        """Execute raw command without cd ~ && bash -c wrapping.
 
-            self.stream_output_realtime(stdout, stderr)
+        Used for commands that need custom working directory.
 
-            self.stream_remaining_output(stdout, "[stdout]")
-            self.stream_remaining_output(stderr, "[stderr]")
+        Parameters
+        ----------
+        command : str
+            Raw command to execute (caller handles working directory and shell)
 
-            exit_code = stdout.channel.recv_exit_status()
-            return exit_code
+        Returns
+        -------
+        int
+            Command exit code (0 = success, non-zero = failure)
 
-        except KeyboardInterrupt:
-            self.close()
-            raise
-
-        finally:
-            if stdin:
-                stdin.close()
-
-            if stdout:
-                stdout.close()
-
-            if stderr:
-                stderr.close()
+        Raises
+        ------
+        RuntimeError
+            If SSH connection is not established
+        KeyboardInterrupt
+            If user presses Ctrl+C during command execution
+        """
+        return self._execute_with_streaming(command)
 
     def close(self) -> None:
         """Close SSH connection and clean up resources."""

@@ -94,9 +94,11 @@ Scenario: Config-file-only fields preserved
   Given config file with machine "jupyter-lab" defined
   And machine "jupyter-lab" has setup_script "install.sh"
   And machine "jupyter-lab" has startup_script "start.sh"
+  And machine "jupyter-lab" has sync_paths configured
   And machine "jupyter-lab" has env_filter "AWS_.*"
   When I run moondock command "run jupyter-lab --instance-type m5.xlarge"
   Then final config contains instance_type "m5.xlarge"
   And final config contains setup_script "install.sh"
   And final config contains startup_script "start.sh"
+  And final config contains sync_paths
   And final config contains env_filter "AWS_.*"

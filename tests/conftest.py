@@ -127,16 +127,45 @@ def mock_ssh_manager(moondock_module):
         mock_manager = MagicMock()
         mock_manager.connect.return_value = None
         mock_manager.execute_command.return_value = 0
+        mock_manager.execute_command_raw.return_value = 0
         mock_manager.close.return_value = None
         MockSSHManager.return_value = mock_manager
         yield mock_manager
 
 
 @pytest.fixture
+def mock_mutagen_manager(moondock_module):
+    """Mock MutagenManager for CLI tests.
+
+    Parameters
+    ----------
+    moondock_module : Any
+        The moondock module from moondock_module fixture
+
+    Returns
+    -------
+    MagicMock
+        Mock MutagenManager with all Mutagen sync methods
+    """
+    with patch.object(moondock_module, "MutagenManager") as MockMutagenManager:
+        mock_manager = MagicMock()
+        mock_manager.check_mutagen_installed.return_value = None
+        mock_manager.cleanup_orphaned_session.return_value = None
+        mock_manager.create_sync_session.return_value = None
+        mock_manager.wait_for_initial_sync.return_value = None
+        mock_manager.terminate_session.return_value = None
+        MockMutagenManager.return_value = mock_manager
+        yield mock_manager
+
+
+@pytest.fixture
 def moondock(
-    moondock_module: Any, mock_ec2_manager: MagicMock, mock_ssh_manager: MagicMock
+    moondock_module: Any,
+    mock_ec2_manager: MagicMock,
+    mock_ssh_manager: MagicMock,
+    mock_mutagen_manager: MagicMock,
 ) -> Any:
-    """Create Moondock instance with mocked EC2Manager and SSHManager.
+    """Create Moondock instance with mocked EC2Manager, SSHManager, and MutagenManager.
 
     Parameters
     ----------
@@ -146,10 +175,12 @@ def moondock(
         Mocked EC2Manager from mock_ec2_manager fixture
     mock_ssh_manager : MagicMock
         Mocked SSHManager from mock_ssh_manager fixture
+    mock_mutagen_manager : MagicMock
+        Mocked MutagenManager from mock_mutagen_manager fixture
 
     Returns
     -------
     Any
-        Moondock instance with EC2Manager and SSHManager mocked
+        Moondock instance with EC2Manager, SSHManager, and MutagenManager mocked
     """
     return moondock_module.Moondock()

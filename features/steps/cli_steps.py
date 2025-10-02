@@ -298,3 +298,24 @@ def step_final_config_contains_startup_script(context: Context, expected: str) -
 @then('final config contains env_filter "{expected}"')
 def step_final_config_contains_env_filter(context: Context, expected: str) -> None:
     assert context.exit_code == 0
+
+
+@given('machine "{machine_name}" has sync_paths configured')
+def step_machine_has_sync_paths_configured(context: Context, machine_name: str) -> None:
+    if not hasattr(context, "config_data"):
+        context.config_data = {"defaults": {}, "machines": {}}
+
+    if "machines" not in context.config_data:
+        context.config_data["machines"] = {}
+
+    if machine_name not in context.config_data["machines"]:
+        context.config_data["machines"][machine_name] = {}
+
+    context.config_data["machines"][machine_name]["sync_paths"] = [
+        {"local": "~/myproject", "remote": "~/myproject"}
+    ]
+
+
+@then("final config contains sync_paths")
+def step_final_config_contains_sync_paths(context: Context) -> None:
+    assert context.exit_code == 0

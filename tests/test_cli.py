@@ -187,6 +187,7 @@ def test_config_file_only_fields_preserved(
             "jupyter-lab": {
                 "setup_script": "install.sh",
                 "startup_script": "start.sh",
+                "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
                 "env_filter": ["AWS_.*"],
             }
         },
