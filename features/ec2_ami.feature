@@ -9,7 +9,7 @@ Scenario: Lookup Ubuntu 22.04 AMI in region
   And AMI virtualization is "hvm"
   And AMI is most recent available
 
-@error @dry_run
+@error @dry_run @no_ami
 Scenario: AMI not found in region
   Given region with no Ubuntu 22.04 AMI
   When I attempt to lookup AMI

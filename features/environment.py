@@ -58,7 +58,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         except (RuntimeError, Exception):
             pass
 
-    if "Missing AWS credentials" not in scenario.name:
+    if "no_credentials" not in scenario.tags:
         context.mock_aws_env = mock_aws()
         context.mock_aws_env.start()
         os.environ["AWS_ACCESS_KEY_ID"] = "testing"
@@ -80,7 +80,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.ec2_manager = None
     context.instance = None
 
-    if "Missing AWS credentials" not in scenario.name:
+    if "no_credentials" not in scenario.tags:
         ec2_client = boto3.client("ec2", region_name="us-east-1")
 
         try:
@@ -94,7 +94,9 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                         ec2_client.delete_security_group(GroupId=sg["GroupId"])
                         logger.debug(f"Cleaned up security group: {sg['GroupName']}")
                     except Exception as e:
-                        logger.debug(f"Could not delete security group {sg['GroupName']}: {e}")
+                        logger.debug(
+                            f"Could not delete security group {sg['GroupName']}: {e}"
+                        )
         except Exception as e:
             logger.debug(f"Error during security group cleanup: {e}")
 
@@ -111,7 +113,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         except Exception as e:
             logger.debug(f"Error during key pair cleanup: {e}")
 
-    if "AMI not found" not in scenario.name and "Missing AWS credentials" not in scenario.name:
+    if "no_ami" not in scenario.tags and "no_credentials" not in scenario.tags:
         ec2_client.register_image(
             Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
             Description="Ubuntu 22.04 LTS",
@@ -255,6 +257,9 @@ def after_all(context: Context) -> None:
                         logger.debug(f"Final cleanup: removed {pem_file}")
                     except Exception as e:
                         logger.warning(f"Final cleanup failed for {pem_file}: {e}")
+
+    if "MOONDOCK_DIR" in os.environ:
+        del os.environ["MOONDOCK_DIR"]
 
     for key in [
         "AWS_ACCESS_KEY_ID",

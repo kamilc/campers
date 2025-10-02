@@ -167,7 +167,7 @@ def step_running_instance_with_unique_id(context: Context, unique_id: str) -> No
 @given("running instance")
 def step_running_instance(context: Context) -> None:
     """Create a running EC2 instance."""
-    step_running_instance_with_unique_id(context, uuid.uuid4().hex[:8])
+    step_running_instance_with_unique_id(context, uuid.uuid4().hex[:16])
 
 
 @given("no AWS credentials configured")

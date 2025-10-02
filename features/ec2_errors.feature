@@ -1,6 +1,6 @@
 Feature: EC2 Error Handling
 
-@error @dry_run
+@error @dry_run @no_credentials
 Scenario: Missing AWS credentials
   Given no AWS credentials configured
   When I attempt to launch instance
