@@ -76,7 +76,8 @@ def cleanup_keys() -> list[Path]:
         if Path(key_file).exists():
             Path(key_file).unlink()
 
-    keys_dir = Path.home() / ".moondock" / "keys"
+    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
+    keys_dir = Path(moondock_dir) / "keys"
 
     if keys_dir.exists() and not list(keys_dir.iterdir()):
         keys_dir.rmdir()
@@ -123,8 +124,11 @@ def test_create_key_pair(ec2_manager, cleanup_keys):
     key_name, key_file = ec2_manager.create_key_pair(unique_id)
     cleanup_keys.append(key_file)
 
+    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
+    expected_key_file = Path(moondock_dir) / "keys" / f"{unique_id}.pem"
+
     assert key_name == f"moondock-{unique_id}"
-    assert key_file == Path.home() / ".moondock" / "keys" / f"{unique_id}.pem"
+    assert key_file == expected_key_file
     assert key_file.exists()
     assert oct(key_file.stat().st_mode)[-3:] == "600"
 
@@ -224,12 +228,13 @@ def test_launch_instance_success(ec2_manager, cleanup_keys):
         result = ec2_manager.launch_instance(config)
         cleanup_keys.append(result["key_file"])
 
+    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
+    expected_key_file = str(Path(moondock_dir) / "keys" / "1234567890.pem")
+
     assert result["instance_id"].startswith("i-")
     assert result["state"] == "running"
     assert result["unique_id"] == "1234567890"
-    assert result["key_file"] == str(
-        Path.home() / ".moondock" / "keys" / "1234567890.pem"
-    )
+    assert result["key_file"] == expected_key_file
     assert result["security_group_id"].startswith("sg-")
 
     instance = ec2_manager.ec2_resource.Instance(result["instance_id"])
@@ -292,7 +297,8 @@ def test_launch_instance_rollback_on_failure(ec2_manager, cleanup_keys):
     key_pairs = ec2_client.describe_key_pairs()
     assert len(key_pairs["KeyPairs"]) == 0
 
-    key_file = Path.home() / ".moondock" / "keys" / "1234567890.pem"
+    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
+    key_file = Path(moondock_dir) / "keys" / "1234567890.pem"
     assert not key_file.exists()
 
 

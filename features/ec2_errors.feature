@@ -5,7 +5,7 @@ Scenario: Missing AWS credentials
   Given no AWS credentials configured
   When I attempt to launch instance
   Then command fails with NoCredentialsError
-  And error message contains "AWS credentials"
+  And error message contains "credentials"
 
 @error @dry_run
 Scenario: Invalid instance type

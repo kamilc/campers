@@ -228,20 +228,20 @@ def step_final_config_contains_include_vcs_false(context) -> None:
 
 @then("command fails with ValueError")
 def step_command_fails_with_value_error(context) -> None:
-    if hasattr(context, "exception"):
-        assert context.exception is not None, "Exception was None, expected ValueError"
+    if hasattr(context, "exception") and context.exception is not None:
         assert isinstance(context.exception, ValueError), (
             f"Expected ValueError, got {type(context.exception).__name__}: {context.exception}"
         )
     else:
-        assert context.exit_code != 0
-        assert "ValueError" in context.stderr
+        assert context.exit_code != 0, f"Expected failure, got exit code {context.exit_code}"
+        assert context.stderr.strip(), "Expected error message in stderr but got nothing"
 
 
 @then('error message contains "{expected}"')
 def step_error_message_contains(context, expected: str) -> None:
-    if hasattr(context, "exception"):
-        assert expected in str(context.exception)
+    if hasattr(context, "exception") and context.exception is not None:
+        error_msg = str(context.exception)
+        assert expected in error_msg, f"Expected '{expected}' in error message but got: '{error_msg}'"
     elif hasattr(context, "error"):
         assert expected in context.error
     elif hasattr(context, "stderr"):

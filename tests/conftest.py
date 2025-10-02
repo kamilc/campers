@@ -92,11 +92,12 @@ def mock_ec2_manager(moondock_module):
     MagicMock
         Mock EC2Manager with launch_instance returning test instance details
     """
+    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
     mock_instance_details = {
         "instance_id": "i-1234567890abcdef0",
         "public_ip": "1.2.3.4",
         "state": "running",
-        "key_file": "/home/user/.moondock/keys/1234567890.pem",
+        "key_file": str(Path(moondock_dir) / "keys" / "1234567890.pem"),
         "security_group_id": "sg-1234567890abcdef0",
         "unique_id": "1234567890",
     }

@@ -1,6 +1,7 @@
 """EC2 instance management for moondock."""
 
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,59 @@ import boto3
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
+
+VALID_INSTANCE_TYPES = [
+    "t2.micro",
+    "t2.small",
+    "t2.medium",
+    "t2.large",
+    "t2.xlarge",
+    "t2.2xlarge",
+    "t3.micro",
+    "t3.small",
+    "t3.medium",
+    "t3.large",
+    "t3.xlarge",
+    "t3.2xlarge",
+    "t3a.micro",
+    "t3a.small",
+    "t3a.medium",
+    "t3a.large",
+    "t3a.xlarge",
+    "t3a.2xlarge",
+    "m5.large",
+    "m5.xlarge",
+    "m5.2xlarge",
+    "m5.4xlarge",
+    "m5.8xlarge",
+    "m5.12xlarge",
+    "m5.16xlarge",
+    "m5.24xlarge",
+    "m5a.large",
+    "m5a.xlarge",
+    "m5a.2xlarge",
+    "m5a.4xlarge",
+    "m5a.8xlarge",
+    "m5a.12xlarge",
+    "m5a.16xlarge",
+    "m5a.24xlarge",
+    "c5.large",
+    "c5.xlarge",
+    "c5.2xlarge",
+    "c5.4xlarge",
+    "c5.9xlarge",
+    "c5.12xlarge",
+    "c5.18xlarge",
+    "c5.24xlarge",
+    "r5.large",
+    "r5.xlarge",
+    "r5.2xlarge",
+    "r5.4xlarge",
+    "r5.8xlarge",
+    "r5.12xlarge",
+    "r5.16xlarge",
+    "r5.24xlarge",
+]
 
 
 class EC2Manager:
@@ -84,7 +138,8 @@ class EC2Manager:
 
         response = self.ec2_client.create_key_pair(KeyName=key_name)
 
-        keys_dir = Path.home() / ".moondock" / "keys"
+        moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
+        keys_dir = Path(moondock_dir) / "keys"
         keys_dir.mkdir(parents=True, exist_ok=True)
 
         key_file = keys_dir / f"{unique_id}.pem"
@@ -175,7 +230,22 @@ class EC2Manager:
         ------
         RuntimeError
             If instance fails to reach running state within timeout
+        ClientError
+            If instance type is invalid
         """
+        instance_type = config["instance_type"]
+
+        if instance_type not in VALID_INSTANCE_TYPES:
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "InvalidParameterValue",
+                        "Message": f"Invalid instance type: {instance_type}",
+                    }
+                },
+                "RunInstances",
+            )
+
         ami_id = self.find_ubuntu_ami()
         unique_id = str(int(time.time()))
         machine_name = config.get("machine_name", "ad-hoc")
@@ -192,7 +262,7 @@ class EC2Manager:
 
             instances = self.ec2_resource.create_instances(
                 ImageId=ami_id,
-                InstanceType=config["instance_type"],
+                InstanceType=instance_type,
                 KeyName=key_name,
                 SecurityGroupIds=[sg_id],
                 MinCount=1,
@@ -312,7 +382,10 @@ class EC2Manager:
             except ClientError:
                 pass
 
-            key_file = Path.home() / ".moondock" / "keys" / f"{unique_id}.pem"
+            moondock_dir = os.environ.get(
+                "MOONDOCK_DIR", str(Path.home() / ".moondock")
+            )
+            key_file = Path(moondock_dir) / "keys" / f"{unique_id}.pem"
 
             if key_file.exists():
                 key_file.unlink()

@@ -100,11 +100,14 @@ class Moondock:
             merged_config["machine_name"] = machine_name
 
         if os.environ.get("MOONDOCK_TEST_MODE") == "1":
+            moondock_dir = os.environ.get(
+                "MOONDOCK_DIR", str(Path.home() / ".moondock")
+            )
             mock_instance = {
                 "instance_id": "i-mock123",
                 "public_ip": "203.0.113.1",
                 "state": "running",
-                "key_file": str(Path.home() / ".moondock" / "keys" / "mock.pem"),
+                "key_file": str(Path(moondock_dir) / "keys" / "mock.pem"),
                 "security_group_id": "sg-mock123",
                 "unique_id": "mock123",
             }
