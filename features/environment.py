@@ -11,6 +11,25 @@ from moto import mock_aws
 logger = logging.getLogger(__name__)
 
 
+def cleanup_env_var(var_name: str, logger: logging.Logger) -> None:
+    """Remove environment variable with error handling.
+
+    Parameters
+    ----------
+    var_name : str
+        Name of the environment variable to remove
+    logger : logging.Logger
+        Logger instance for error reporting
+    """
+    try:
+        if var_name in os.environ:
+            del os.environ[var_name]
+    except KeyError as e:
+        logger.debug(f"Expected error removing {var_name}: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error removing {var_name}: {e}", exc_info=True)
+
+
 def before_all(context: Context) -> None:
     """Setup executed before all tests."""
     project_root = Path(__file__).parent.parent
@@ -305,16 +324,10 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
             f"Unexpected error removing MOONDOCK_SYNC_TIMEOUT: {e}", exc_info=True
         )
 
-    try:
-        if "MOONDOCK_MUTAGEN_NOT_INSTALLED" in os.environ:
-            del os.environ["MOONDOCK_MUTAGEN_NOT_INSTALLED"]
-    except KeyError as e:
-        logger.debug(f"Expected error removing MOONDOCK_MUTAGEN_NOT_INSTALLED: {e}")
-    except Exception as e:
-        logger.error(
-            f"Unexpected error removing MOONDOCK_MUTAGEN_NOT_INSTALLED: {e}",
-            exc_info=True,
-        )
+    cleanup_env_var("MOONDOCK_MUTAGEN_NOT_INSTALLED", logger)
+    cleanup_env_var("MOONDOCK_TUNNEL_FAIL_PORT", logger)
+    cleanup_env_var("MOONDOCK_PORT_IN_USE", logger)
+    cleanup_env_var("MOONDOCK_SIMULATE_INTERRUPT", logger)
 
 
 def after_all(context: Context) -> None:

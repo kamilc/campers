@@ -159,13 +159,37 @@ def mock_mutagen_manager(moondock_module):
 
 
 @pytest.fixture
+def mock_portforward_manager(moondock_module):
+    """Mock PortForwardManager for CLI tests.
+
+    Parameters
+    ----------
+    moondock_module : Any
+        The moondock module from moondock_module fixture
+
+    Returns
+    -------
+    MagicMock
+        Mock PortForwardManager with all port forwarding methods
+    """
+    with patch.object(moondock_module, "PortForwardManager") as MockPortForwardManager:
+        mock_manager = MagicMock()
+        mock_manager.create_tunnel.return_value = None
+        mock_manager.create_tunnels.return_value = None
+        mock_manager.stop_all_tunnels.return_value = None
+        MockPortForwardManager.return_value = mock_manager
+        yield mock_manager
+
+
+@pytest.fixture
 def moondock(
     moondock_module: Any,
     mock_ec2_manager: MagicMock,
     mock_ssh_manager: MagicMock,
     mock_mutagen_manager: MagicMock,
+    mock_portforward_manager: MagicMock,
 ) -> Any:
-    """Create Moondock instance with mocked EC2Manager, SSHManager, and MutagenManager.
+    """Create Moondock instance with all managers mocked.
 
     Parameters
     ----------
@@ -177,10 +201,12 @@ def moondock(
         Mocked SSHManager from mock_ssh_manager fixture
     mock_mutagen_manager : MagicMock
         Mocked MutagenManager from mock_mutagen_manager fixture
+    mock_portforward_manager : MagicMock
+        Mocked PortForwardManager from mock_portforward_manager fixture
 
     Returns
     -------
     Any
-        Moondock instance with EC2Manager, SSHManager, and MutagenManager mocked
+        Moondock instance with all managers mocked
     """
     return moondock_module.Moondock()

@@ -6,6 +6,7 @@
 #   "fire>=0.7.0",
 #   "textual>=0.47.0",
 #   "paramiko>=3.0.0",
+#   "sshtunnel>=0.4.0",
 # ]
 # ///
 
@@ -24,8 +25,16 @@ import fire
 
 from moondock.config import ConfigLoader
 from moondock.ec2 import EC2Manager
+from moondock.portforward import PortForwardManager
 from moondock.ssh import SSHManager
 from moondock.sync import MutagenManager
+
+SYNC_TIMEOUT = 300
+"""Mutagen initial sync timeout in seconds.
+
+Five minutes allows time for large codebases to complete initial sync over SSH.
+Timeout prevents indefinite hangs if sync stalls due to network or filesystem issues.
+"""
 
 
 class Moondock:
@@ -57,6 +66,18 @@ class Moondock:
 
         match = re.search(r"exit\s+(\d+)", script)
         return int(match.group(1)) if match else 0
+
+    def log_port_forwarding_setup(self, ports: list[int]) -> None:
+        """Log SSH tunnel creation messages for each port.
+
+        Parameters
+        ----------
+        ports : list[int]
+            List of ports to log tunnel creation for
+        """
+        for port in ports:
+            logging.info(f"Creating SSH tunnel for port {port}...")
+            logging.info(f"SSH tunnel established: localhost:{port} -> remote:{port}")
 
     def run_test_mode(
         self, merged_config: dict[str, Any], json_output: bool
@@ -143,6 +164,9 @@ class Moondock:
                     )
 
                 logging.info("File sync completed")
+
+            if merged_config.get("ports"):
+                self.log_port_forwarding_setup(merged_config["ports"])
 
             if merged_config.get("startup_script"):
                 logging.info("Running startup_script...")
@@ -259,6 +283,7 @@ class Moondock:
 
         ssh_manager = None
         mutagen_session_name = None
+        portforward_mgr = None
 
         try:
             need_ssh = (
@@ -323,8 +348,24 @@ class Moondock:
 
             if merged_config.get("sync_paths"):
                 logging.info("Waiting for initial file sync to complete...")
-                mutagen_mgr.wait_for_initial_sync(mutagen_session_name, timeout=300)
+                mutagen_mgr.wait_for_initial_sync(
+                    mutagen_session_name, timeout=SYNC_TIMEOUT
+                )
                 logging.info("File sync completed")
+
+            if merged_config.get("ports"):
+                portforward_mgr = PortForwardManager()
+
+                try:
+                    portforward_mgr.create_tunnels(
+                        ports=merged_config["ports"],
+                        host=instance_details["public_ip"],
+                        key_file=instance_details["key_file"],
+                        username="ubuntu",
+                    )
+                except RuntimeError as e:
+                    logging.error(f"Port forwarding failed: {e}")
+                    raise
 
             if merged_config.get("startup_script"):
                 working_dir = merged_config["sync_paths"][0]["remote"]
@@ -358,15 +399,18 @@ class Moondock:
                 instance_details["command_exit_code"] = exit_code
 
         finally:
+            if portforward_mgr:
+                try:
+                    portforward_mgr.stop_all_tunnels()
+                except Exception as e:
+                    logging.warning(f"Error during tunnel cleanup: {e}")
+
             if ssh_manager:
                 ssh_manager.close()
 
             if mutagen_session_name:
                 logging.info("Terminating Mutagen sync session...")
                 mutagen_mgr.terminate_session(mutagen_session_name)
-
-        # TODO (next spec): Setup port forwarding
-        # TODO (next spec): Add automatic cleanup on Ctrl+C
 
         if json_output:
             return json.dumps(instance_details, indent=2)

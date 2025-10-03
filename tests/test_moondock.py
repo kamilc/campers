@@ -696,3 +696,274 @@ def test_run_test_mode_with_startup_script_success(moondock_module) -> None:
 
     assert result is not None
     assert result["instance_id"] == "i-mock123"
+
+
+def test_run_with_port_forwarding_creates_tunnels(moondock_module) -> None:
+    """Test that run() creates port forwarding tunnels when ports configured."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "ports": [8888, 8080],
+        "command": "echo test",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+        patch("moondock_cli.PortForwardManager") as mock_portforward,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.execute_command_raw.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        mock_portforward_instance = MagicMock()
+        mock_portforward.return_value = mock_portforward_instance
+
+        result = moondock_instance.run()
+
+        mock_portforward_instance.create_tunnels.assert_called_once_with(
+            ports=[8888, 8080],
+            host="203.0.113.1",
+            key_file="/tmp/test.pem",
+            username="ubuntu",
+        )
+        mock_portforward_instance.stop_all_tunnels.assert_called_once()
+        assert result["instance_id"] == "i-test123"
+
+
+def test_run_port_forwarding_cleanup_order(moondock_module) -> None:
+    """Test that port forwarding tunnels stop before SSH closes."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "ports": [8888],
+        "command": "echo test",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    cleanup_order = []
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+        patch("moondock_cli.PortForwardManager") as mock_portforward,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.execute_command_raw.return_value = 0
+        mock_ssh_instance.close.side_effect = lambda: cleanup_order.append("ssh_close")
+        mock_ssh.return_value = mock_ssh_instance
+
+        mock_portforward_instance = MagicMock()
+        mock_portforward_instance.stop_all_tunnels.side_effect = (
+            lambda: cleanup_order.append("tunnels_stop")
+        )
+        mock_portforward.return_value = mock_portforward_instance
+
+        result = moondock_instance.run()
+
+        assert cleanup_order == ["tunnels_stop", "ssh_close"]
+        assert result["instance_id"] == "i-test123"
+
+
+def test_run_port_forwarding_error_triggers_cleanup(moondock_module) -> None:
+    """Test that port forwarding error triggers full cleanup."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "ports": [8888],
+        "command": "echo test",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+        patch("moondock_cli.PortForwardManager") as mock_portforward,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh.return_value = mock_ssh_instance
+
+        mock_portforward_instance = MagicMock()
+        mock_portforward_instance.create_tunnels.side_effect = RuntimeError(
+            "Port 8888 already in use"
+        )
+        mock_portforward.return_value = mock_portforward_instance
+
+        with pytest.raises(RuntimeError, match="Port 8888 already in use"):
+            moondock_instance.run()
+
+        mock_portforward_instance.stop_all_tunnels.assert_called_once()
+        mock_ssh_instance.close.assert_called_once()
+
+
+def test_run_port_forwarding_with_sync_paths(moondock_module) -> None:
+    """Test that port forwarding works with sync_paths enabled."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "ports": [8888],
+        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
+        "command": "echo test",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+        patch("moondock_cli.MutagenManager") as mock_mutagen,
+        patch("moondock_cli.PortForwardManager") as mock_portforward,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.execute_command_raw.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        mock_mutagen_instance = MagicMock()
+        mock_mutagen.return_value = mock_mutagen_instance
+
+        mock_portforward_instance = MagicMock()
+        mock_portforward.return_value = mock_portforward_instance
+
+        result = moondock_instance.run()
+
+        mock_portforward_instance.create_tunnels.assert_called_once()
+        mock_mutagen_instance.create_sync_session.assert_called_once()
+        assert result["instance_id"] == "i-test123"
+
+
+def test_run_port_forwarding_with_startup_script(moondock_module) -> None:
+    """Test that port forwarding establishes before startup_script runs."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "ports": [8888],
+        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
+        "startup_script": "echo startup",
+        "command": "echo command",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    execution_order = []
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+        patch("moondock_cli.MutagenManager") as mock_mutagen,
+        patch("moondock_cli.PortForwardManager") as mock_portforward,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+
+        def track_execution(cmd: str) -> int:
+            if "startup" in cmd:
+                execution_order.append("startup")
+            else:
+                execution_order.append("command")
+            return 0
+
+        mock_ssh_instance.execute_command_raw.side_effect = track_execution
+        mock_ssh.return_value = mock_ssh_instance
+
+        mock_mutagen_instance = MagicMock()
+        mock_mutagen.return_value = mock_mutagen_instance
+
+        mock_portforward_instance = MagicMock()
+        mock_portforward_instance.create_tunnels.side_effect = (
+            lambda **kwargs: execution_order.append("port_forward")
+        )
+        mock_portforward.return_value = mock_portforward_instance
+
+        result = moondock_instance.run()
+
+        assert execution_order[0] == "port_forward"
+        assert "startup" in execution_order
+        assert result["instance_id"] == "i-test123"
