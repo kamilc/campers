@@ -648,3 +648,17 @@ class TestConfigLoader:
 
         with pytest.raises(ValueError, match="ignore entries must be strings"):
             loader.validate_config(config)
+
+    def test_validate_config_invalid_env_filter_regex_pattern(self) -> None:
+        """Verify validation fails when env_filter contains invalid regex pattern."""
+        config = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "env_filter": ["AWS_.*", "[invalid(regex"],
+        }
+
+        loader = ConfigLoader()
+
+        with pytest.raises(ValueError, match="Invalid regex pattern in env_filter"):
+            loader.validate_config(config)

@@ -1,5 +1,6 @@
 import copy
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -158,6 +159,14 @@ class ConfigLoader:
             for item in config["env_filter"]:
                 if not isinstance(item, str):
                     raise ValueError("env_filter entries must be strings")
+
+            for pattern in config["env_filter"]:
+                try:
+                    re.compile(pattern)
+                except re.error as e:
+                    raise ValueError(
+                        f"Invalid regex pattern in env_filter: '{pattern}' - {e}"
+                    )
 
         if "port" in config and "ports" in config:
             raise ValueError("cannot specify both port and ports")

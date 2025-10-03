@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, call, patch
 import paramiko
 import pytest
 
-from moondock.ssh import SSHManager
+from moondock.ssh import MAX_COMMAND_LENGTH, SSHManager
 
 
 @pytest.fixture
@@ -480,4 +480,216 @@ def test_execute_command_raw_exceeds_max_length(ssh_manager: SSHManager) -> None
     with pytest.raises(ValueError) as exc_info:
         ssh_manager.execute_command_raw(long_command)
 
-    assert "exceeds maximum of 10000 characters" in str(exc_info.value)
+    assert f"exceeds maximum of {MAX_COMMAND_LENGTH} characters" in str(exc_info.value)
+
+
+@patch.dict(
+    "os.environ",
+    {
+        "AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE",
+        "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        "AWS_REGION": "us-west-2",
+        "HF_TOKEN": "hf_AbCdEfGhIjKlMnOpQrStUvWxYz",
+        "WANDB_API_KEY": "a1b2c3d4e5f6g7h8i9j0",
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/home/user",
+    },
+    clear=True,
+)
+def test_filter_environment_variables_with_aws_pattern(ssh_manager: SSHManager) -> None:
+    """Test filtering environment variables with AWS regex pattern."""
+    env_filter = ["AWS_.*"]
+
+    filtered = ssh_manager.filter_environment_variables(env_filter)
+
+    assert len(filtered) == 3
+    assert "AWS_ACCESS_KEY_ID" in filtered
+    assert "AWS_SECRET_ACCESS_KEY" in filtered
+    assert "AWS_REGION" in filtered
+    assert "HF_TOKEN" not in filtered
+    assert "PATH" not in filtered
+
+
+@patch.dict(
+    "os.environ",
+    {
+        "AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE",
+        "HF_TOKEN": "hf_AbCdEfGhIjKlMnOpQrStUvWxYz",
+        "WANDB_API_KEY": "a1b2c3d4e5f6g7h8i9j0",
+        "OPENAI_API_KEY": "sk-1234567890",
+    },
+    clear=True,
+)
+def test_filter_environment_variables_with_multiple_patterns(
+    ssh_manager: SSHManager,
+) -> None:
+    """Test filtering with multiple regex patterns using OR logic."""
+    env_filter = ["AWS_.*", "HF_TOKEN", ".*_API_KEY$"]
+
+    filtered = ssh_manager.filter_environment_variables(env_filter)
+
+    assert len(filtered) == 4
+    assert "AWS_ACCESS_KEY_ID" in filtered
+    assert "HF_TOKEN" in filtered
+    assert "WANDB_API_KEY" in filtered
+    assert "OPENAI_API_KEY" in filtered
+
+
+def test_filter_environment_variables_with_no_filter(ssh_manager: SSHManager) -> None:
+    """Test filtering returns empty dict when no filter provided."""
+    filtered = ssh_manager.filter_environment_variables(None)
+
+    assert filtered == {}
+
+
+def test_filter_environment_variables_with_empty_list(ssh_manager: SSHManager) -> None:
+    """Test filtering returns empty dict when empty list provided."""
+    filtered = ssh_manager.filter_environment_variables([])
+
+    assert filtered == {}
+
+
+@patch.dict("os.environ", {"PATH": "/usr/bin", "HOME": "/home/user"}, clear=True)
+def test_filter_environment_variables_with_no_matches(ssh_manager: SSHManager) -> None:
+    """Test filtering returns empty dict when no variables match pattern."""
+    env_filter = ["AWS_.*", "HF_TOKEN"]
+
+    filtered = ssh_manager.filter_environment_variables(env_filter)
+
+    assert filtered == {}
+
+
+def test_build_command_with_env_no_env_vars(ssh_manager: SSHManager) -> None:
+    """Test building command without environment variables returns unchanged command."""
+    command = "echo test"
+
+    result = ssh_manager.build_command_with_env(command, None)
+
+    assert result == "echo test"
+
+
+def test_build_command_with_env_empty_dict(ssh_manager: SSHManager) -> None:
+    """Test building command with empty env dict returns unchanged command."""
+    command = "echo test"
+
+    result = ssh_manager.build_command_with_env(command, {})
+
+    assert result == "echo test"
+
+
+def test_build_command_with_env_single_var(ssh_manager: SSHManager) -> None:
+    """Test building command with single environment variable."""
+    command = "aws s3 ls"
+    env_vars = {"AWS_REGION": "us-west-2"}
+
+    result = ssh_manager.build_command_with_env(command, env_vars)
+
+    assert result == "export AWS_REGION=us-west-2 && aws s3 ls"
+
+
+def test_build_command_with_env_multiple_vars(ssh_manager: SSHManager) -> None:
+    """Test building command with multiple environment variables."""
+    command = "python train.py"
+    env_vars = {
+        "AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE",
+        "HF_TOKEN": "hf_AbCdEfGhIjKlMnOpQrStUvWxYz",
+    }
+
+    result = ssh_manager.build_command_with_env(command, env_vars)
+
+    assert (
+        result
+        == "export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE && export HF_TOKEN=hf_AbCdEfGhIjKlMnOpQrStUvWxYz && python train.py"
+    )
+
+
+def test_build_command_with_env_special_characters(ssh_manager: SSHManager) -> None:
+    """Test building command with special characters in values."""
+    command = "echo test"
+    env_vars = {"TOKEN": "abc def 'quoted' $special"}
+
+    result = ssh_manager.build_command_with_env(command, env_vars)
+
+    assert result == "export TOKEN='abc def '\"'\"'quoted'\"'\"' $special' && echo test"
+
+
+def test_build_command_with_env_shell_injection_prevention(
+    ssh_manager: SSHManager,
+) -> None:
+    """Test building command prevents shell injection via shlex.quote."""
+    command = "echo safe"
+    env_vars = {"MALICIOUS_VAR": "'; rm -rf / #"}
+
+    result = ssh_manager.build_command_with_env(command, env_vars)
+
+    assert result == "export MALICIOUS_VAR=''\"'\"'; rm -rf / #' && echo safe"
+
+
+def test_build_command_with_env_exceeds_max_length(ssh_manager: SSHManager) -> None:
+    """Test that command with env vars exceeding max length raises error."""
+    command = "a" * 9000
+    env_vars = {"VAR_" + str(i): "x" * 100 for i in range(20)}
+
+    with pytest.raises(ValueError, match="exceeds maximum of 10000 characters"):
+        ssh_manager.build_command_with_env(command, env_vars)
+
+
+@patch("moondock.ssh.paramiko.SSHClient")
+@patch("moondock.ssh.paramiko.RSAKey.from_private_key_file")
+def test_execute_command_with_env_success(
+    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+) -> None:
+    """Test executing command with environment variables."""
+    mock_client = MagicMock()
+    mock_ssh_client.return_value = mock_client
+    ssh_manager.client = mock_client
+
+    mock_stdin = MagicMock()
+    mock_stdout = MagicMock()
+    mock_stderr = MagicMock()
+
+    mock_stdout.readline.return_value = ""
+    mock_stdout.readlines.return_value = []
+    mock_stderr.readline.return_value = ""
+    mock_stderr.readlines.return_value = []
+    mock_stdout.channel.exit_status_ready.return_value = True
+    mock_stdout.channel.recv_exit_status.return_value = 0
+
+    mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+
+    env_vars = {"AWS_REGION": "us-west-2"}
+    exit_code = ssh_manager.execute_command_with_env("aws s3 ls", env_vars)
+
+    assert exit_code == 0
+    mock_client.exec_command.assert_called_once_with(
+        "cd ~ && bash -c 'export AWS_REGION=us-west-2 && aws s3 ls'"
+    )
+
+
+@patch("moondock.ssh.paramiko.SSHClient")
+@patch("moondock.ssh.paramiko.RSAKey.from_private_key_file")
+def test_execute_command_with_env_no_vars(
+    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+) -> None:
+    """Test executing command without environment variables."""
+    mock_client = MagicMock()
+    mock_ssh_client.return_value = mock_client
+    ssh_manager.client = mock_client
+
+    mock_stdin = MagicMock()
+    mock_stdout = MagicMock()
+    mock_stderr = MagicMock()
+
+    mock_stdout.readline.return_value = ""
+    mock_stdout.readlines.return_value = []
+    mock_stderr.readline.return_value = ""
+    mock_stderr.readlines.return_value = []
+    mock_stdout.channel.exit_status_ready.return_value = True
+    mock_stdout.channel.recv_exit_status.return_value = 0
+
+    mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
+
+    exit_code = ssh_manager.execute_command_with_env("echo test", None)
+
+    assert exit_code == 0
+    mock_client.exec_command.assert_called_once_with("cd ~ && bash -c 'echo test'")

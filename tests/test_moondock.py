@@ -176,6 +176,8 @@ def test_run_executes_setup_script_before_command(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
 
         def track_execute_command(cmd: str) -> int:
             execution_order.append(cmd)
@@ -225,6 +227,8 @@ def test_run_setup_script_failure_prevents_command(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command.return_value = 1
         mock_ssh.return_value = mock_ssh_instance
 
@@ -303,6 +307,8 @@ def test_run_only_setup_script_no_command(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command.return_value = 0
         mock_ssh.return_value = mock_ssh_instance
 
@@ -367,6 +373,8 @@ def test_run_with_sync_paths_creates_mutagen_session(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
         mock_ssh.return_value = mock_ssh_instance
 
@@ -417,6 +425,8 @@ def test_run_executes_command_from_synced_directory(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
         mock_ssh.return_value = mock_ssh_instance
 
@@ -467,6 +477,8 @@ def test_run_executes_startup_script_from_synced_directory(moondock_module) -> N
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
         mock_ssh.return_value = mock_ssh_instance
 
@@ -584,6 +596,8 @@ def test_run_startup_script_failure_prevents_command(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 42
         mock_ssh.return_value = mock_ssh_instance
 
@@ -639,6 +653,8 @@ cd src"""
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
         mock_ssh.return_value = mock_ssh_instance
 
@@ -732,6 +748,8 @@ def test_run_with_port_forwarding_creates_tunnels(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
         mock_ssh.return_value = mock_ssh_instance
 
@@ -786,6 +804,8 @@ def test_run_port_forwarding_cleanup_order(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
         mock_ssh_instance.close.side_effect = lambda: cleanup_order.append("ssh_close")
         mock_ssh.return_value = mock_ssh_instance
@@ -836,6 +856,8 @@ def test_run_port_forwarding_error_triggers_cleanup(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh.return_value = mock_ssh_instance
 
         mock_portforward_instance = MagicMock()
@@ -887,6 +909,8 @@ def test_run_port_forwarding_with_sync_paths(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
         mock_ssh.return_value = mock_ssh_instance
 
@@ -942,6 +966,8 @@ def test_run_port_forwarding_with_startup_script(moondock_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
 
         def track_execution(cmd: str) -> int:
             if "startup" in cmd:
@@ -967,3 +993,239 @@ def test_run_port_forwarding_with_startup_script(moondock_module) -> None:
         assert execution_order[0] == "port_forward"
         assert "startup" in execution_order
         assert result["instance_id"] == "i-test123"
+
+
+@pytest.mark.parametrize(
+    "env_filter,expected_error",
+    [
+        (["[invalid(regex"], "Invalid regex pattern in env_filter"),
+        (["(unclosed"], "Invalid regex pattern in env_filter"),
+    ],
+)
+def test_run_validates_env_filter_regex_patterns(
+    moondock_module, env_filter, expected_error
+) -> None:
+    """Test that invalid regex patterns in env_filter are caught during validation."""
+    from moondock.config import ConfigLoader
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = ConfigLoader()
+
+    config_data = {
+        "defaults": {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "env_filter": env_filter,
+        }
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        moondock_instance.config_loader.validate_config(config_data["defaults"])
+
+    assert expected_error in str(exc_info.value)
+
+
+def test_run_filters_environment_variables_after_ssh_connection(
+    moondock_module,
+) -> None:
+    """Test that environment variables are filtered after SSH connection."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "env_filter": ["AWS_.*"],
+        "command": "aws s3 ls",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {
+            "AWS_REGION": "us-west-2"
+        }
+        mock_ssh_instance.build_command_with_env.return_value = (
+            "export AWS_REGION='us-west-2' && aws s3 ls"
+        )
+        mock_ssh_instance.execute_command.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        moondock_instance.run()
+
+        mock_ssh_instance.connect.assert_called_once()
+        mock_ssh_instance.filter_environment_variables.assert_called_once_with(
+            ["AWS_.*"]
+        )
+        mock_ssh_instance.build_command_with_env.assert_called()
+
+
+def test_run_forwards_env_to_setup_script(moondock_module) -> None:
+    """Test that environment variables are forwarded to setup_script."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "env_filter": ["AWS_.*"],
+        "setup_script": "aws s3 cp s3://bucket/setup.sh .",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {
+            "AWS_REGION": "us-west-2"
+        }
+        mock_ssh_instance.build_command_with_env.return_value = (
+            "export AWS_REGION='us-west-2' && aws s3 cp s3://bucket/setup.sh ."
+        )
+        mock_ssh_instance.execute_command.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        result = moondock_instance.run()
+
+        mock_ssh_instance.build_command_with_env.assert_called_with(
+            "aws s3 cp s3://bucket/setup.sh .", {"AWS_REGION": "us-west-2"}
+        )
+        assert result["instance_id"] == "i-test123"
+
+
+def test_run_forwards_env_to_startup_script(moondock_module) -> None:
+    """Test that environment variables are forwarded to startup_script."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "env_filter": ["HF_TOKEN"],
+        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
+        "startup_script": "huggingface-cli login",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+        patch("moondock_cli.MutagenManager") as mock_mutagen,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {
+            "HF_TOKEN": "hf_test123"
+        }
+        mock_ssh_instance.build_command_with_env.return_value = "export HF_TOKEN='hf_test123' && cd ~/myproject && bash -c 'huggingface-cli login'"
+        mock_ssh_instance.execute_command_raw.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        mock_mutagen_instance = MagicMock()
+        mock_mutagen.return_value = mock_mutagen_instance
+
+        result = moondock_instance.run()
+
+        calls = mock_ssh_instance.build_command_with_env.call_args_list
+        assert any("huggingface-cli login" in str(call) for call in calls)
+        assert result["instance_id"] == "i-test123"
+
+
+def test_run_forwards_env_to_main_command(moondock_module) -> None:
+    """Test that environment variables are forwarded to main command."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "env_filter": ["WANDB_.*"],
+        "command": "python train.py",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {
+            "WANDB_API_KEY": "test-key"
+        }
+        mock_ssh_instance.build_command_with_env.return_value = (
+            "export WANDB_API_KEY='test-key' && python train.py"
+        )
+        mock_ssh_instance.execute_command.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        result = moondock_instance.run()
+
+        mock_ssh_instance.build_command_with_env.assert_called_with(
+            "python train.py", {"WANDB_API_KEY": "test-key"}
+        )
+        assert result["command_exit_code"] == 0

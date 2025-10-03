@@ -1,6 +1,9 @@
 """SSH connection and command execution management."""
 
 import logging
+import os
+import re
+import shlex
 import socket
 import time
 
@@ -269,6 +272,126 @@ class SSHManager:
             )
 
         return self._execute_with_streaming(command)
+
+    def filter_environment_variables(
+        self,
+        env_filter: list[str] | None,
+    ) -> dict[str, str]:
+        """Filter local environment variables using regex patterns.
+
+        Patterns are pre-validated during config loading, so no validation
+        is performed here.
+
+        Parameters
+        ----------
+        env_filter : list[str] | None
+            List of regex patterns to match environment variable names.
+            Variables matching any pattern will be included.
+            Patterns must be pre-validated (already checked by ConfigLoader).
+
+        Returns
+        -------
+        dict[str, str]
+            Dictionary of filtered environment variables (name -> value)
+        """
+        if not env_filter:
+            return {}
+
+        compiled_patterns = [re.compile(pattern) for pattern in env_filter]
+        filtered_vars = {}
+
+        for var_name, var_value in os.environ.items():
+            for regex in compiled_patterns:
+                if regex.match(var_name):
+                    filtered_vars[var_name] = var_value
+                    break
+
+        if filtered_vars:
+            var_names = ", ".join(sorted(filtered_vars.keys()))
+            logger.info(
+                f"Forwarding {len(filtered_vars)} environment variables: {var_names}"
+            )
+
+            sensitive_patterns = ["SECRET", "PASSWORD", "TOKEN", "KEY"]
+            sensitive_vars = [
+                name
+                for name in filtered_vars.keys()
+                if any(pattern in name.upper() for pattern in sensitive_patterns)
+            ]
+
+            if sensitive_vars:
+                logger.warning(
+                    f"Forwarding sensitive environment variables: {', '.join(sensitive_vars)}"
+                )
+
+        return filtered_vars
+
+    def build_command_with_env(
+        self,
+        command: str,
+        env_vars: dict[str, str] | None = None,
+    ) -> str:
+        """Build command with environment variable exports.
+
+        Parameters
+        ----------
+        command : str
+            Original command to execute
+        env_vars : dict[str, str] | None
+            Environment variables to export before command
+
+        Returns
+        -------
+        str
+            Command with environment variable exports prepended
+
+        Raises
+        ------
+        ValueError
+            If resulting command exceeds maximum length
+        """
+        if not env_vars:
+            return command
+
+        exports = []
+
+        for var_name, var_value in sorted(env_vars.items()):
+            quoted_value = shlex.quote(var_value)
+            exports.append(f"export {var_name}={quoted_value}")
+
+        export_prefix = " && ".join(exports)
+        full_command = f"{export_prefix} && {command}"
+
+        if len(full_command) > MAX_COMMAND_LENGTH:
+            raise ValueError(
+                f"Command with environment variables ({len(full_command)} chars) "
+                f"exceeds maximum of {MAX_COMMAND_LENGTH} characters. "
+                f"Consider: 1) reducing environment variables, 2) using shorter values, or 3) simplifying the command."
+            )
+
+        return full_command
+
+    def execute_command_with_env(
+        self,
+        command: str,
+        env_vars: dict[str, str] | None = None,
+    ) -> int:
+        """Execute command with environment variables forwarded.
+
+        Parameters
+        ----------
+        command : str
+            Command to execute
+        env_vars : dict[str, str] | None
+            Environment variables to forward
+
+        Returns
+        -------
+        int
+            Exit code from command execution
+        """
+        full_command = self.build_command_with_env(command, env_vars)
+        return self.execute_command(full_command)
 
     def close(self) -> None:
         """Close SSH connection and clean up resources."""

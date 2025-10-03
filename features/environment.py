@@ -329,6 +329,14 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     cleanup_env_var("MOONDOCK_PORT_IN_USE", logger)
     cleanup_env_var("MOONDOCK_SIMULATE_INTERRUPT", logger)
 
+    try:
+        if hasattr(context, "saved_env") and context.saved_env:
+            os.environ.clear()
+            os.environ.update(context.saved_env)
+            delattr(context, "saved_env")
+    except Exception as e:
+        logger.error(f"Error restoring environment: {e}", exc_info=True)
+
 
 def after_all(context: Context) -> None:
     """Cleanup executed after all tests.

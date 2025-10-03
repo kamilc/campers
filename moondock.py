@@ -139,6 +139,14 @@ class Moondock:
             logging.info("Waiting for SSH to be ready...")
             logging.info("SSH connection established")
 
+            if merged_config.get("env_filter"):
+                from moondock.ssh import SSHManager
+
+                mock_ssh = SSHManager(
+                    host="203.0.113.1", key_file="/tmp/mock.pem", username="ubuntu"
+                )
+                mock_ssh.filter_environment_variables(merged_config["env_filter"])
+
             if merged_config.get("setup_script", "").strip():
                 logging.info("Running setup_script...")
 
@@ -314,6 +322,10 @@ class Moondock:
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
 
+            env_vars = ssh_manager.filter_environment_variables(
+                merged_config.get("env_filter")
+            )
+
             if merged_config.get("sync_paths"):
                 mutagen_session_name = f"moondock-{instance_details['unique_id']}"
                 mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)
@@ -337,7 +349,10 @@ class Moondock:
             if merged_config.get("setup_script", "").strip():
                 logging.info("Running setup_script...")
 
-                exit_code = ssh_manager.execute_command(merged_config["setup_script"])
+                setup_with_env = ssh_manager.build_command_with_env(
+                    merged_config["setup_script"], env_vars
+                )
+                exit_code = ssh_manager.execute_command(setup_with_env)
 
                 if exit_code != 0:
                     raise RuntimeError(
@@ -375,7 +390,10 @@ class Moondock:
                 startup_command = self.build_command_in_directory(
                     working_dir, merged_config["startup_script"]
                 )
-                exit_code = ssh_manager.execute_command_raw(startup_command)
+                startup_with_env = ssh_manager.build_command_with_env(
+                    startup_command, env_vars
+                )
+                exit_code = ssh_manager.execute_command_raw(startup_with_env)
 
                 if exit_code != 0:
                     raise RuntimeError(
@@ -391,9 +409,13 @@ class Moondock:
                 if merged_config.get("sync_paths"):
                     working_dir = merged_config["sync_paths"][0]["remote"]
                     full_command = self.build_command_in_directory(working_dir, cmd)
-                    exit_code = ssh_manager.execute_command_raw(full_command)
+                    command_with_env = ssh_manager.build_command_with_env(
+                        full_command, env_vars
+                    )
+                    exit_code = ssh_manager.execute_command_raw(command_with_env)
                 else:
-                    exit_code = ssh_manager.execute_command(cmd)
+                    command_with_env = ssh_manager.build_command_with_env(cmd, env_vars)
+                    exit_code = ssh_manager.execute_command(command_with_env)
 
                 logging.info(f"Command completed with exit code: {exit_code}")
                 instance_details["command_exit_code"] = exit_code
