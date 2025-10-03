@@ -9,6 +9,8 @@ from paramiko.channel import ChannelFile
 
 logger = logging.getLogger(__name__)
 
+MAX_COMMAND_LENGTH = 10000
+
 
 class SSHManager:
     """Manages SSH connections and command execution on EC2 instances.
@@ -226,9 +228,9 @@ class SSHManager:
         if not command or not command.strip():
             raise ValueError("Command cannot be empty")
 
-        if len(command) > 10000:
+        if len(command) > MAX_COMMAND_LENGTH:
             raise ValueError(
-                f"Command length ({len(command)}) exceeds maximum of 10000 characters"
+                f"Command length ({len(command)}) exceeds maximum of {MAX_COMMAND_LENGTH} characters"
             )
 
         shell_command = f"cd ~ && bash -c {repr(command)}"
@@ -261,9 +263,9 @@ class SSHManager:
         if not command or not command.strip():
             raise ValueError("Command cannot be empty")
 
-        if len(command) > 10000:
+        if len(command) > MAX_COMMAND_LENGTH:
             raise ValueError(
-                f"Command length ({len(command)}) exceeds maximum of 10000 characters"
+                f"Command length ({len(command)}) exceeds maximum of {MAX_COMMAND_LENGTH} characters"
             )
 
         return self._execute_with_streaming(command)

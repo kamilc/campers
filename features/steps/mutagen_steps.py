@@ -2,9 +2,32 @@
 
 import json
 import os
+from typing import Any
 
 from behave import given, then, when
 from behave.runner import Context
+
+
+def ensure_defaults_section(context: Context) -> dict[str, Any]:
+    """Ensure defaults section exists in config_data and return it.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object containing test state
+
+    Returns
+    -------
+    dict
+        The defaults section dictionary
+    """
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {"defaults": {}}
+
+    if "defaults" not in context.config_data:
+        context.config_data["defaults"] = {}
+
+    return context.config_data["defaults"]
 
 
 @given("mutagen is not installed locally")
@@ -41,16 +64,11 @@ def step_defaults_no_sync_paths(context: Context) -> None:
 @given("defaults have multi-line startup_script with shell features")
 def step_defaults_multiline_startup_script(context: Context) -> None:
     """Add multi-line startup_script with shell features to defaults."""
-    if not hasattr(context, "config_data") or context.config_data is None:
-        context.config_data = {"defaults": {}}
-
-    if "defaults" not in context.config_data:
-        context.config_data["defaults"] = {}
-
+    defaults = ensure_defaults_section(context)
     multiline_script = """source .venv/bin/activate
 export DEBUG=1
 cd src"""
-    context.config_data["defaults"]["startup_script"] = multiline_script
+    defaults["startup_script"] = multiline_script
 
 
 @given("defaults have no startup_script")
@@ -66,13 +84,8 @@ def step_defaults_no_startup_script(context: Context) -> None:
 @given('YAML defaults with startup_script "{script}"')
 def step_yaml_defaults_startup_script(context: Context, script: str) -> None:
     """Add startup_script to YAML defaults section."""
-    if not hasattr(context, "config_data") or context.config_data is None:
-        context.config_data = {"defaults": {}}
-
-    if "defaults" not in context.config_data:
-        context.config_data["defaults"] = {}
-
-    context.config_data["defaults"]["startup_script"] = script
+    defaults = ensure_defaults_section(context)
+    defaults["startup_script"] = script
 
 
 @given('defaults have sync_paths with local "{local_path}" and remote "{remote_path}"')
@@ -94,13 +107,8 @@ def step_defaults_sync_paths_with_paths(
 @given('defaults have startup_script "{script}"')
 def step_defaults_have_startup_script(context: Context, script: str) -> None:
     """Add startup_script to defaults configuration."""
-    if not hasattr(context, "config_data") or context.config_data is None:
-        context.config_data = {"defaults": {}}
-
-    if "defaults" not in context.config_data:
-        context.config_data["defaults"] = {}
-
-    context.config_data["defaults"]["startup_script"] = script
+    defaults = ensure_defaults_section(context)
+    defaults["startup_script"] = script
 
 
 @given("defaults have ignore patterns {patterns}")
@@ -346,11 +354,57 @@ def step_new_mutagen_session_created(context: Context) -> None:
 
 @then("startup_script execution is skipped")
 def step_startup_script_execution_skipped(context: Context) -> None:
-    """Verify startup_script execution was skipped."""
-    context.startup_script_skipped = True
+    """Verify startup_script execution was skipped.
+
+    This step verifies that startup_script execution was properly skipped by
+    checking that the "Running startup_script..." status message does NOT appear
+    in stderr output. Used in scenarios where no startup_script is configured
+    or when startup_script should be bypassed.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object containing test state
+
+    Raises
+    ------
+    AssertionError
+        If stderr is not captured or startup_script was executed
+    """
+    if not hasattr(context, "stderr"):
+        available_attrs = [a for a in dir(context) if not a.startswith("_")]
+        raise AssertionError(
+            "No stderr output captured - cannot verify startup_script execution. "
+            f"Available context attributes: {available_attrs}"
+        )
+
+    stderr_text = str(context.stderr) if context.stderr else ""
+
+    if "Running startup_script..." in stderr_text:
+        raise AssertionError(
+            "startup_script was executed when it should have been skipped. "
+            f"stderr preview: {stderr_text[:200]}..."
+        )
 
 
 @then("SSH connection is not actually attempted for startup_script")
 def step_ssh_not_attempted_for_startup_script(context: Context) -> None:
-    """Verify SSH connection not attempted for startup_script in test mode."""
-    context.ssh_not_attempted_for_startup = True
+    """Verify SSH was not attempted for startup_script in test mode.
+
+    This step verifies that when MOONDOCK_TEST_MODE is enabled, SSH connections
+    are not actually made for startup_script execution. Used in test scenarios
+    to ensure the test mode flag is properly honored.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object containing test state
+
+    Raises
+    ------
+    AssertionError
+        If test mode is not enabled
+    """
+    assert hasattr(context, "test_mode_enabled") and context.test_mode_enabled, (
+        "Test mode must be enabled for this verification"
+    )
