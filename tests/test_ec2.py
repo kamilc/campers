@@ -11,16 +11,6 @@ from moondock.ec2 import EC2Manager
 
 
 @pytest.fixture(scope="function")
-def aws_credentials():
-    """Mocked AWS Credentials for moto."""
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    os.environ["AWS_SECURITY_TOKEN"] = "testing"
-    os.environ["AWS_SESSION_TOKEN"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-
-
-@pytest.fixture(scope="function")
 def ec2_manager(aws_credentials):
     """Return a mocked EC2Manager with patched describe_images for Canonical owner ID."""
     with mock_aws():
@@ -65,6 +55,31 @@ def mocked_aws(aws_credentials):
         yield
 
 
+@pytest.fixture(scope="function")
+def registered_ami(ec2_manager):
+    """Register Ubuntu 22.04 AMI for testing.
+
+    Parameters
+    ----------
+    ec2_manager : EC2Manager
+        EC2Manager fixture
+
+    Yields
+    ------
+    str
+        AMI ID of registered image
+    """
+    ec2_client = ec2_manager.ec2_client
+    ec2_client.register_image(
+        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+        Description="Ubuntu 22.04 LTS",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+    yield ec2_manager.find_ubuntu_ami()
+
+
 @pytest.fixture
 def cleanup_keys() -> list[Path]:
     """Clean up SSH key files after test."""
@@ -94,21 +109,10 @@ def test_ec2_manager_initialization(ec2_manager):
     assert ec2_manager.ec2_resource is not None
 
 
-def test_find_ubuntu_ami(ec2_manager):
+def test_find_ubuntu_ami(registered_ami):
     """Test finding Ubuntu 22.04 AMI."""
-    ec2_client = ec2_manager.ec2_client
-
-    ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS",
-        Architecture="x86_64",
-        RootDeviceName="/dev/sda1",
-        VirtualizationType="hvm",
-    )
-
-    ami_id = ec2_manager.find_ubuntu_ami()
-    assert ami_id is not None
-    assert ami_id.startswith("ami-")
+    assert registered_ami is not None
+    assert registered_ami.startswith("ami-")
 
 
 def test_find_ubuntu_ami_no_ami_found(ec2_manager):
@@ -205,18 +209,8 @@ def test_create_security_group_deletes_existing(ec2_manager):
     assert sg_names.count(f"moondock-{unique_id}") == 1
 
 
-def test_launch_instance_success(ec2_manager, cleanup_keys):
+def test_launch_instance_success(ec2_manager, cleanup_keys, registered_ami):
     """Test successful EC2 instance launch."""
-    ec2_client = ec2_manager.ec2_client
-
-    ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS",
-        Architecture="x86_64",
-        RootDeviceName="/dev/sda1",
-        VirtualizationType="hvm",
-    )
-
     config = {
         "instance_type": "t3.medium",
         "disk_size": 50,
@@ -252,18 +246,8 @@ def test_launch_instance_success(ec2_manager, cleanup_keys):
     assert len(instance.security_groups) == 1
 
 
-def test_launch_instance_ad_hoc(ec2_manager, cleanup_keys):
+def test_launch_instance_ad_hoc(ec2_manager, cleanup_keys, registered_ami):
     """Test instance launch without machine name tags as ad-hoc."""
-    ec2_client = ec2_manager.ec2_client
-
-    ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS",
-        Architecture="x86_64",
-        RootDeviceName="/dev/sda1",
-        VirtualizationType="hvm",
-    )
-
     config = {
         "instance_type": "t3.medium",
         "disk_size": 50,
@@ -302,18 +286,9 @@ def test_launch_instance_rollback_on_failure(ec2_manager, cleanup_keys):
     assert not key_file.exists()
 
 
-def test_terminate_instance(ec2_manager, cleanup_keys):
+def test_terminate_instance(ec2_manager, cleanup_keys, registered_ami):
     """Test instance termination and cleanup."""
     ec2_client = ec2_manager.ec2_client
-
-    ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS",
-        Architecture="x86_64",
-        RootDeviceName="/dev/sda1",
-        VirtualizationType="hvm",
-    )
-
     config = {
         "instance_type": "t3.medium",
         "disk_size": 50,
@@ -344,20 +319,10 @@ def test_terminate_instance(ec2_manager, cleanup_keys):
         ec2_client.describe_security_groups(GroupIds=[sg_id])
 
 
-def test_terminate_instance_without_unique_id_tag(ec2_manager):
+def test_terminate_instance_without_unique_id_tag(ec2_manager, registered_ami):
     """Test termination handles missing UniqueId tag gracefully."""
-    ec2_client = ec2_manager.ec2_client
-
-    ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS",
-        Architecture="x86_64",
-        RootDeviceName="/dev/sda1",
-        VirtualizationType="hvm",
-    )
-
     instances = ec2_manager.ec2_resource.create_instances(
-        ImageId=ec2_manager.find_ubuntu_ami(),
+        ImageId=registered_ami,
         InstanceType="t3.medium",
         MinCount=1,
         MaxCount=1,
@@ -369,3 +334,177 @@ def test_terminate_instance_without_unique_id_tag(ec2_manager):
 
     instance.load()
     assert instance.state["Name"] == "terminated"
+
+
+def test_list_instances_all_regions(ec2_manager, registered_ami) -> None:
+    """Test listing instances across all regions."""
+    from datetime import datetime
+
+    ec2_resource = ec2_manager.ec2_resource
+
+    instances = ec2_resource.create_instances(
+        ImageId=registered_ami,
+        InstanceType="t3.medium",
+        MinCount=2,
+        MaxCount=2,
+        TagSpecifications=[
+            {
+                "ResourceType": "instance",
+                "Tags": [
+                    {"Key": "ManagedBy", "Value": "moondock"},
+                    {"Key": "MachineConfig", "Value": "test-machine"},
+                ],
+            }
+        ],
+    )
+
+    for instance in instances:
+        instance.wait_until_running()
+
+    result = ec2_manager.list_instances()
+
+    assert len(result) == 2
+    assert all(inst["machine_config"] == "test-machine" for inst in result)
+    assert all(inst["region"] == "us-east-1" for inst in result)
+    assert all("launch_time" in inst for inst in result)
+    assert all(isinstance(inst["launch_time"], datetime) for inst in result)
+
+
+def test_list_instances_filtered_by_region(ec2_manager, registered_ami) -> None:
+    """Test listing instances filtered by specific region."""
+    ec2_resource = ec2_manager.ec2_resource
+
+    instances = ec2_resource.create_instances(
+        ImageId=registered_ami,
+        InstanceType="t3.medium",
+        MinCount=1,
+        MaxCount=1,
+        TagSpecifications=[
+            {
+                "ResourceType": "instance",
+                "Tags": [
+                    {"Key": "ManagedBy", "Value": "moondock"},
+                    {"Key": "MachineConfig", "Value": "filtered-machine"},
+                ],
+            }
+        ],
+    )
+
+    for instance in instances:
+        instance.wait_until_running()
+
+    result = ec2_manager.list_instances(region_filter="us-east-1")
+
+    assert len(result) == 1
+    assert result[0]["machine_config"] == "filtered-machine"
+    assert result[0]["region"] == "us-east-1"
+
+
+def test_list_instances_empty_results(ec2_manager) -> None:
+    """Test listing instances when none exist."""
+    result = ec2_manager.list_instances()
+    assert result == []
+
+
+def test_list_instances_sorts_by_launch_time(ec2_manager, registered_ami) -> None:
+    """Test that instances are sorted by launch time descending."""
+    import time
+
+    ec2_resource = ec2_manager.ec2_resource
+
+    for i in range(3):
+        instances = ec2_resource.create_instances(
+            ImageId=registered_ami,
+            InstanceType="t3.medium",
+            MinCount=1,
+            MaxCount=1,
+            TagSpecifications=[
+                {
+                    "ResourceType": "instance",
+                    "Tags": [
+                        {"Key": "ManagedBy", "Value": "moondock"},
+                        {"Key": "MachineConfig", "Value": f"machine-{i}"},
+                    ],
+                }
+            ],
+        )
+        for instance in instances:
+            instance.wait_until_running()
+        time.sleep(1)
+
+    result = ec2_manager.list_instances()
+
+    assert len(result) == 3
+    for i in range(len(result) - 1):
+        assert result[i]["launch_time"] >= result[i + 1]["launch_time"]
+
+
+def test_list_instances_handles_missing_tags(ec2_manager, registered_ami) -> None:
+    """Test that instances with missing tags show default values."""
+    ec2_resource = ec2_manager.ec2_resource
+
+    instances = ec2_resource.create_instances(
+        ImageId=registered_ami,
+        InstanceType="t3.medium",
+        MinCount=1,
+        MaxCount=1,
+        TagSpecifications=[
+            {
+                "ResourceType": "instance",
+                "Tags": [
+                    {"Key": "ManagedBy", "Value": "moondock"},
+                ],
+            }
+        ],
+    )
+
+    for instance in instances:
+        instance.wait_until_running()
+
+    result = ec2_manager.list_instances()
+
+    assert len(result) == 1
+    assert result[0]["machine_config"] == "ad-hoc"
+    assert result[0]["name"] == "N/A"
+
+
+def test_list_instances_no_credentials_error(ec2_manager) -> None:
+    """Test that NoCredentialsError is raised when credentials missing."""
+    from unittest.mock import MagicMock, patch
+
+    from botocore.exceptions import NoCredentialsError
+
+    def mock_boto3_client(*args, **kwargs):
+        mock_client = MagicMock()
+        mock_client.describe_instances.side_effect = NoCredentialsError()
+        return mock_client
+
+    with patch("boto3.client", side_effect=mock_boto3_client):
+        with pytest.raises(NoCredentialsError):
+            ec2_manager.list_instances(region_filter="us-east-1")
+
+
+def test_list_instances_region_query_failure(ec2_manager) -> None:
+    """Test that region query failure falls back to default region."""
+    from unittest.mock import MagicMock, patch
+
+    from botocore.exceptions import ClientError
+
+    def mock_client_factory(*args, **kwargs):
+        mock_client = MagicMock()
+        if kwargs.get("region_name") == ec2_manager.region:
+            mock_client.describe_regions.side_effect = ClientError(
+                {
+                    "Error": {
+                        "Code": "RequestLimitExceeded",
+                        "Message": "Too many requests",
+                    }
+                },
+                "DescribeRegions",
+            )
+            mock_client.describe_instances.return_value = {"Reservations": []}
+        return mock_client
+
+    with patch("boto3.client", side_effect=mock_client_factory):
+        result = ec2_manager.list_instances()
+        assert isinstance(result, list)

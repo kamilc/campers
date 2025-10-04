@@ -1575,3 +1575,333 @@ def test_finally_block_calls_cleanup_if_not_already_done(moondock_module) -> Non
 
         assert moondock_instance.cleanup_in_progress is True
         mock_ssh_instance.close.assert_called()
+
+
+def test_format_time_ago_just_now(moondock_module) -> None:
+    """Test format_time_ago returns 'just now' for recent times."""
+    from datetime import datetime, timezone
+
+    from moondock.utils import format_time_ago
+
+    dt = datetime.now(timezone.utc)
+    result = format_time_ago(dt)
+    assert result == "just now"
+
+
+def test_format_time_ago_minutes(moondock_module) -> None:
+    """Test format_time_ago returns minutes ago for times under an hour."""
+    from datetime import datetime, timedelta, timezone
+
+    from moondock.utils import format_time_ago
+
+    dt = datetime.now(timezone.utc) - timedelta(minutes=30)
+    result = format_time_ago(dt)
+    assert result == "30m ago"
+
+
+def test_format_time_ago_hours(moondock_module) -> None:
+    """Test format_time_ago returns hours ago for times under a day."""
+    from datetime import datetime, timedelta, timezone
+
+    from moondock.utils import format_time_ago
+
+    dt = datetime.now(timezone.utc) - timedelta(hours=2)
+    result = format_time_ago(dt)
+    assert result == "2h ago"
+
+
+def test_format_time_ago_days(moondock_module) -> None:
+    """Test format_time_ago returns days ago for times over a day."""
+    from datetime import datetime, timedelta, timezone
+
+    from moondock.utils import format_time_ago
+
+    dt = datetime.now(timezone.utc) - timedelta(days=5)
+    result = format_time_ago(dt)
+    assert result == "5d ago"
+
+
+def test_format_time_ago_raises_on_naive_datetime(moondock_module) -> None:
+    """Test format_time_ago raises ValueError for naive datetime."""
+    from datetime import datetime
+
+    from moondock.utils import format_time_ago
+
+    dt = datetime.now()
+
+    with pytest.raises(ValueError, match="datetime must be timezone-aware"):
+        format_time_ago(dt)
+
+
+def test_list_command_all_regions(moondock_module, aws_credentials) -> None:
+    """Test list command displays instances from all regions."""
+    from datetime import datetime, timezone
+    from io import StringIO
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2_manager = MagicMock()
+    mock_ec2_manager.list_instances.return_value = [
+        {
+            "instance_id": "i-test1",
+            "machine_config": "test-machine-1",
+            "state": "running",
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "launch_time": datetime.now(timezone.utc),
+        },
+        {
+            "instance_id": "i-test2",
+            "machine_config": "test-machine-2",
+            "state": "running",
+            "region": "us-west-2",
+            "instance_type": "t3.large",
+            "launch_time": datetime.now(timezone.utc),
+        },
+    ]
+
+    captured_output = StringIO()
+
+    with patch("sys.stdout", captured_output):
+        with patch("moondock_cli.EC2Manager", return_value=mock_ec2_manager):
+            moondock_instance.list()
+
+    output = captured_output.getvalue()
+    assert "NAME" in output
+    assert "INSTANCE-ID" in output
+    assert "STATUS" in output
+    assert "REGION" in output
+    assert "TYPE" in output
+    assert "LAUNCHED" in output
+    assert "test-machine-1" in output
+    assert "test-machine-2" in output
+    assert "i-test1" in output
+    assert "i-test2" in output
+    assert "Instances in" not in output
+
+
+def test_list_command_filtered_region(moondock_module, aws_credentials) -> None:
+    """Test list command displays instances from specific region."""
+    from datetime import datetime, timezone
+    from io import StringIO
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2_manager = MagicMock()
+    mock_ec2_manager.list_instances.return_value = [
+        {
+            "instance_id": "i-test1",
+            "machine_config": "test-machine-1",
+            "state": "running",
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "launch_time": datetime.now(timezone.utc),
+        }
+    ]
+
+    mock_ec2_client = MagicMock()
+    mock_ec2_client.describe_regions.return_value = {
+        "Regions": [
+            {"RegionName": "us-east-1"},
+            {"RegionName": "us-west-2"},
+        ]
+    }
+
+    captured_output = StringIO()
+
+    with patch("sys.stdout", captured_output):
+        with patch("moondock_cli.EC2Manager", return_value=mock_ec2_manager):
+            with patch("boto3.client", return_value=mock_ec2_client):
+                moondock_instance.list(region="us-east-1")
+
+    output = captured_output.getvalue()
+    assert "Instances in us-east-1:" in output
+    assert "NAME" in output
+    assert "INSTANCE-ID" in output
+    assert "STATUS" in output
+    assert "TYPE" in output
+    assert "LAUNCHED" in output
+    assert "test-machine-1" in output
+    assert "i-test1" in output
+
+
+def test_list_command_no_instances(moondock_module, aws_credentials) -> None:
+    """Test list command displays message when no instances exist."""
+    from io import StringIO
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2_manager = MagicMock()
+    mock_ec2_manager.list_instances.return_value = []
+
+    captured_output = StringIO()
+
+    with patch("sys.stdout", captured_output):
+        with patch("moondock_cli.EC2Manager", return_value=mock_ec2_manager):
+            moondock_instance.list()
+
+    output = captured_output.getvalue()
+    assert "No moondock-managed instances found" in output
+
+
+def test_list_command_no_credentials(moondock_module) -> None:
+    """Test list command handles missing AWS credentials."""
+    from io import StringIO
+    from unittest.mock import MagicMock, patch
+
+    from botocore.exceptions import NoCredentialsError
+
+    moondock_instance = moondock_module()
+
+    mock_ec2_manager = MagicMock()
+    mock_ec2_manager.list_instances.side_effect = NoCredentialsError()
+
+    captured_output = StringIO()
+
+    with patch("sys.stdout", captured_output):
+        with patch("moondock_cli.EC2Manager", return_value=mock_ec2_manager):
+            with pytest.raises(NoCredentialsError):
+                moondock_instance.list()
+
+    output = captured_output.getvalue()
+    assert "Error: AWS credentials not found" in output
+
+
+def test_list_command_permission_error(moondock_module, aws_credentials) -> None:
+    """Test list command handles permission errors."""
+    from io import StringIO
+    from unittest.mock import MagicMock, patch
+
+    from botocore.exceptions import ClientError
+
+    moondock_instance = moondock_module()
+
+    mock_ec2_manager = MagicMock()
+    mock_ec2_manager.list_instances.side_effect = ClientError(
+        {"Error": {"Code": "UnauthorizedOperation", "Message": "Not authorized"}},
+        "DescribeInstances",
+    )
+
+    captured_output = StringIO()
+
+    with patch("sys.stdout", captured_output):
+        with patch("moondock_cli.EC2Manager", return_value=mock_ec2_manager):
+            with pytest.raises(ClientError):
+                moondock_instance.list()
+
+    output = captured_output.getvalue()
+    assert "Error: Insufficient AWS permissions" in output
+
+
+def test_list_command_invalid_region(moondock_module, aws_credentials) -> None:
+    """Test list command with invalid region parameter."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2_client = MagicMock()
+    mock_ec2_client.describe_regions.return_value = {
+        "Regions": [
+            {"RegionName": "us-east-1"},
+            {"RegionName": "us-west-2"},
+            {"RegionName": "eu-west-1"},
+        ]
+    }
+
+    with patch("boto3.client", return_value=mock_ec2_client):
+        with pytest.raises(
+            ValueError, match="Invalid AWS region: 'invalid-region-xyz'"
+        ):
+            moondock_instance.list(region="invalid-region-xyz")
+
+
+def test_truncate_name_short_name(moondock_module) -> None:
+    """Test truncate_name returns original name when it fits."""
+    moondock_instance = moondock_module()
+
+    short_name = "short"
+    result = moondock_instance.truncate_name(short_name)
+
+    assert result == "short"
+
+
+def test_truncate_name_exactly_max_width(moondock_module) -> None:
+    """Test truncate_name returns original name when exactly at max width."""
+    moondock_instance = moondock_module()
+
+    exact_name = "x" * 19
+    result = moondock_instance.truncate_name(exact_name)
+
+    assert result == exact_name
+
+
+def test_truncate_name_exceeds_max_width(moondock_module) -> None:
+    """Test truncate_name adds ellipsis when name exceeds max width."""
+    moondock_instance = moondock_module()
+
+    long_name = "very-long-machine-config-name-that-exceeds-limit"
+    result = moondock_instance.truncate_name(long_name)
+
+    assert len(result) == 19
+    assert result.endswith("...")
+    assert result == "very-long-machin..."
+
+
+def test_validate_region_valid(moondock_module) -> None:
+    """Test validate_region accepts valid AWS region."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2_client = MagicMock()
+    mock_ec2_client.describe_regions.return_value = {
+        "Regions": [
+            {"RegionName": "us-east-1"},
+            {"RegionName": "us-west-2"},
+        ]
+    }
+
+    with patch("boto3.client", return_value=mock_ec2_client):
+        moondock_instance.validate_region("us-east-1")
+
+
+def test_validate_region_invalid(moondock_module) -> None:
+    """Test validate_region raises ValueError for invalid region."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2_client = MagicMock()
+    mock_ec2_client.describe_regions.return_value = {
+        "Regions": [
+            {"RegionName": "us-east-1"},
+            {"RegionName": "us-west-2"},
+        ]
+    }
+
+    with patch("boto3.client", return_value=mock_ec2_client):
+        with pytest.raises(ValueError, match="Invalid AWS region"):
+            moondock_instance.validate_region("invalid-region")
+
+
+def test_validate_region_graceful_fallback(moondock_module, caplog) -> None:
+    """Test validate_region proceeds without validation on API errors."""
+    from unittest.mock import MagicMock, patch
+
+    from botocore.exceptions import ClientError
+
+    moondock_instance = moondock_module()
+
+    mock_ec2_client = MagicMock()
+    mock_ec2_client.describe_regions.side_effect = ClientError(
+        {"Error": {"Code": "UnauthorizedOperation", "Message": "Not authorized"}},
+        "DescribeRegions",
+    )
+
+    with patch("boto3.client", return_value=mock_ec2_client):
+        moondock_instance.validate_region("us-east-1")
+
+    assert "Unable to validate region" in caplog.text

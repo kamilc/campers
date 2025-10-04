@@ -2,6 +2,7 @@
 
 import importlib.util
 import logging
+import logging.handlers
 import os
 import sys
 from pathlib import Path
@@ -11,6 +12,31 @@ from behave.runner import Context
 from moto import mock_aws
 
 logger = logging.getLogger(__name__)
+
+
+class LogCapture(logging.Handler):
+    """Custom logging handler for capturing log records in tests.
+
+    Attributes
+    ----------
+    records : list[logging.LogRecord]
+        List of captured log records
+    """
+
+    def __init__(self) -> None:
+        """Initialize LogCapture handler with empty records list."""
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Capture log record.
+
+        Parameters
+        ----------
+        record : logging.LogRecord
+            Log record to capture
+        """
+        self.records.append(record)
 
 
 def cleanup_env_var(var_name: str, logger: logging.Logger) -> None:
@@ -95,6 +121,15 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     else:
         context.mock_aws_env = None
+
+    log_handler = LogCapture()
+    log_handler.setLevel(logging.DEBUG)
+    context.log_handler = log_handler
+    context.log_records = log_handler.records
+
+    moondock_logger = logging.getLogger("moondock.ec2")
+    moondock_logger.addHandler(log_handler)
+    moondock_logger.setLevel(logging.DEBUG)
 
     context.ec2_config = None
     context._config = None
@@ -223,6 +258,20 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     scenario : Scenario
         The scenario that just finished.
     """
+    try:
+        if hasattr(context, "log_handler") and context.log_handler:
+            moondock_logger = logging.getLogger("moondock.ec2")
+            moondock_logger.removeHandler(context.log_handler)
+    except Exception as e:
+        logger.debug(f"Error removing log handler: {e}")
+
+    try:
+        if hasattr(context, "patches"):
+            for patch_obj in context.patches:
+                patch_obj.stop()
+    except Exception as e:
+        logger.debug(f"Error stopping patches: {e}")
+
     try:
         if hasattr(context, "mock_aws_env") and context.mock_aws_env:
             context.mock_aws_env.stop()

@@ -30,6 +30,44 @@ def moondock_module() -> Any:
 
 
 @pytest.fixture
+def aws_credentials() -> Generator[None, None, None]:
+    """Fixture to set AWS credentials for testing with proper cleanup.
+
+    Sets mock AWS credentials in environment variables for the duration of the test,
+    then restores the original environment state.
+
+    Yields
+    ------
+    None
+        Control back to test after setting credentials
+    """
+    old_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    old_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    old_region = os.environ.get("AWS_DEFAULT_REGION")
+
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+
+    yield
+
+    if old_access_key is not None:
+        os.environ["AWS_ACCESS_KEY_ID"] = old_access_key
+    else:
+        os.environ.pop("AWS_ACCESS_KEY_ID", None)
+
+    if old_secret_key is not None:
+        os.environ["AWS_SECRET_ACCESS_KEY"] = old_secret_key
+    else:
+        os.environ.pop("AWS_SECRET_ACCESS_KEY", None)
+
+    if old_region is not None:
+        os.environ["AWS_DEFAULT_REGION"] = old_region
+    else:
+        os.environ.pop("AWS_DEFAULT_REGION", None)
+
+
+@pytest.fixture
 def config_file(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary config file path and clean up environment.
 

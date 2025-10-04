@@ -10,6 +10,8 @@ import yaml
 from behave import given, then, when
 from behave.runner import Context
 
+JSON_OUTPUT_TRUNCATE_LENGTH = 200
+
 
 def ensure_machine_exists(context: Context, machine_name: str) -> None:
     """Ensure machine configuration structure exists in context.
@@ -182,7 +184,16 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
 
     if result.returncode == 0:
         if result.stdout.strip():
-            context.final_config = json.loads(result.stdout)
+            try:
+                context.final_config = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                truncated_output = (
+                    result.stdout[:JSON_OUTPUT_TRUNCATE_LENGTH] + "..."
+                    if len(result.stdout) > JSON_OUTPUT_TRUNCATE_LENGTH
+                    else result.stdout
+                )
+                context.error = f"Invalid JSON output: {truncated_output}"
+                context.final_config = None
     else:
         context.error = result.stderr
 

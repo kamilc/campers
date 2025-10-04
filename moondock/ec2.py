@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any
 
 import boto3
-from botocore.exceptions import ClientError, WaiterError
+from botocore.exceptions import (
+    ClientError,
+    EndpointConnectionError,
+    NoCredentialsError,
+    WaiterError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +347,90 @@ class EC2Manager:
                     )
 
             raise RuntimeError(f"Failed to launch instance: {e}") from e
+
+    def list_instances(self, region_filter: str | None = None) -> list[dict[str, Any]]:
+        """List all moondock-managed instances across regions.
+
+        Parameters
+        ----------
+        region_filter : str | None
+            Optional AWS region to filter results (e.g., "us-east-1")
+            If None, queries all regions
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of instance dictionaries with keys: instance_id, name, state,
+            region, instance_type, launch_time, machine_config
+
+        Notes
+        -----
+        When querying all regions (region_filter=None), this method performs
+        sequential API calls to each AWS region (N+1 pattern: 1 call to
+        describe_regions, then N calls to describe_instances per region).
+        With 20+ AWS regions, total latency may reach several seconds depending
+        on network conditions and number of instances per region.
+        """
+        if region_filter:
+            regions = [region_filter]
+        else:
+            try:
+                ec2_client = boto3.client("ec2", region_name=self.region)
+                regions_response = ec2_client.describe_regions()
+                regions = [r["RegionName"] for r in regions_response["Regions"]]
+            except NoCredentialsError:
+                raise
+            except (ClientError, EndpointConnectionError) as e:
+                logger.warning(
+                    f"Unable to query all AWS regions ({e.__class__.__name__}), "
+                    f"falling back to default region '{self.region}' only. "
+                    f"Use --region flag to query specific regions."
+                )
+                regions = [self.region]
+
+        instances = []
+
+        for region in regions:
+            try:
+                regional_ec2 = boto3.client("ec2", region_name=region)
+
+                response = regional_ec2.describe_instances(
+                    Filters=[
+                        {"Name": "tag:ManagedBy", "Values": ["moondock"]},
+                        {
+                            "Name": "instance-state-name",
+                            "Values": ["pending", "running", "stopping", "stopped"],
+                        },
+                    ]
+                )
+
+                for reservation in response["Reservations"]:
+                    for instance in reservation["Instances"]:
+                        tags = {
+                            tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])
+                        }
+
+                        instances.append(
+                            {
+                                "instance_id": instance["InstanceId"],
+                                "name": tags.get("Name", "N/A"),
+                                "state": instance["State"]["Name"],
+                                "region": region,
+                                "instance_type": instance["InstanceType"],
+                                "launch_time": instance["LaunchTime"],
+                                "machine_config": tags.get("MachineConfig", "ad-hoc"),
+                            }
+                        )
+
+            except NoCredentialsError:
+                raise
+            except ClientError as e:
+                logger.warning(f"Failed to query region {region}: {e}")
+                continue
+
+        instances.sort(key=lambda x: x["launch_time"], reverse=True)
+
+        return instances
 
     def terminate_instance(self, instance_id: str) -> None:
         """Terminate instance and clean up resources.

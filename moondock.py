@@ -25,18 +25,26 @@ from pathlib import Path
 from typing import Any
 
 import fire
+from botocore.exceptions import ClientError, NoCredentialsError
 
 from moondock.config import ConfigLoader
 from moondock.ec2 import EC2Manager
 from moondock.portforward import PortForwardManager
 from moondock.ssh import SSHManager
 from moondock.sync import MutagenManager
+from moondock.utils import format_time_ago
 
 SYNC_TIMEOUT = 300
 """Mutagen initial sync timeout in seconds.
 
 Five minutes allows time for large codebases to complete initial sync over SSH.
 Timeout prevents indefinite hangs if sync stalls due to network or filesystem issues.
+"""
+
+MAX_NAME_COLUMN_WIDTH = 19
+"""Maximum width for machine config name column in list output.
+
+Names exceeding this width are truncated to maintain table alignment.
 """
 
 
@@ -702,6 +710,121 @@ class Moondock:
             Full command with directory change and proper escaping
         """
         return f"cd {shlex.quote(working_dir)} && bash -c {repr(command)}"
+
+    def truncate_name(self, name: str) -> str:
+        """Truncate machine config name to fit in column width.
+
+        Parameters
+        ----------
+        name : str
+            Machine config name to truncate
+
+        Returns
+        -------
+        str
+            Truncated name with ellipsis if exceeds MAX_NAME_COLUMN_WIDTH, otherwise original name
+        """
+        if len(name) > MAX_NAME_COLUMN_WIDTH:
+            return name[: MAX_NAME_COLUMN_WIDTH - 3] + "..."
+
+        return name
+
+    def validate_region(self, region: str) -> None:
+        """Validate that a region string is a valid AWS region.
+
+        Parameters
+        ----------
+        region : str
+            AWS region string to validate
+
+        Raises
+        ------
+        ValueError
+            If region is not a valid AWS region
+        """
+        import boto3
+
+        try:
+            ec2_client = boto3.client("ec2", region_name="us-east-1")
+            regions_response = ec2_client.describe_regions()
+            valid_regions = {r["RegionName"] for r in regions_response["Regions"]}
+
+            if region not in valid_regions:
+                raise ValueError(
+                    f"Invalid AWS region: '{region}'. "
+                    f"Valid regions: {', '.join(sorted(valid_regions))}"
+                )
+        except (NoCredentialsError, ClientError) as e:
+            logging.warning(
+                f"Unable to validate region '{region}' ({e.__class__.__name__}). "
+                f"Proceeding without validation."
+            )
+
+    def list(self, region: str | None = None) -> None:
+        """List all moondock-managed EC2 instances.
+
+        Parameters
+        ----------
+        region : str | None
+            Optional AWS region to filter results
+
+        Raises
+        ------
+        NoCredentialsError
+            If AWS credentials are not configured
+        ClientError
+            If AWS API calls fail
+        ValueError
+            If provided region is not a valid AWS region
+        """
+        default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
+
+        if region is not None:
+            self.validate_region(region)
+
+        try:
+            ec2_manager = EC2Manager(region=region or default_region)
+            instances = ec2_manager.list_instances(region_filter=region)
+
+            if not instances:
+                print("No moondock-managed instances found")
+                return
+
+            if region:
+                print(f"Instances in {region}:")
+                print(
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} {'LAUNCHED':<12}"
+                )
+                print("-" * 79)
+
+                for inst in instances:
+                    name = self.truncate_name(inst["machine_config"])
+                    launched = format_time_ago(inst["launch_time"])
+                    print(
+                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['instance_type']:<15} {launched:<12}"
+                    )
+            else:
+                print(
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} {'TYPE':<15} {'LAUNCHED':<12}"
+                )
+                print("-" * 94)
+
+                for inst in instances:
+                    name = self.truncate_name(inst["machine_config"])
+                    launched = format_time_ago(inst["launch_time"])
+                    print(
+                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['region']:<15} {inst['instance_type']:<15} {launched:<12}"
+                    )
+
+        except NoCredentialsError:
+            print("Error: AWS credentials not found. Please configure AWS credentials.")
+            raise
+        except ClientError as e:
+            if "UnauthorizedOperation" in str(e):
+                print("Error: Insufficient AWS permissions to list instances.")
+                raise
+
+            raise
 
     def hello(self) -> str:
         """Test command to validate Fire CLI works.
