@@ -17,7 +17,10 @@ import logging
 import os
 import re
 import shlex
+import signal
 import sys
+import threading
+import types
 from pathlib import Path
 from typing import Any
 
@@ -44,9 +47,12 @@ class Moondock:
         """Initialize Moondock CLI.
 
         Creates a ConfigLoader instance for handling configuration loading,
-        merging, and validation.
+        merging, and validation. Also initializes cleanup tracking state.
         """
         self.config_loader = ConfigLoader()
+        self.cleanup_lock = threading.Lock()
+        self.cleanup_in_progress = False
+        self.resources: dict[str, Any] = {}
 
     def extract_exit_code_from_script(self, script: str) -> int:
         """Extract exit code from script if it contains 'exit N' command.
@@ -78,6 +84,90 @@ class Moondock:
         for port in ports:
             logging.info(f"Creating SSH tunnel for port {port}...")
             logging.info(f"SSH tunnel established: localhost:{port} -> remote:{port}")
+
+    def cleanup_resources(
+        self, signum: int | None = None, frame: types.FrameType | None = None
+    ) -> None:
+        """Perform graceful cleanup of all resources.
+
+        Parameters
+        ----------
+        signum : int | None
+            Signal number if triggered by signal handler (e.g., signal.SIGINT)
+        frame : types.FrameType | None
+            Current stack frame (unused but required by signal handler signature).
+            Python's signal.signal() requires handlers to accept (signum, frame).
+
+        Notes
+        -----
+        The cleanup_in_progress flag is set at the start to prevent duplicate
+        cleanup if signal handler invokes this method before finally block.
+        Thread safety is ensured using cleanup_lock to prevent race conditions.
+        """
+        with self.cleanup_lock:
+            if self.cleanup_in_progress:
+                logging.info("Cleanup already in progress, please wait...")
+                return
+            self.cleanup_in_progress = True
+
+        logging.info("Shutdown requested - beginning cleanup...")
+        errors = []
+
+        try:
+            if "portforward_mgr" in self.resources:
+                logging.info("Stopping SSH port forwarding tunnels...")
+
+                try:
+                    self.resources["portforward_mgr"].stop_all_tunnels()
+                except Exception as e:
+                    logging.error(f"Error stopping tunnels: {e}")
+                    errors.append(e)
+
+            if "mutagen_session_name" in self.resources:
+                logging.info("Terminating Mutagen sync session...")
+
+                try:
+                    self.resources["mutagen_mgr"].terminate_session(
+                        self.resources["mutagen_session_name"]
+                    )
+                except Exception as e:
+                    logging.error(f"Error terminating Mutagen session: {e}")
+                    errors.append(e)
+
+            if "ssh_manager" in self.resources:
+                logging.info("Closing SSH connection...")
+
+                try:
+                    self.resources["ssh_manager"].close()
+                except Exception as e:
+                    logging.error(f"Error closing SSH: {e}")
+                    errors.append(e)
+
+            if "instance_details" in self.resources:
+                instance_id = self.resources["instance_details"]["instance_id"]
+                logging.info(f"Terminating EC2 instance {instance_id}...")
+
+                try:
+                    self.resources["ec2_manager"].terminate_instance(instance_id)
+                except Exception as e:
+                    logging.error(f"Error terminating instance: {e}")
+                    errors.append(e)
+
+            if errors:
+                logging.info(f"Cleanup completed with {len(errors)} errors")
+            else:
+                logging.info("Cleanup completed successfully")
+
+            self.resources.clear()
+
+        finally:
+            if signum is not None:
+                exit_code = (
+                    130
+                    if signum == signal.SIGINT
+                    else (143 if signum == signal.SIGTERM else 1)
+                )
+                sys.exit(exit_code)
 
     def run_test_mode(
         self, merged_config: dict[str, Any], json_output: bool
@@ -281,19 +371,24 @@ class Moondock:
         if os.environ.get("MOONDOCK_TEST_MODE") == "1":
             return self.run_test_mode(merged_config, json_output)
 
-        mutagen_mgr = MutagenManager()
-
-        if merged_config.get("sync_paths"):
-            mutagen_mgr.check_mutagen_installed()
-
-        ec2_manager = EC2Manager(region=merged_config["region"])
-        instance_details = ec2_manager.launch_instance(merged_config)
-
-        ssh_manager = None
-        mutagen_session_name = None
-        portforward_mgr = None
+        original_sigint = signal.signal(signal.SIGINT, self.cleanup_resources)
+        original_sigterm = signal.signal(signal.SIGTERM, self.cleanup_resources)
 
         try:
+            mutagen_mgr = MutagenManager()
+
+            if merged_config.get("sync_paths"):
+                mutagen_mgr.check_mutagen_installed()
+
+            ec2_manager = EC2Manager(region=merged_config["region"])
+            self.resources["ec2_manager"] = ec2_manager
+
+            instance_details = ec2_manager.launch_instance(merged_config)
+            self.resources["instance_details"] = instance_details
+
+            ssh_manager = None
+            mutagen_session_name = None
+            portforward_mgr = None
             need_ssh = (
                 merged_config.get("setup_script")
                 or merged_config.get("startup_script")
@@ -322,6 +417,8 @@ class Moondock:
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
 
+            self.resources["ssh_manager"] = ssh_manager
+
             env_vars = ssh_manager.filter_environment_variables(
                 merged_config.get("env_filter")
             )
@@ -329,6 +426,9 @@ class Moondock:
             if merged_config.get("sync_paths"):
                 mutagen_session_name = f"moondock-{instance_details['unique_id']}"
                 mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)
+
+                self.resources["mutagen_mgr"] = mutagen_mgr
+                self.resources["mutagen_session_name"] = mutagen_session_name
 
             if merged_config.get("sync_paths"):
                 sync_config = merged_config["sync_paths"][0]
@@ -370,6 +470,8 @@ class Moondock:
 
             if merged_config.get("ports"):
                 portforward_mgr = PortForwardManager()
+
+                self.resources["portforward_mgr"] = portforward_mgr
 
                 try:
                     portforward_mgr.create_tunnels(
@@ -420,24 +522,17 @@ class Moondock:
                 logging.info(f"Command completed with exit code: {exit_code}")
                 instance_details["command_exit_code"] = exit_code
 
+            if json_output:
+                return json.dumps(instance_details, indent=2)
+
+            return instance_details
+
         finally:
-            if portforward_mgr:
-                try:
-                    portforward_mgr.stop_all_tunnels()
-                except Exception as e:
-                    logging.warning(f"Error during tunnel cleanup: {e}")
+            if not self.cleanup_in_progress:
+                self.cleanup_resources()
 
-            if ssh_manager:
-                ssh_manager.close()
-
-            if mutagen_session_name:
-                logging.info("Terminating Mutagen sync session...")
-                mutagen_mgr.terminate_session(mutagen_session_name)
-
-        if json_output:
-            return json.dumps(instance_details, indent=2)
-
-        return instance_details
+            signal.signal(signal.SIGINT, original_sigint)
+            signal.signal(signal.SIGTERM, original_sigterm)
 
     def apply_cli_overrides(
         self,

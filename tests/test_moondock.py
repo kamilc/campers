@@ -1229,3 +1229,349 @@ def test_run_forwards_env_to_main_command(moondock_module) -> None:
             "python train.py", {"WANDB_API_KEY": "test-key"}
         )
         assert result["command_exit_code"] == 0
+
+
+def test_moondock_init_cleanup_state(moondock_module) -> None:
+    """Test that Moondock instance initializes with cleanup state tracking."""
+    moondock_instance = moondock_module()
+
+    assert hasattr(moondock_instance, "cleanup_in_progress")
+    assert moondock_instance.cleanup_in_progress is False
+    assert hasattr(moondock_instance, "resources")
+    assert isinstance(moondock_instance.resources, dict)
+    assert len(moondock_instance.resources) == 0
+
+
+def test_signal_handlers_registered_during_run(moondock_module) -> None:
+    """Test that SIGINT and SIGTERM handlers are registered during run()."""
+    import signal
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.signal.signal") as mock_signal,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        moondock_instance.run()
+
+        signal_calls = [call[0] for call in mock_signal.call_args_list]
+        assert (signal.SIGINT, moondock_instance.cleanup_resources) in signal_calls
+        assert (signal.SIGTERM, moondock_instance.cleanup_resources) in signal_calls
+
+
+def test_signal_handlers_restored_after_run(moondock_module) -> None:
+    """Test that original signal handlers are restored after run() completes."""
+    import signal
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    original_sigint = MagicMock()
+    original_sigterm = MagicMock()
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.signal.signal") as mock_signal,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_signal.side_effect = [
+            original_sigint,
+            original_sigterm,
+            None,
+            None,
+        ]
+
+        moondock_instance.run()
+
+        signal_calls = mock_signal.call_args_list
+        assert (signal.SIGINT, original_sigint) in [
+            call[0] for call in signal_calls[-2:]
+        ]
+        assert (signal.SIGTERM, original_sigterm) in [
+            call[0] for call in signal_calls[-2:]
+        ]
+
+
+def test_cleanup_resources_executes_in_correct_order(moondock_module) -> None:
+    """Test that cleanup_resources executes cleanup steps in correct order."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+
+    mock_portforward = MagicMock()
+    mock_mutagen = MagicMock()
+    mock_ssh = MagicMock()
+    mock_ec2 = MagicMock()
+
+    cleanup_order = []
+
+    mock_portforward.stop_all_tunnels.side_effect = lambda: cleanup_order.append(
+        "portforward"
+    )
+    mock_mutagen.terminate_session.side_effect = lambda name: cleanup_order.append(
+        "mutagen"
+    )
+    mock_ssh.close.side_effect = lambda: cleanup_order.append("ssh")
+    mock_ec2.terminate_instance.side_effect = lambda id: cleanup_order.append("ec2")
+
+    moondock_instance.resources = {
+        "portforward_mgr": mock_portforward,
+        "mutagen_mgr": mock_mutagen,
+        "mutagen_session_name": "test-session",
+        "ssh_manager": mock_ssh,
+        "ec2_manager": mock_ec2,
+        "instance_details": {"instance_id": "i-test123"},
+    }
+
+    moondock_instance.cleanup_resources()
+
+    assert cleanup_order == ["portforward", "mutagen", "ssh", "ec2"]
+
+
+def test_cleanup_resources_continues_on_error(moondock_module) -> None:
+    """Test that cleanup continues even if individual steps fail."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+
+    mock_portforward = MagicMock()
+    mock_mutagen = MagicMock()
+    mock_ssh = MagicMock()
+    mock_ec2 = MagicMock()
+
+    mock_mutagen.terminate_session.side_effect = RuntimeError("Mutagen error")
+
+    moondock_instance.resources = {
+        "portforward_mgr": mock_portforward,
+        "mutagen_mgr": mock_mutagen,
+        "mutagen_session_name": "test-session",
+        "ssh_manager": mock_ssh,
+        "ec2_manager": mock_ec2,
+        "instance_details": {"instance_id": "i-test123"},
+    }
+
+    moondock_instance.cleanup_resources()
+
+    mock_portforward.stop_all_tunnels.assert_called_once()
+    mock_mutagen.terminate_session.assert_called_once()
+    mock_ssh.close.assert_called_once()
+    mock_ec2.terminate_instance.assert_called_once()
+
+
+def test_cleanup_resources_exits_with_sigint_code(moondock_module) -> None:
+    """Test that cleanup_resources exits with code 130 for SIGINT."""
+    import signal
+
+    moondock_instance = moondock_module()
+
+    moondock_instance.resources = {}
+
+    with pytest.raises(SystemExit) as exc_info:
+        moondock_instance.cleanup_resources(signum=signal.SIGINT, frame=None)
+
+    assert exc_info.value.code == 130
+
+
+def test_cleanup_resources_exits_with_sigterm_code(moondock_module) -> None:
+    """Test that cleanup_resources exits with code 143 for SIGTERM."""
+    import signal
+
+    moondock_instance = moondock_module()
+
+    moondock_instance.resources = {}
+
+    with pytest.raises(SystemExit) as exc_info:
+        moondock_instance.cleanup_resources(signum=signal.SIGTERM, frame=None)
+
+    assert exc_info.value.code == 143
+
+
+def test_cleanup_resources_prevents_duplicate_cleanup(moondock_module) -> None:
+    """Test that cleanup_in_progress flag prevents duplicate cleanup."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    moondock_instance.resources = {
+        "ec2_manager": mock_ec2,
+        "instance_details": {"instance_id": "i-test123"},
+    }
+
+    moondock_instance.cleanup_in_progress = True
+
+    moondock_instance.cleanup_resources()
+
+    mock_ec2.terminate_instance.assert_not_called()
+
+
+def test_cleanup_resources_only_cleans_tracked_resources(moondock_module) -> None:
+    """Test that cleanup only attempts to clean resources that were tracked."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    mock_ssh = MagicMock()
+
+    moondock_instance.resources = {
+        "ec2_manager": mock_ec2,
+        "instance_details": {"instance_id": "i-test123"},
+        "ssh_manager": mock_ssh,
+    }
+
+    moondock_instance.cleanup_resources()
+
+    mock_ec2.terminate_instance.assert_called_once_with("i-test123")
+    mock_ssh.close.assert_called_once()
+
+
+def test_run_tracks_resources_incrementally(moondock_module) -> None:
+    """Test that run() tracks resources as they are created."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "ports": [8888],
+        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
+        "command": "echo test",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    captured_resources = {}
+
+    def capture_cleanup():
+        captured_resources.update(moondock_instance.resources)
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+        patch("moondock_cli.MutagenManager") as mock_mutagen,
+        patch("moondock_cli.PortForwardManager") as mock_portforward,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
+        mock_ssh_instance.execute_command_raw.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        mock_mutagen_instance = MagicMock()
+        mock_mutagen.return_value = mock_mutagen_instance
+
+        mock_portforward_instance = MagicMock()
+        mock_portforward.return_value = mock_portforward_instance
+
+        original_cleanup = moondock_instance.cleanup_resources
+        moondock_instance.cleanup_resources = lambda *args, **kwargs: (
+            capture_cleanup(),
+            original_cleanup(*args, **kwargs),
+        )[1]
+
+        moondock_instance.run()
+
+        assert "ec2_manager" in captured_resources
+        assert "instance_details" in captured_resources
+        assert "ssh_manager" in captured_resources
+        assert "portforward_mgr" in captured_resources
+        assert "mutagen_mgr" in captured_resources
+        assert "mutagen_session_name" in captured_resources
+
+
+def test_finally_block_calls_cleanup_if_not_already_done(moondock_module) -> None:
+    """Test that finally block calls cleanup when signal handler hasn't run."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance.config_loader = MagicMock()
+    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance.config_loader.get_machine_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "command": "echo test",
+    }
+    moondock_instance.config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+    }
+
+    with (
+        patch("moondock_cli.EC2Manager") as mock_ec2,
+        patch("moondock_cli.SSHManager") as mock_ssh,
+    ):
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.launch_instance.return_value = mock_instance_details
+        mock_ec2.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
+        mock_ssh_instance.execute_command.return_value = 0
+        mock_ssh.return_value = mock_ssh_instance
+
+        moondock_instance.run()
+
+        assert moondock_instance.cleanup_in_progress is True
+        mock_ssh_instance.close.assert_called()

@@ -1,7 +1,9 @@
 """Behave environment configuration for moondock tests."""
 
+import importlib.util
 import logging
 import os
+import sys
 from pathlib import Path
 
 from behave.model import Scenario
@@ -57,6 +59,14 @@ def before_all(context: Context) -> None:
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     os.environ["MOONDOCK_TEST_MODE"] = "1"
+
+    moondock_script = project_root / "moondock.py"
+    spec = importlib.util.spec_from_file_location("moondock_module", moondock_script)
+    moondock_module = importlib.util.module_from_spec(spec)
+    sys.modules["moondock_module"] = moondock_module
+    spec.loader.exec_module(moondock_module)
+
+    context.moondock_module = moondock_module
 
 
 def before_scenario(context: Context, scenario: Scenario) -> None:
@@ -143,6 +153,9 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.timeout_scenario = None
     context.uses_hex_format = None
     context.uses_uuid = None
+
+    context.mock_moondock = context.moondock_module.Moondock()
+    context.cleanup_order = []
 
     if "no_credentials" not in scenario.tags:
         ec2_client = boto3.client("ec2", region_name="us-east-1")
