@@ -189,6 +189,20 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.uses_hex_format = None
     context.uses_uuid = None
 
+    context.instances = None
+    context.aws_permission_error = None
+    context.state_test_instances = None
+    context.mock_terminate = None
+    context.time_test_instances = None
+    context.test_instance_id_mapping = None
+    context.long_machine_config = None
+    context.filter_region = None
+    context.region_patches = None
+    context.patches = []
+    context.mock_time_instances = None
+    context.terminate_runtime_error = None
+    context.terminate_client_error = None
+
     context.mock_moondock = context.moondock_module.Moondock()
     context.cleanup_order = []
 

@@ -16,6 +16,8 @@ from botocore.exceptions import (
 
 logger = logging.getLogger(__name__)
 
+ACTIVE_INSTANCE_STATES = ["pending", "running", "stopping", "stopped"]
+
 VALID_INSTANCE_TYPES = [
     "t2.micro",
     "t2.small",
@@ -399,7 +401,7 @@ class EC2Manager:
                         {"Name": "tag:ManagedBy", "Values": ["moondock"]},
                         {
                             "Name": "instance-state-name",
-                            "Values": ["pending", "running", "stopping", "stopped"],
+                            "Values": ACTIVE_INSTANCE_STATES,
                         },
                     ]
                 )
@@ -431,6 +433,33 @@ class EC2Manager:
         instances.sort(key=lambda x: x["launch_time"], reverse=True)
 
         return instances
+
+    def find_instances_by_name_or_id(
+        self, name_or_id: str, region_filter: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Find moondock-managed instances matching ID or MachineConfig.
+
+        Parameters
+        ----------
+        name_or_id : str
+            EC2 instance ID or MachineConfig name to search for
+        region_filter : str | None
+            Optional AWS region to filter results
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of matching instances with keys: instance_id, name, state,
+            region, instance_type, launch_time, machine_config
+        """
+        instances = self.list_instances(region_filter=region_filter)
+
+        id_matches = [inst for inst in instances if inst["instance_id"] == name_or_id]
+
+        if id_matches:
+            return id_matches
+
+        return [inst for inst in instances if inst["machine_config"] == name_or_id]
 
     def terminate_instance(self, instance_id: str) -> None:
         """Terminate instance and clean up resources.

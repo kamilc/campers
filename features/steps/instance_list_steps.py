@@ -89,7 +89,7 @@ def step_instances_exist_in_region(context: Context, count: int, region: str) ->
     region : str
         AWS region to create instances in
     """
-    if not hasattr(context, "instances"):
+    if context.instances is None:
         context.instances = []
 
     for i in range(count):
@@ -125,7 +125,7 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
     """
     from unittest.mock import patch
 
-    if hasattr(context, "region_patches") and context.region_patches:
+    if context.region_patches is not None and context.region_patches:
         for patch_obj in context.region_patches:
             patch_obj.start()
 
@@ -136,7 +136,7 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
     sys.stdout = captured_output
 
     try:
-        if hasattr(context, "mock_time_instances") and context.mock_time_instances:
+        if context.mock_time_instances is not None and context.mock_time_instances:
             with patch("moondock.ec2.EC2Manager.list_instances") as mock_list:
                 mock_list.return_value = context.instances
                 moondock.list(region=region)
@@ -311,7 +311,7 @@ def step_instance_exists_without_machine_config(
     instance_id : str
         Instance ID to create
     """
-    if not hasattr(context, "instances"):
+    if context.instances is None:
         context.instances = []
 
     region = "us-east-1"
@@ -393,10 +393,10 @@ def step_instance_launched_hours_ago(context: Context, hours: int) -> None:
     """
     from datetime import timedelta, timezone
 
-    if not hasattr(context, "instances"):
+    if context.instances is None:
         context.instances = []
 
-    if not hasattr(context, "time_test_instances"):
+    if context.time_test_instances is None:
         context.time_test_instances = []
 
     region = "us-east-1"
@@ -433,10 +433,10 @@ def step_instance_launched_minutes_ago(context: Context, minutes: int) -> None:
     """
     from datetime import timedelta, timezone
 
-    if not hasattr(context, "instances"):
+    if context.instances is None:
         context.instances = []
 
-    if not hasattr(context, "time_test_instances"):
+    if context.time_test_instances is None:
         context.time_test_instances = []
 
     region = "us-east-1"
@@ -473,10 +473,10 @@ def step_instance_launched_days_ago(context: Context, days: int) -> None:
     """
     from datetime import timedelta, timezone
 
-    if not hasattr(context, "instances"):
+    if context.instances is None:
         context.instances = []
 
-    if not hasattr(context, "time_test_instances"):
+    if context.time_test_instances is None:
         context.time_test_instances = []
 
     region = "us-east-1"
@@ -597,7 +597,7 @@ def step_moondock_instances_exist_in_region(context: Context, region: str) -> No
     region : str
         AWS region
     """
-    if not hasattr(context, "instances"):
+    if context.instances is None:
         context.instances = []
 
     tags = {
@@ -633,7 +633,7 @@ def step_region_query_fails(context: Context, region: str) -> None:
 
     from botocore.exceptions import ClientError
 
-    if not hasattr(context, "region_patches"):
+    if context.region_patches is None:
         context.region_patches = []
 
     original_client = boto3.client
@@ -689,7 +689,12 @@ def step_output_displays_instances_from_region(context: Context, region: str) ->
 
 
 @given('instance "{instance_id}" in state "{state}"')
-def step_instance_in_state(context: Context, instance_id: str, state: str) -> None:
+@given(
+    'instance "{instance_id}" in state "{state}" with MachineConfig "{machine_config}"'
+)
+def step_instance_in_state(
+    context: Context, instance_id: str, state: str, machine_config: str | None = None
+) -> None:
     """Create instance in specific state.
 
     Parameters
@@ -700,18 +705,21 @@ def step_instance_in_state(context: Context, instance_id: str, state: str) -> No
         Instance ID
     state : str
         Instance state
+    machine_config : str | None
+        Optional MachineConfig tag value
     """
-    if not hasattr(context, "instances"):
+    if context.instances is None:
         context.instances = []
 
-    if not hasattr(context, "state_test_instances"):
+    if context.state_test_instances is None:
         context.state_test_instances = {}
 
     region = "us-east-1"
+    config_name = machine_config if machine_config else f"test-{state}"
     tags = {
         "ManagedBy": "moondock",
         "Name": f"test-{state}",
-        "MachineConfig": f"test-{state}",
+        "MachineConfig": config_name,
     }
 
     actual_instance_id, launch_time = create_test_instance(region, tags)
@@ -728,7 +736,7 @@ def step_instance_in_state(context: Context, instance_id: str, state: str) -> No
             "instance_id": actual_instance_id,
             "region": region,
             "launch_time": launch_time,
-            "machine_config": f"test-{state}",
+            "machine_config": config_name,
             "state": state,
         }
     )
@@ -800,7 +808,7 @@ def step_instance_with_machine_config(context: Context, machine_config: str) -> 
     machine_config : str
         Machine config name
     """
-    if not hasattr(context, "instances"):
+    if context.instances is None:
         context.instances = []
 
     region = "us-east-1"
@@ -929,7 +937,7 @@ def step_warning_logged_for_region(context: Context, region: str) -> None:
         Region that should have warning logged
     """
 
-    if not hasattr(context, "log_records"):
+    if context.log_records is None:
         context.log_records = []
 
     assert any(
@@ -951,7 +959,7 @@ def step_describe_regions_fails(context: Context) -> None:
 
     from botocore.exceptions import ClientError
 
-    if not hasattr(context, "patches"):
+    if context.patches is None:
         context.patches = []
 
     original_client = boto3.client
@@ -991,7 +999,7 @@ def step_warning_logged_for_describe_regions(context: Context) -> None:
         Behave test context
     """
 
-    if not hasattr(context, "log_records"):
+    if context.log_records is None:
         context.log_records = []
 
     assert any(

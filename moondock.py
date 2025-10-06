@@ -62,6 +62,20 @@ class Moondock:
         self.cleanup_in_progress = False
         self.resources: dict[str, Any] = {}
 
+    def log_and_print_error(self, message: str, *args: Any) -> None:
+        """Log error message and print to stderr.
+
+        Parameters
+        ----------
+        message : str
+            Error message with optional format placeholders
+        *args : Any
+            Format arguments for message
+        """
+        logging.error(message, *args)
+        formatted_msg = message % args if args else message
+        print(f"Error: {formatted_msg}", file=sys.stderr)
+
     def extract_exit_code_from_script(self, script: str) -> int:
         """Extract exit code from script if it contains 'exit N' command.
 
@@ -90,8 +104,8 @@ class Moondock:
             List of ports to log tunnel creation for
         """
         for port in ports:
-            logging.info(f"Creating SSH tunnel for port {port}...")
-            logging.info(f"SSH tunnel established: localhost:{port} -> remote:{port}")
+            logging.info("Creating SSH tunnel for port %s...", port)
+            logging.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
 
     def cleanup_resources(
         self, signum: int | None = None, frame: types.FrameType | None = None
@@ -128,7 +142,7 @@ class Moondock:
                 try:
                     self.resources["portforward_mgr"].stop_all_tunnels()
                 except Exception as e:
-                    logging.error(f"Error stopping tunnels: {e}")
+                    logging.error("Error stopping tunnels: %s", e)
                     errors.append(e)
 
             if "mutagen_session_name" in self.resources:
@@ -139,7 +153,7 @@ class Moondock:
                         self.resources["mutagen_session_name"]
                     )
                 except Exception as e:
-                    logging.error(f"Error terminating Mutagen session: {e}")
+                    logging.error("Error terminating Mutagen session: %s", e)
                     errors.append(e)
 
             if "ssh_manager" in self.resources:
@@ -148,21 +162,21 @@ class Moondock:
                 try:
                     self.resources["ssh_manager"].close()
                 except Exception as e:
-                    logging.error(f"Error closing SSH: {e}")
+                    logging.error("Error closing SSH: %s", e)
                     errors.append(e)
 
             if "instance_details" in self.resources:
                 instance_id = self.resources["instance_details"]["instance_id"]
-                logging.info(f"Terminating EC2 instance {instance_id}...")
+                logging.info("Terminating EC2 instance %s...", instance_id)
 
                 try:
                     self.resources["ec2_manager"].terminate_instance(instance_id)
                 except Exception as e:
-                    logging.error(f"Error terminating instance: {e}")
+                    logging.error("Error terminating instance: %s", e)
                     errors.append(e)
 
             if errors:
-                logging.info(f"Cleanup completed with {len(errors)} errors")
+                logging.info("Cleanup completed with %s errors", len(errors))
             else:
                 logging.info("Cleanup completed successfully")
 
@@ -292,8 +306,8 @@ class Moondock:
                 cmd = merged_config["command"]
                 exit_code = self.extract_exit_code_from_script(cmd)
 
-                logging.info(f"Executing command: {cmd}")
-                logging.info(f"Command completed with exit code: {exit_code}")
+                logging.info("Executing command: %s", cmd)
+                logging.info("Command completed with exit code: %s", exit_code)
                 mock_instance["command_exit_code"] = exit_code
 
         if json_output:
@@ -489,7 +503,7 @@ class Moondock:
                         username="ubuntu",
                     )
                 except RuntimeError as e:
-                    logging.error(f"Port forwarding failed: {e}")
+                    logging.error("Port forwarding failed: %s", e)
                     raise
 
             if merged_config.get("startup_script"):
@@ -514,7 +528,7 @@ class Moondock:
 
             if merged_config.get("command"):
                 cmd = merged_config["command"]
-                logging.info(f"Executing command: {cmd}")
+                logging.info("Executing command: %s", cmd)
 
                 if merged_config.get("sync_paths"):
                     working_dir = merged_config["sync_paths"][0]["remote"]
@@ -527,7 +541,7 @@ class Moondock:
                     command_with_env = ssh_manager.build_command_with_env(cmd, env_vars)
                     exit_code = ssh_manager.execute_command(command_with_env)
 
-                logging.info(f"Command completed with exit code: {exit_code}")
+                logging.info("Command completed with exit code: %s", exit_code)
                 instance_details["command_exit_code"] = exit_code
 
             if json_output:
@@ -756,8 +770,9 @@ class Moondock:
                 )
         except (NoCredentialsError, ClientError) as e:
             logging.warning(
-                f"Unable to validate region '{region}' ({e.__class__.__name__}). "
-                f"Proceeding without validation."
+                "Unable to validate region '%s' (%s). Proceeding without validation.",
+                region,
+                e.__class__.__name__,
             )
 
     def list(self, region: str | None = None) -> None:
@@ -825,6 +840,98 @@ class Moondock:
                 raise
 
             raise
+
+    def stop(self, name_or_id: str, region: str | None = None) -> None:
+        """Terminate a moondock-managed EC2 instance by MachineConfig or ID.
+
+        Parameters
+        ----------
+        name_or_id : str
+            EC2 instance ID or MachineConfig name to terminate
+        region : str | None
+            Optional AWS region to narrow search scope
+
+        Raises
+        ------
+        SystemExit
+            Exits with code 1 if no instance matches, multiple instances match,
+            or AWS errors occur. Returns normally on successful termination.
+        """
+        default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
+
+        if region:
+            self.validate_region(region)
+
+        target: dict[str, Any] | None = None
+
+        try:
+            search_manager = EC2Manager(region=region or default_region)
+            matches = search_manager.find_instances_by_name_or_id(
+                name_or_id=name_or_id, region_filter=region
+            )
+
+            if not matches:
+                self.log_and_print_error(
+                    "No moondock-managed instances matched '%s'.", name_or_id
+                )
+                sys.exit(1)
+
+            if len(matches) > 1:
+                logging.error(
+                    "Ambiguous machine config '%s'; matches multiple instances.",
+                    name_or_id,
+                )
+                print(
+                    "Multiple instances found. Please use a specific instance ID to stop:",
+                    file=sys.stderr,
+                )
+
+                for match in matches:
+                    print(
+                        f"  {match['instance_id']} ({match['region']})", file=sys.stderr
+                    )
+
+                sys.exit(1)
+
+            target = matches[0]
+            logging.info(
+                "Terminating instance %s (%s) in %s...",
+                target["instance_id"],
+                target["machine_config"],
+                target["region"],
+            )
+
+            regional_manager = EC2Manager(region=target["region"])
+            regional_manager.terminate_instance(target["instance_id"])
+
+            print(f"Instance {target['instance_id']} has been successfully terminated.")
+        except RuntimeError as e:
+            if target is not None:
+                self.log_and_print_error(
+                    "Failed to terminate instance %s: %s",
+                    target["instance_id"],
+                    str(e),
+                )
+            else:
+                self.log_and_print_error("Failed to terminate instance: %s", str(e))
+
+            sys.exit(1)
+        except NoCredentialsError:
+            self.log_and_print_error(
+                "AWS credentials not configured. Please set up AWS credentials."
+            )
+            sys.exit(1)
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+
+            if error_code == "UnauthorizedOperation":
+                self.log_and_print_error(
+                    "Insufficient AWS permissions to perform this operation."
+                )
+                sys.exit(1)
+
+            self.log_and_print_error("AWS API error: %s", e)
+            sys.exit(1)
 
     def hello(self) -> str:
         """Test command to validate Fire CLI works.
