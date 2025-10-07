@@ -26,6 +26,8 @@ from typing import Any
 
 import fire
 from botocore.exceptions import ClientError, NoCredentialsError
+from textual.app import App, ComposeResult
+from textual.widgets import Log
 
 from moondock.config import ConfigLoader
 from moondock.ec2 import EC2Manager
@@ -48,6 +50,213 @@ Names exceeding this width are truncated to maintain table alignment.
 """
 
 
+class StreamFormatter(logging.Formatter):
+    """Logging formatter that prepends stream tags based on extra parameter."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format log record with stream prefix if present.
+
+        Parameters
+        ----------
+        record : logging.LogRecord
+            Log record to format
+
+        Returns
+        -------
+        str
+            Formatted log message with optional stream prefix
+        """
+        msg = super().format(record)
+        stream = getattr(record, "stream", None)
+
+        if stream == "stdout":
+            return f"[stdout] {msg}"
+        elif stream == "stderr":
+            return f"[stderr] {msg}"
+
+        return msg
+
+
+class StreamRoutingFilter(logging.Filter):
+    """Filter that routes log records based on stream extra parameter.
+
+    Parameters
+    ----------
+    stream_type : str
+        Stream type to allow: "stdout" or "stderr"
+    """
+
+    def __init__(self, stream_type: str) -> None:
+        """Initialize filter.
+
+        Parameters
+        ----------
+        stream_type : str
+            Stream type to allow: "stdout" or "stderr"
+        """
+        super().__init__()
+        self.stream_type = stream_type
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Filter log records by stream type.
+
+        Parameters
+        ----------
+        record : logging.LogRecord
+            Log record to filter
+
+        Returns
+        -------
+        bool
+            True if record should be emitted by this handler
+        """
+        record_stream = getattr(record, "stream", None)
+
+        if record_stream is None:
+            return self.stream_type == "stderr"
+
+        return record_stream == self.stream_type
+
+
+class TuiLogHandler(logging.Handler):
+    """Logging handler that writes to a Textual Log widget.
+
+    Parameters
+    ----------
+    app : MoondockTUI
+        Textual app instance
+    log_widget : Log
+        Log widget to write to
+
+    Attributes
+    ----------
+    app : MoondockTUI
+        Textual app instance
+    log_widget : Log
+        Log widget to write to
+    """
+
+    def __init__(self, app: "MoondockTUI", log_widget: Log) -> None:
+        """Initialize TuiLogHandler.
+
+        Parameters
+        ----------
+        app : MoondockTUI
+            Textual app instance
+        log_widget : Log
+            Log widget to write to
+        """
+        super().__init__()
+        self.app = app
+        self.log_widget = log_widget
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Emit log record to TUI widget.
+
+        Parameters
+        ----------
+        record : logging.LogRecord
+            Log record to emit
+        """
+        msg = self.format(record)
+        self.app.call_from_thread(self.log_widget.write_line, msg)
+
+
+class MoondockTUI(App):
+    """Textual TUI application for moondock.
+
+    Parameters
+    ----------
+    moondock_instance : Moondock
+        Moondock instance to run
+    run_kwargs : dict[str, Any]
+        Keyword arguments for run method
+
+    Attributes
+    ----------
+    moondock : Moondock
+        Moondock instance to run
+    run_kwargs : dict[str, Any]
+        Keyword arguments for run method
+    original_handlers : list[logging.Handler]
+        Original logging handlers to restore on exit
+    worker_exit_code : int
+        Exit code from worker thread
+    """
+
+    def __init__(
+        self, moondock_instance: "Moondock", run_kwargs: dict[str, Any]
+    ) -> None:
+        """Initialize MoondockTUI.
+
+        Parameters
+        ----------
+        moondock_instance : Moondock
+            Moondock instance to run
+        run_kwargs : dict[str, Any]
+            Keyword arguments for run method
+        """
+        super().__init__()
+        self.moondock = moondock_instance
+        self.run_kwargs = run_kwargs
+        self.original_handlers: list[logging.Handler] = []
+        self.worker_exit_code = 0
+
+    def compose(self) -> ComposeResult:
+        """Compose TUI layout.
+
+        Yields
+        ------
+        Log
+            Log widget for displaying messages
+        """
+        yield Log()
+
+    def on_mount(self) -> None:
+        """Handle mount event - setup logging and start worker."""
+        root_logger = logging.getLogger()
+        self.original_handlers = root_logger.handlers[:]
+
+        log_widget = self.query_one(Log)
+        tui_handler = TuiLogHandler(self, log_widget)
+        tui_handler.setFormatter(StreamFormatter("%(message)s"))
+
+        root_logger.handlers = [tui_handler]
+
+        self.run_worker(self.run_moondock_logic, exit_on_error=False, thread=True)
+
+    def on_unmount(self) -> None:
+        """Handle unmount event - restore logging and cleanup resources."""
+        root_logger = logging.getLogger()
+        root_logger.handlers = self.original_handlers
+
+        if not self.moondock.cleanup_in_progress:
+            self.moondock.cleanup_resources()
+
+    def run_moondock_logic(self) -> None:
+        """Run moondock logic in worker thread."""
+        try:
+            result = self.moondock._execute_run(tui_mode=True, **self.run_kwargs)
+            self.worker_exit_code = 0
+
+            if isinstance(result, dict) and "command_exit_code" in result:
+                self.worker_exit_code = result["command_exit_code"]
+
+            if self.worker_exit_code == 0:
+                logging.info("Command completed successfully")
+        except Exception:
+            logging.exception("Command failed")
+            self.worker_exit_code = 1
+        finally:
+            self.call_from_thread(self.exit, self.worker_exit_code)
+
+    def action_quit(self) -> None:
+        """Handle quit action (Ctrl+C)."""
+        if not self.moondock.cleanup_in_progress:
+            self.moondock.cleanup_resources()
+        self.exit(130)
+
+
 class Moondock:
     """Main CLI interface for moondock."""
 
@@ -59,6 +268,7 @@ class Moondock:
         """
         self.config_loader = ConfigLoader()
         self.cleanup_lock = threading.Lock()
+        self.resources_lock = threading.Lock()
         self.cleanup_in_progress = False
         self.resources: dict[str, Any] = {}
 
@@ -105,7 +315,9 @@ class Moondock:
         """
         for port in ports:
             logging.info("Creating SSH tunnel for port %s...", port)
-            logging.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
+            logging.info(
+                "SSH tunnel established: localhost:%s -> remote:%s", port, port
+            )
 
     def cleanup_resources(
         self, signum: int | None = None, frame: types.FrameType | None = None
@@ -135,42 +347,45 @@ class Moondock:
         logging.info("Shutdown requested - beginning cleanup...")
         errors = []
 
+        with self.resources_lock:
+            resources_to_clean = dict(self.resources)
+
         try:
-            if "portforward_mgr" in self.resources:
+            if "portforward_mgr" in resources_to_clean:
                 logging.info("Stopping SSH port forwarding tunnels...")
 
                 try:
-                    self.resources["portforward_mgr"].stop_all_tunnels()
+                    resources_to_clean["portforward_mgr"].stop_all_tunnels()
                 except Exception as e:
                     logging.error("Error stopping tunnels: %s", e)
                     errors.append(e)
 
-            if "mutagen_session_name" in self.resources:
+            if "mutagen_session_name" in resources_to_clean:
                 logging.info("Terminating Mutagen sync session...")
 
                 try:
-                    self.resources["mutagen_mgr"].terminate_session(
-                        self.resources["mutagen_session_name"]
+                    resources_to_clean["mutagen_mgr"].terminate_session(
+                        resources_to_clean["mutagen_session_name"]
                     )
                 except Exception as e:
                     logging.error("Error terminating Mutagen session: %s", e)
                     errors.append(e)
 
-            if "ssh_manager" in self.resources:
+            if "ssh_manager" in resources_to_clean:
                 logging.info("Closing SSH connection...")
 
                 try:
-                    self.resources["ssh_manager"].close()
+                    resources_to_clean["ssh_manager"].close()
                 except Exception as e:
                     logging.error("Error closing SSH: %s", e)
                     errors.append(e)
 
-            if "instance_details" in self.resources:
-                instance_id = self.resources["instance_details"]["instance_id"]
+            if "instance_details" in resources_to_clean:
+                instance_id = resources_to_clean["instance_details"]["instance_id"]
                 logging.info("Terminating EC2 instance %s...", instance_id)
 
                 try:
-                    self.resources["ec2_manager"].terminate_instance(instance_id)
+                    resources_to_clean["ec2_manager"].terminate_instance(instance_id)
                 except Exception as e:
                     logging.error("Error terminating instance: %s", e)
                     errors.append(e)
@@ -180,7 +395,8 @@ class Moondock:
             else:
                 logging.info("Cleanup completed successfully")
 
-            self.resources.clear()
+            with self.resources_lock:
+                self.resources.clear()
 
         finally:
             if signum is not None:
@@ -326,6 +542,7 @@ class Moondock:
         include_vcs: str | bool | None = None,
         ignore: str | None = None,
         json_output: bool = False,
+        plain: bool = False,
     ) -> dict[str, Any] | str:
         """Launch EC2 instance with file sync and command execution.
 
@@ -350,6 +567,105 @@ class Moondock:
             Comma-separated file patterns to exclude (overrides config)
         json_output : bool
             If True, return JSON string instead of dict (default: False)
+        plain : bool
+            If True, use plain text logging to stderr instead of TUI (default: False)
+
+        Returns
+        -------
+        dict[str, Any] | str
+            Instance details with fields: instance_id, public_ip, state, key_file,
+            security_group_id, unique_id (as dict for testing or JSON string for CLI).
+            In TUI mode, returns dict with exit_code and tui_mode=True.
+
+        Raises
+        ------
+        ValueError
+            If include_vcs is not "true" or "false", or if machine name is invalid
+        """
+        is_tty = sys.stdout.isatty()
+        is_test = os.environ.get("MOONDOCK_TEST_MODE") == "1"
+
+        use_tui = not (plain or json_output or is_test or not is_tty)
+
+        if use_tui:
+            run_kwargs = {
+                "machine_name": machine_name,
+                "command": command,
+                "instance_type": instance_type,
+                "disk_size": disk_size,
+                "region": region,
+                "port": port,
+                "include_vcs": include_vcs,
+                "ignore": ignore,
+                "json_output": json_output,
+            }
+            app = MoondockTUI(moondock_instance=self, run_kwargs=run_kwargs)
+
+            original_sigint = signal.signal(signal.SIGINT, self.cleanup_resources)
+            original_sigterm = signal.signal(signal.SIGTERM, self.cleanup_resources)
+
+            try:
+                exit_code = app.run()
+            finally:
+                signal.signal(signal.SIGINT, original_sigint)
+                signal.signal(signal.SIGTERM, original_sigterm)
+
+            return {
+                "exit_code": exit_code if exit_code is not None else 0,
+                "tui_mode": True,
+                "message": "TUI session completed",
+            }
+
+        return self._execute_run(
+            machine_name=machine_name,
+            command=command,
+            instance_type=instance_type,
+            disk_size=disk_size,
+            region=region,
+            port=port,
+            include_vcs=include_vcs,
+            ignore=ignore,
+            json_output=json_output,
+        )
+
+    def _execute_run(
+        self,
+        machine_name: str | None = None,
+        command: str | None = None,
+        instance_type: str | None = None,
+        disk_size: int | None = None,
+        region: str | None = None,
+        port: str | list[int] | tuple[int, ...] | None = None,
+        include_vcs: str | bool | None = None,
+        ignore: str | None = None,
+        json_output: bool = False,
+        tui_mode: bool = False,
+    ) -> dict[str, Any] | str:
+        """Execute moondock run logic.
+
+        Parameters
+        ----------
+        machine_name : str | None
+            Named machine configuration from YAML, or None to use defaults
+        command : str | None
+            Command to execute on remote instance (overrides config)
+        instance_type : str | None
+            EC2 instance type (overrides config)
+        disk_size : int | None
+            Root disk size in GB (overrides config)
+        region : str | None
+            AWS region (overrides config)
+        port : str | list[int] | tuple[int, ...] | None
+            Local port(s) for forwarding - can be single port, comma-separated string,
+            list of integers, or tuple of integers (overrides config)
+        include_vcs : str | bool | None
+            Include VCS files: "true"/"false" strings or True/False booleans (overrides config)
+        ignore : str | None
+            Comma-separated file patterns to exclude (overrides config)
+        json_output : bool
+            If True, return JSON string instead of dict (default: False)
+        tui_mode : bool
+            If True, TUI owns cleanup lifecycle (default: False)
 
         Returns
         -------
@@ -393,8 +709,9 @@ class Moondock:
         if os.environ.get("MOONDOCK_TEST_MODE") == "1":
             return self.run_test_mode(merged_config, json_output)
 
-        original_sigint = signal.signal(signal.SIGINT, self.cleanup_resources)
-        original_sigterm = signal.signal(signal.SIGTERM, self.cleanup_resources)
+        if not tui_mode:
+            original_sigint = signal.signal(signal.SIGINT, self.cleanup_resources)
+            original_sigterm = signal.signal(signal.SIGTERM, self.cleanup_resources)
 
         try:
             mutagen_mgr = MutagenManager()
@@ -403,10 +720,14 @@ class Moondock:
                 mutagen_mgr.check_mutagen_installed()
 
             ec2_manager = EC2Manager(region=merged_config["region"])
-            self.resources["ec2_manager"] = ec2_manager
+
+            with self.resources_lock:
+                self.resources["ec2_manager"] = ec2_manager
 
             instance_details = ec2_manager.launch_instance(merged_config)
-            self.resources["instance_details"] = instance_details
+
+            with self.resources_lock:
+                self.resources["instance_details"] = instance_details
 
             ssh_manager = None
             mutagen_session_name = None
@@ -439,7 +760,8 @@ class Moondock:
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
 
-            self.resources["ssh_manager"] = ssh_manager
+            with self.resources_lock:
+                self.resources["ssh_manager"] = ssh_manager
 
             env_vars = ssh_manager.filter_environment_variables(
                 merged_config.get("env_filter")
@@ -449,8 +771,9 @@ class Moondock:
                 mutagen_session_name = f"moondock-{instance_details['unique_id']}"
                 mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)
 
-                self.resources["mutagen_mgr"] = mutagen_mgr
-                self.resources["mutagen_session_name"] = mutagen_session_name
+                with self.resources_lock:
+                    self.resources["mutagen_mgr"] = mutagen_mgr
+                    self.resources["mutagen_session_name"] = mutagen_session_name
 
             if merged_config.get("sync_paths"):
                 sync_config = merged_config["sync_paths"][0]
@@ -493,7 +816,8 @@ class Moondock:
             if merged_config.get("ports"):
                 portforward_mgr = PortForwardManager()
 
-                self.resources["portforward_mgr"] = portforward_mgr
+                with self.resources_lock:
+                    self.resources["portforward_mgr"] = portforward_mgr
 
                 try:
                     portforward_mgr.create_tunnels(
@@ -550,11 +874,12 @@ class Moondock:
             return instance_details
 
         finally:
-            if not self.cleanup_in_progress:
+            if not tui_mode and not self.cleanup_in_progress:
                 self.cleanup_resources()
 
-            signal.signal(signal.SIGINT, original_sigint)
-            signal.signal(signal.SIGTERM, original_sigterm)
+            if not tui_mode:
+                signal.signal(signal.SIGINT, original_sigint)
+                signal.signal(signal.SIGTERM, original_sigterm)
 
     def apply_cli_overrides(
         self,
@@ -944,10 +1269,75 @@ class Moondock:
         return "moondock v0.1.0 - skeleton ready"
 
 
+class MoondockCLI(Moondock):
+    """CLI wrapper that handles process exit codes."""
+
+    def run(
+        self,
+        machine_name: str | None = None,
+        command: str | None = None,
+        instance_type: str | None = None,
+        disk_size: int | None = None,
+        region: str | None = None,
+        port: str | list[int] | tuple[int, ...] | None = None,
+        include_vcs: str | bool | None = None,
+        ignore: str | None = None,
+        json_output: bool = False,
+        plain: bool = False,
+    ) -> dict[str, Any] | str:
+        """Run Moondock and handle TUI exit codes for CLI context.
+
+        Parameters
+        ----------
+        machine_name : str | None
+            Name of machine configuration from YAML
+        command : str | None
+            Command to execute on remote instance
+        instance_type : str | None
+            EC2 instance type override
+        disk_size : int | None
+            Root disk size in GB override
+        region : str | None
+            AWS region override
+        port : str | list[int] | tuple[int, ...] | None
+            Port(s) to forward
+        include_vcs : str | bool | None
+            Include VCS files in sync
+        ignore : str | None
+            Comma-separated ignore patterns
+        json_output : bool
+            Output result as JSON
+        plain : bool
+            Disable TUI, use plain stderr logging
+
+        Returns
+        -------
+        dict[str, Any] | str
+            Instance metadata dict or JSON string (never returns in TUI mode, exits instead)
+        """
+        result = super().run(
+            machine_name=machine_name,
+            command=command,
+            instance_type=instance_type,
+            disk_size=disk_size,
+            region=region,
+            port=port,
+            include_vcs=include_vcs,
+            ignore=ignore,
+            json_output=json_output,
+            plain=plain,
+        )
+
+        if isinstance(result, dict) and result.get("tui_mode"):
+            sys.exit(result.get("exit_code", 0))
+
+        return result
+
+
 def main() -> None:
     """Entry point for Fire CLI.
 
-    This function initializes the Fire CLI interface by passing the Moondock
+    This function initializes the Fire CLI interface by passing the MoondockCLI
     class to Fire, which automatically generates CLI commands from the class
     methods. The function should be called when the script is executed directly.
 
@@ -956,13 +1346,20 @@ def main() -> None:
     Fire automatically maps class methods to CLI commands and handles argument
     parsing, help text generation, and command routing.
     """
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(StreamFormatter("%(message)s"))
+    stdout_handler.addFilter(StreamRoutingFilter("stdout"))
+
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setFormatter(StreamFormatter("%(message)s"))
+    stderr_handler.addFilter(StreamRoutingFilter("stderr"))
+
     logging.basicConfig(
         level=logging.INFO,
-        format="%(message)s",
-        stream=sys.stderr,
+        handlers=[stdout_handler, stderr_handler],
     )
 
-    fire.Fire(Moondock)
+    fire.Fire(MoondockCLI)
 
 
 if __name__ == "__main__":

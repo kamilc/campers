@@ -82,7 +82,9 @@ class SSHManager:
         for attempt in range(max_retries):
             try:
                 logger.info(
-                    f"Attempting SSH connection (attempt {attempt + 1}/{max_retries})..."
+                    "Attempting SSH connection (attempt %s/%s)...",
+                    attempt + 1,
+                    max_retries,
                 )
 
                 self.client = paramiko.SSHClient()
@@ -117,18 +119,18 @@ class SSHManager:
                         f"Failed to establish SSH connection after {max_retries} attempts"
                     ) from e
 
-    def stream_remaining_output(self, stream: ChannelFile, prefix: str) -> None:
+    def stream_remaining_output(self, stream: ChannelFile, stream_type: str) -> None:
         """Stream remaining output from a channel stream.
 
         Parameters
         ----------
         stream : ChannelFile
             Channel stream to read from (stdout or stderr)
-        prefix : str
-            Prefix to add to output lines (e.g., "[stdout]" or "[stderr]")
+        stream_type : str
+            Stream type identifier: "stdout" or "stderr"
         """
         for line in stream.readlines():
-            print(f"{prefix} {line}", end="", flush=True)
+            logging.info(line.rstrip("\n"), extra={"stream": stream_type})
 
     def stream_output_realtime(self, stdout: ChannelFile, stderr: ChannelFile) -> None:
         """Stream stdout and stderr in real-time until command completes.
@@ -144,12 +146,12 @@ class SSHManager:
             line = stdout.readline()
 
             if line:
-                print(f"[stdout] {line}", end="", flush=True)
+                logging.info(line.rstrip("\n"), extra={"stream": "stdout"})
 
             err_line = stderr.readline()
 
             if err_line:
-                print(f"[stderr] {err_line}", end="", flush=True)
+                logging.info(err_line.rstrip("\n"), extra={"stream": "stderr"})
 
             if stdout.channel.exit_status_ready():
                 break
@@ -186,8 +188,8 @@ class SSHManager:
 
             self.stream_output_realtime(stdout, stderr)
 
-            self.stream_remaining_output(stdout, "[stdout]")
-            self.stream_remaining_output(stderr, "[stderr]")
+            self.stream_remaining_output(stdout, "stdout")
+            self.stream_remaining_output(stderr, "stderr")
 
             exit_code = stdout.channel.recv_exit_status()
             return exit_code
@@ -309,7 +311,7 @@ class SSHManager:
         if filtered_vars:
             var_names = ", ".join(sorted(filtered_vars.keys()))
             logger.info(
-                f"Forwarding {len(filtered_vars)} environment variables: {var_names}"
+                "Forwarding %s environment variables: %s", len(filtered_vars), var_names
             )
 
             sensitive_patterns = ["SECRET", "PASSWORD", "TOKEN", "KEY"]
@@ -321,7 +323,8 @@ class SSHManager:
 
             if sensitive_vars:
                 logger.warning(
-                    f"Forwarding sensitive environment variables: {', '.join(sensitive_vars)}"
+                    "Forwarding sensitive environment variables: %s",
+                    ", ".join(sensitive_vars),
                 )
 
         return filtered_vars
