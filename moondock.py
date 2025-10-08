@@ -21,12 +21,15 @@ import shlex
 import signal
 import sys
 import threading
+import time
 import types
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import fire
 from botocore.exceptions import ClientError, NoCredentialsError
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import Header, Footer, Log, Static
@@ -235,6 +238,8 @@ class MoondockTUI(App):
         self.update_queue = update_queue
         self.original_handlers: list[logging.Handler] = []
         self.worker_exit_code = 0
+        self.instance_start_time: datetime | None = None
+        self.last_ctrl_c_time: float = 0.0
 
     def compose(self) -> ComposeResult:
         """Compose TUI layout.
@@ -257,6 +262,7 @@ class MoondockTUI(App):
             yield Static("Region: loading...", id="region-widget")
             yield Static("Status: launching...", id="status-widget")
             yield Static("Uptime: 0s", id="uptime-widget")
+            yield Static("Mutagen: Not syncing", id="mutagen-widget")
             yield Static("Machine Name: loading...", id="machine-name-widget")
             yield Static("Command: loading...", id="command-widget")
             yield Static("Forwarded Ports: loading...", id="ports-widget")
@@ -276,7 +282,9 @@ class MoondockTUI(App):
 
         root_logger.handlers = [tui_handler]
 
+        self.instance_start_time = datetime.now()
         self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
+        self.set_interval(1.0, self.update_uptime, name="uptime-timer")
         self.run_worker(self.run_moondock_logic, exit_on_error=False, thread=True)
 
     def check_for_updates(self) -> None:
@@ -298,10 +306,88 @@ class MoondockTUI(App):
                     self.update_from_config(payload)
                 elif update_type == "instance_details":
                     self.update_from_instance_details(payload)
+                elif update_type == "status_update":
+                    self.update_status(payload)
+                elif update_type == "mutagen_status":
+                    self.update_mutagen_status(payload)
+                elif update_type == "cleanup_event":
+                    self.handle_cleanup_event(payload)
 
                 updates_processed += 1
             except queue.Empty:
                 break
+
+    def update_uptime(self) -> None:
+        """Update uptime widget with elapsed time since instance start."""
+        if self.instance_start_time is None:
+            return
+
+        elapsed = datetime.now() - self.instance_start_time
+        total_seconds = int(elapsed.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        if hours > 0:
+            uptime_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        elif minutes > 0:
+            uptime_str = f"{minutes:02d}:{seconds:02d}"
+        else:
+            uptime_str = f"{seconds}s"
+
+        try:
+            self.query_one("#uptime-widget").update(f"Uptime: {uptime_str}")
+        except Exception as e:
+            logging.error("Failed to update uptime widget: %s", e)
+
+    def update_status(self, payload: dict[str, Any]) -> None:
+        """Update status widget from status update event.
+
+        Parameters
+        ----------
+        payload : dict[str, Any]
+            Status update payload containing 'status' field
+        """
+        if "status" in payload:
+            try:
+                self.query_one("#status-widget").update(f"Status: {payload['status']}")
+            except Exception as e:
+                logging.error("Failed to update status widget: %s", e)
+
+    def update_mutagen_status(self, payload: dict[str, Any]) -> None:
+        """Update mutagen widget from mutagen status event.
+
+        Parameters
+        ----------
+        payload : dict[str, Any]
+            Mutagen status payload containing 'state' and optionally 'files_synced'
+        """
+        state = payload.get("state", "unknown")
+        files_synced = payload.get("files_synced")
+
+        if state == "not_configured":
+            display_text = "Mutagen: Not syncing"
+        elif files_synced is not None:
+            display_text = f"Mutagen: {state} ({files_synced} files)"
+        else:
+            display_text = f"Mutagen: {state}"
+
+        try:
+            self.query_one("#mutagen-widget").update(display_text)
+        except Exception as e:
+            logging.error("Failed to update mutagen widget: %s", e)
+
+    def handle_cleanup_event(self, payload: dict[str, Any]) -> None:
+        """Handle cleanup event by logging to the log panel.
+
+        Parameters
+        ----------
+        payload : dict[str, Any]
+            Cleanup event payload containing 'step' and 'status'
+        """
+        step = payload.get("step", "unknown")
+        status = payload.get("status", "unknown")
+        logging.info("Cleanup: %s - %s", step, status)
 
     def update_from_config(self, config: dict[str, Any]) -> None:
         """Update widgets from merged config data.
@@ -387,6 +473,12 @@ class MoondockTUI(App):
         root_logger = logging.getLogger()
         root_logger.handlers = self.original_handlers
 
+        while not self.update_queue.empty():
+            try:
+                self.update_queue.get_nowait()
+            except queue.Empty:
+                break
+
         if not self.moondock.cleanup_in_progress:
             self.moondock.cleanup_resources()
 
@@ -418,8 +510,31 @@ class MoondockTUI(App):
         finally:
             self.call_from_thread(self.exit, self.worker_exit_code)
 
+    def on_key(self, event: events.Key) -> None:
+        """Handle key press events.
+
+        Parameters
+        ----------
+        event : events.Key
+            Key event
+        """
+        if event.key == "q":
+            self.action_quit()
+        elif event.key == "ctrl+c":
+            current_time = time.time()
+
+            if (
+                self.last_ctrl_c_time > 0
+                and (current_time - self.last_ctrl_c_time) < 1.5
+            ):
+                logging.info("Force exit requested")
+                self.exit(130)
+            else:
+                self.last_ctrl_c_time = current_time
+                self.action_quit()
+
     def action_quit(self) -> None:
-        """Handle quit action (Ctrl+C)."""
+        """Handle quit action (q key or first Ctrl+C)."""
         if not self.moondock.cleanup_in_progress:
             self.moondock.cleanup_resources()
         self.exit(130)
@@ -439,6 +554,7 @@ class Moondock:
         self.resources_lock = threading.Lock()
         self.cleanup_in_progress = False
         self.resources: dict[str, Any] = {}
+        self.update_queue: queue.Queue | None = None
 
     def log_and_print_error(self, message: str, *args: Any) -> None:
         """Log error message and print to stderr.
@@ -524,43 +640,181 @@ class Moondock:
                 if "portforward_mgr" in resources_to_clean:
                     logging.info("Stopping SSH port forwarding tunnels...")
 
+                    if self.update_queue is not None:
+                        self.update_queue.put(
+                            {
+                                "type": "cleanup_event",
+                                "payload": {
+                                    "step": "stop_tunnels",
+                                    "status": "in_progress",
+                                },
+                            }
+                        )
+
                     try:
                         resources_to_clean["portforward_mgr"].stop_all_tunnels()
+
+                        if self.update_queue is not None:
+                            self.update_queue.put(
+                                {
+                                    "type": "cleanup_event",
+                                    "payload": {
+                                        "step": "stop_tunnels",
+                                        "status": "completed",
+                                    },
+                                }
+                            )
                     except Exception as e:
                         logging.error("Error stopping tunnels: %s", e)
                         errors.append(e)
 
+                        if self.update_queue is not None:
+                            self.update_queue.put(
+                                {
+                                    "type": "cleanup_event",
+                                    "payload": {
+                                        "step": "stop_tunnels",
+                                        "status": "failed",
+                                    },
+                                }
+                            )
+
                 if "mutagen_session_name" in resources_to_clean:
                     logging.info("Terminating Mutagen sync session...")
+
+                    if self.update_queue is not None:
+                        self.update_queue.put(
+                            {
+                                "type": "cleanup_event",
+                                "payload": {
+                                    "step": "terminate_mutagen",
+                                    "status": "in_progress",
+                                },
+                            }
+                        )
 
                     try:
                         resources_to_clean["mutagen_mgr"].terminate_session(
                             resources_to_clean["mutagen_session_name"]
                         )
+
+                        if self.update_queue is not None:
+                            self.update_queue.put(
+                                {
+                                    "type": "cleanup_event",
+                                    "payload": {
+                                        "step": "terminate_mutagen",
+                                        "status": "completed",
+                                    },
+                                }
+                            )
                     except Exception as e:
                         logging.error("Error terminating Mutagen session: %s", e)
                         errors.append(e)
 
+                        if self.update_queue is not None:
+                            self.update_queue.put(
+                                {
+                                    "type": "cleanup_event",
+                                    "payload": {
+                                        "step": "terminate_mutagen",
+                                        "status": "failed",
+                                    },
+                                }
+                            )
+
                 if "ssh_manager" in resources_to_clean:
                     logging.info("Closing SSH connection...")
 
+                    if self.update_queue is not None:
+                        self.update_queue.put(
+                            {
+                                "type": "cleanup_event",
+                                "payload": {
+                                    "step": "close_ssh",
+                                    "status": "in_progress",
+                                },
+                            }
+                        )
+
                     try:
                         resources_to_clean["ssh_manager"].close()
+
+                        if self.update_queue is not None:
+                            self.update_queue.put(
+                                {
+                                    "type": "cleanup_event",
+                                    "payload": {
+                                        "step": "close_ssh",
+                                        "status": "completed",
+                                    },
+                                }
+                            )
                     except Exception as e:
                         logging.error("Error closing SSH: %s", e)
                         errors.append(e)
+
+                        if self.update_queue is not None:
+                            self.update_queue.put(
+                                {
+                                    "type": "cleanup_event",
+                                    "payload": {
+                                        "step": "close_ssh",
+                                        "status": "failed",
+                                    },
+                                }
+                            )
 
                 if "instance_details" in resources_to_clean:
                     instance_id = resources_to_clean["instance_details"]["instance_id"]
                     logging.info("Terminating EC2 instance %s...", instance_id)
 
+                    if self.update_queue is not None:
+                        self.update_queue.put(
+                            {
+                                "type": "status_update",
+                                "payload": {"status": "terminating"},
+                            }
+                        )
+                        self.update_queue.put(
+                            {
+                                "type": "cleanup_event",
+                                "payload": {
+                                    "step": "terminate_instance",
+                                    "status": "in_progress",
+                                },
+                            }
+                        )
+
                     try:
                         resources_to_clean["ec2_manager"].terminate_instance(
                             instance_id
                         )
+
+                        if self.update_queue is not None:
+                            self.update_queue.put(
+                                {
+                                    "type": "cleanup_event",
+                                    "payload": {
+                                        "step": "terminate_instance",
+                                        "status": "completed",
+                                    },
+                                }
+                            )
                     except Exception as e:
                         logging.error("Error terminating instance: %s", e)
                         errors.append(e)
+
+                        if self.update_queue is not None:
+                            self.update_queue.put(
+                                {
+                                    "type": "cleanup_event",
+                                    "payload": {
+                                        "step": "terminate_instance",
+                                        "status": "failed",
+                                    },
+                                }
+                            )
 
                 if errors:
                     logging.info("Cleanup completed with %s errors", len(errors))
@@ -772,7 +1026,7 @@ class Moondock:
                 "ignore": ignore,
                 "json_output": json_output,
             }
-            update_queue: queue.Queue = queue.Queue()
+            update_queue: queue.Queue = queue.Queue(maxsize=100)
             app = MoondockTUI(
                 moondock_instance=self, run_kwargs=run_kwargs, update_queue=update_queue
             )
@@ -894,6 +1148,8 @@ class Moondock:
         if os.environ.get("MOONDOCK_TEST_MODE") == "1":
             return self.run_test_mode(merged_config, json_output)
 
+        self.update_queue = update_queue
+
         if not tui_mode:
             original_sigint = signal.signal(signal.SIGINT, self.cleanup_resources)
             original_sigterm = signal.signal(signal.SIGTERM, self.cleanup_resources)
@@ -951,6 +1207,11 @@ class Moondock:
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
 
+            if update_queue is not None:
+                update_queue.put(
+                    {"type": "status_update", "payload": {"status": "running"}}
+                )
+
             with self.resources_lock:
                 self.resources["ssh_manager"] = ssh_manager
 
@@ -965,11 +1226,27 @@ class Moondock:
                 with self.resources_lock:
                     self.resources["mutagen_mgr"] = mutagen_mgr
                     self.resources["mutagen_session_name"] = mutagen_session_name
+            else:
+                if update_queue is not None:
+                    update_queue.put(
+                        {
+                            "type": "mutagen_status",
+                            "payload": {"state": "not_configured"},
+                        }
+                    )
 
             if merged_config.get("sync_paths"):
                 sync_config = merged_config["sync_paths"][0]
 
                 logging.info("Starting Mutagen file sync...")
+
+                if update_queue is not None:
+                    update_queue.put(
+                        {
+                            "type": "mutagen_status",
+                            "payload": {"state": "starting", "files_synced": 0},
+                        }
+                    )
 
                 mutagen_mgr.create_sync_session(
                     session_name=mutagen_session_name,
@@ -999,10 +1276,27 @@ class Moondock:
 
             if merged_config.get("sync_paths"):
                 logging.info("Waiting for initial file sync to complete...")
+
+                if update_queue is not None:
+                    update_queue.put(
+                        {
+                            "type": "mutagen_status",
+                            "payload": {"state": "syncing", "files_synced": 0},
+                        }
+                    )
+
                 mutagen_mgr.wait_for_initial_sync(
                     mutagen_session_name, timeout=SYNC_TIMEOUT
                 )
                 logging.info("File sync completed")
+
+                if update_queue is not None:
+                    update_queue.put(
+                        {
+                            "type": "mutagen_status",
+                            "payload": {"state": "idle"},
+                        }
+                    )
 
             if merged_config.get("ports"):
                 portforward_mgr = PortForwardManager()
