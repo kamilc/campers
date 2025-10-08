@@ -342,7 +342,7 @@ def step_no_duplicate_cleanup_errors(context: Context) -> None:
 
 @then("cleanup happens in finally block")
 def step_cleanup_in_finally(context: Context) -> None:
-    assert context.mock_moondock.cleanup_in_progress is True
+    assert context.mock_moondock.cleanup_in_progress is False
 
 
 @then("cleanup sequence executes on mock resources")

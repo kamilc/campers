@@ -15,6 +15,7 @@
 import json
 import logging
 import os
+import queue
 import re
 import shlex
 import signal
@@ -27,7 +28,8 @@ from typing import Any
 import fire
 from botocore.exceptions import ClientError, NoCredentialsError
 from textual.app import App, ComposeResult
-from textual.widgets import Log
+from textual.containers import Container
+from textual.widgets import Header, Footer, Log, Static
 
 from moondock.config import ConfigLoader
 from moondock.ec2 import EC2Manager
@@ -47,6 +49,18 @@ MAX_NAME_COLUMN_WIDTH = 19
 """Maximum width for machine config name column in list output.
 
 Names exceeding this width are truncated to maintain table alignment.
+"""
+
+TUI_UPDATE_INTERVAL = 0.1
+"""TUI update check interval in seconds.
+
+Checks the update queue every 100ms for new data from the worker thread.
+"""
+
+MAX_UPDATES_PER_TICK = 10
+"""Maximum number of queue updates processed per timer tick.
+
+Prevents queue flooding from blocking the UI thread by limiting updates per interval.
 """
 
 
@@ -171,6 +185,8 @@ class MoondockTUI(App):
         Moondock instance to run
     run_kwargs : dict[str, Any]
         Keyword arguments for run method
+    update_queue : queue.Queue
+        Queue for receiving updates from worker thread
 
     Attributes
     ----------
@@ -178,14 +194,29 @@ class MoondockTUI(App):
         Moondock instance to run
     run_kwargs : dict[str, Any]
         Keyword arguments for run method
+    update_queue : queue.Queue
+        Queue for receiving updates from worker thread
     original_handlers : list[logging.Handler]
         Original logging handlers to restore on exit
     worker_exit_code : int
         Exit code from worker thread
     """
 
+    CSS = """
+    #status-panel {
+        height: 1fr;
+        border: heavy white;
+    }
+    #log-panel {
+        height: 2fr;
+    }
+    """
+
     def __init__(
-        self, moondock_instance: "Moondock", run_kwargs: dict[str, Any]
+        self,
+        moondock_instance: "Moondock",
+        run_kwargs: dict[str, Any],
+        update_queue: queue.Queue,
     ) -> None:
         """Initialize MoondockTUI.
 
@@ -195,10 +226,13 @@ class MoondockTUI(App):
             Moondock instance to run
         run_kwargs : dict[str, Any]
             Keyword arguments for run method
+        update_queue : queue.Queue
+            Queue for receiving updates from worker thread
         """
         super().__init__()
         self.moondock = moondock_instance
         self.run_kwargs = run_kwargs
+        self.update_queue = update_queue
         self.original_handlers: list[logging.Handler] = []
         self.worker_exit_code = 0
 
@@ -207,13 +241,32 @@ class MoondockTUI(App):
 
         Yields
         ------
-        Log
-            Log widget for displaying messages
+        Header
+            Header widget
+        Container
+            Status panel container with static widgets
+        Container
+            Log panel container with log widget
+        Footer
+            Footer widget
         """
-        yield Log()
+        yield Header()
+        with Container(id="status-panel"):
+            yield Static("Instance ID: loading...", id="instance-id-widget")
+            yield Static("Instance Type: loading...", id="instance-type-widget")
+            yield Static("Region: loading...", id="region-widget")
+            yield Static("Status: launching...", id="status-widget")
+            yield Static("Uptime: 0s", id="uptime-widget")
+            yield Static("Machine Name: loading...", id="machine-name-widget")
+            yield Static("Command: loading...", id="command-widget")
+            yield Static("Forwarded Ports: loading...", id="ports-widget")
+            yield Static("SSH Connection: loading...", id="ssh-widget")
+        with Container(id="log-panel"):
+            yield Log()
+        yield Footer()
 
     def on_mount(self) -> None:
-        """Handle mount event - setup logging and start worker."""
+        """Handle mount event - setup logging, start worker, and timer."""
         root_logger = logging.getLogger()
         self.original_handlers = root_logger.handlers[:]
 
@@ -223,7 +276,111 @@ class MoondockTUI(App):
 
         root_logger.handlers = [tui_handler]
 
+        self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
         self.run_worker(self.run_moondock_logic, exit_on_error=False, thread=True)
+
+    def check_for_updates(self) -> None:
+        """Check queue for updates and update widgets accordingly.
+
+        Processes up to MAX_UPDATES_PER_TICK updates per call to prevent
+        unbounded processing that could block the UI thread.
+        """
+        updates_processed = 0
+
+        while updates_processed < MAX_UPDATES_PER_TICK:
+            try:
+                data = self.update_queue.get_nowait()
+                logging.debug("Processing update from queue: type=%s", data.get("type"))
+                update_type = data.get("type")
+                payload = data.get("payload", {})
+
+                if update_type == "merged_config":
+                    self.update_from_config(payload)
+                elif update_type == "instance_details":
+                    self.update_from_instance_details(payload)
+
+                updates_processed += 1
+            except queue.Empty:
+                break
+
+    def update_from_config(self, config: dict[str, Any]) -> None:
+        """Update widgets from merged config data.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Merged configuration data
+        """
+        if "instance_type" in config:
+            try:
+                self.query_one("#instance-type-widget").update(
+                    f"Instance Type: {config['instance_type']}"
+                )
+            except Exception as e:
+                logging.error("Failed to update instance type widget: %s", e)
+
+        if "region" in config:
+            try:
+                self.query_one("#region-widget").update(f"Region: {config['region']}")
+            except Exception as e:
+                logging.error("Failed to update region widget: %s", e)
+
+        machine_name = config.get("machine_name", "ad-hoc")
+
+        try:
+            self.query_one("#machine-name-widget").update(
+                f"Machine Name: {machine_name}"
+            )
+        except Exception as e:
+            logging.error("Failed to update machine name widget: %s", e)
+
+        if "command" in config:
+            try:
+                self.query_one("#command-widget").update(
+                    f"Command: {config['command']}"
+                )
+            except Exception as e:
+                logging.error("Failed to update command widget: %s", e)
+
+        if "ports" in config and config["ports"]:
+            try:
+                ports_display = ", ".join(
+                    f"localhost:{port}" for port in config["ports"]
+                )
+                self.query_one("#ports-widget").update(
+                    f"Forwarded Ports: {ports_display}"
+                )
+            except Exception as e:
+                logging.error("Failed to update ports widget: %s", e)
+
+    def update_from_instance_details(self, details: dict[str, Any]) -> None:
+        """Update widgets from instance details data.
+
+        Parameters
+        ----------
+        details : dict[str, Any]
+            Instance details data
+        """
+        if "instance_id" in details:
+            try:
+                self.query_one("#instance-id-widget").update(
+                    f"Instance ID: {details['instance_id']}"
+                )
+            except Exception as e:
+                logging.error("Failed to update instance ID widget: %s", e)
+
+        if "state" in details:
+            try:
+                self.query_one("#status-widget").update(f"Status: {details['state']}")
+            except Exception as e:
+                logging.error("Failed to update status widget: %s", e)
+
+        if "public_ip" in details and details["public_ip"]:
+            try:
+                ssh_string = f"ssh -i {details.get('key_file', 'key.pem')} ubuntu@{details['public_ip']}"
+                self.query_one("#ssh-widget").update(f"SSH Connection: {ssh_string}")
+            except Exception as e:
+                logging.error("Failed to update SSH widget: %s", e)
 
     def on_unmount(self) -> None:
         """Handle unmount event - restore logging and cleanup resources."""
@@ -236,7 +393,9 @@ class MoondockTUI(App):
     def run_moondock_logic(self) -> None:
         """Run moondock logic in worker thread."""
         try:
-            result = self.moondock._execute_run(tui_mode=True, **self.run_kwargs)
+            result = self.moondock._execute_run(
+                tui_mode=True, update_queue=self.update_queue, **self.run_kwargs
+            )
             self.worker_exit_code = 0
 
             if isinstance(result, dict) and "command_exit_code" in result:
@@ -244,8 +403,17 @@ class MoondockTUI(App):
 
             if self.worker_exit_code == 0:
                 logging.info("Command completed successfully")
+        except KeyboardInterrupt:
+            logging.info("Operation cancelled by user")
+            self.worker_exit_code = 130
+        except ValueError as e:
+            logging.error("Configuration error: %s", e)
+            self.worker_exit_code = 2
+        except RuntimeError as e:
+            logging.error("Runtime error: %s", e)
+            self.worker_exit_code = 3
         except Exception:
-            logging.exception("Command failed")
+            logging.exception("Unexpected error during command execution")
             self.worker_exit_code = 1
         finally:
             self.call_from_thread(self.exit, self.worker_exit_code)
@@ -344,68 +512,73 @@ class Moondock:
                 return
             self.cleanup_in_progress = True
 
-        logging.info("Shutdown requested - beginning cleanup...")
-        errors = []
-
-        with self.resources_lock:
-            resources_to_clean = dict(self.resources)
-
         try:
-            if "portforward_mgr" in resources_to_clean:
-                logging.info("Stopping SSH port forwarding tunnels...")
-
-                try:
-                    resources_to_clean["portforward_mgr"].stop_all_tunnels()
-                except Exception as e:
-                    logging.error("Error stopping tunnels: %s", e)
-                    errors.append(e)
-
-            if "mutagen_session_name" in resources_to_clean:
-                logging.info("Terminating Mutagen sync session...")
-
-                try:
-                    resources_to_clean["mutagen_mgr"].terminate_session(
-                        resources_to_clean["mutagen_session_name"]
-                    )
-                except Exception as e:
-                    logging.error("Error terminating Mutagen session: %s", e)
-                    errors.append(e)
-
-            if "ssh_manager" in resources_to_clean:
-                logging.info("Closing SSH connection...")
-
-                try:
-                    resources_to_clean["ssh_manager"].close()
-                except Exception as e:
-                    logging.error("Error closing SSH: %s", e)
-                    errors.append(e)
-
-            if "instance_details" in resources_to_clean:
-                instance_id = resources_to_clean["instance_details"]["instance_id"]
-                logging.info("Terminating EC2 instance %s...", instance_id)
-
-                try:
-                    resources_to_clean["ec2_manager"].terminate_instance(instance_id)
-                except Exception as e:
-                    logging.error("Error terminating instance: %s", e)
-                    errors.append(e)
-
-            if errors:
-                logging.info("Cleanup completed with %s errors", len(errors))
-            else:
-                logging.info("Cleanup completed successfully")
+            logging.info("Shutdown requested - beginning cleanup...")
+            errors = []
 
             with self.resources_lock:
+                resources_to_clean = dict(self.resources)
                 self.resources.clear()
 
+            try:
+                if "portforward_mgr" in resources_to_clean:
+                    logging.info("Stopping SSH port forwarding tunnels...")
+
+                    try:
+                        resources_to_clean["portforward_mgr"].stop_all_tunnels()
+                    except Exception as e:
+                        logging.error("Error stopping tunnels: %s", e)
+                        errors.append(e)
+
+                if "mutagen_session_name" in resources_to_clean:
+                    logging.info("Terminating Mutagen sync session...")
+
+                    try:
+                        resources_to_clean["mutagen_mgr"].terminate_session(
+                            resources_to_clean["mutagen_session_name"]
+                        )
+                    except Exception as e:
+                        logging.error("Error terminating Mutagen session: %s", e)
+                        errors.append(e)
+
+                if "ssh_manager" in resources_to_clean:
+                    logging.info("Closing SSH connection...")
+
+                    try:
+                        resources_to_clean["ssh_manager"].close()
+                    except Exception as e:
+                        logging.error("Error closing SSH: %s", e)
+                        errors.append(e)
+
+                if "instance_details" in resources_to_clean:
+                    instance_id = resources_to_clean["instance_details"]["instance_id"]
+                    logging.info("Terminating EC2 instance %s...", instance_id)
+
+                    try:
+                        resources_to_clean["ec2_manager"].terminate_instance(
+                            instance_id
+                        )
+                    except Exception as e:
+                        logging.error("Error terminating instance: %s", e)
+                        errors.append(e)
+
+                if errors:
+                    logging.info("Cleanup completed with %s errors", len(errors))
+                else:
+                    logging.info("Cleanup completed successfully")
+
+            finally:
+                if signum is not None:
+                    exit_code = (
+                        130
+                        if signum == signal.SIGINT
+                        else (143 if signum == signal.SIGTERM else 1)
+                    )
+                    sys.exit(exit_code)
+
         finally:
-            if signum is not None:
-                exit_code = (
-                    130
-                    if signum == signal.SIGINT
-                    else (143 if signum == signal.SIGTERM else 1)
-                )
-                sys.exit(exit_code)
+            with self.cleanup_lock:
+                self.cleanup_in_progress = False
 
     def run_test_mode(
         self, merged_config: dict[str, Any], json_output: bool
@@ -599,7 +772,10 @@ class Moondock:
                 "ignore": ignore,
                 "json_output": json_output,
             }
-            app = MoondockTUI(moondock_instance=self, run_kwargs=run_kwargs)
+            update_queue: queue.Queue = queue.Queue()
+            app = MoondockTUI(
+                moondock_instance=self, run_kwargs=run_kwargs, update_queue=update_queue
+            )
 
             original_sigint = signal.signal(signal.SIGINT, self.cleanup_resources)
             original_sigterm = signal.signal(signal.SIGTERM, self.cleanup_resources)
@@ -640,6 +816,7 @@ class Moondock:
         ignore: str | None = None,
         json_output: bool = False,
         tui_mode: bool = False,
+        update_queue: queue.Queue | None = None,
     ) -> dict[str, Any] | str:
         """Execute moondock run logic.
 
@@ -666,6 +843,8 @@ class Moondock:
             If True, return JSON string instead of dict (default: False)
         tui_mode : bool
             If True, TUI owns cleanup lifecycle (default: False)
+        update_queue : queue.Queue | None
+            Queue for sending updates to TUI (default: None)
 
         Returns
         -------
@@ -697,6 +876,8 @@ class Moondock:
 
         if machine_name is not None:
             merged_config["machine_name"] = machine_name
+        else:
+            merged_config.setdefault("machine_name", "ad-hoc")
 
         if merged_config.get("startup_script") and not merged_config.get("sync_paths"):
             raise ValueError(
@@ -705,6 +886,10 @@ class Moondock:
             )
 
         self.validate_sync_paths_config(merged_config.get("sync_paths"))
+
+        if update_queue is not None:
+            logging.debug("Sending merged_config to TUI queue")
+            update_queue.put({"type": "merged_config", "payload": merged_config})
 
         if os.environ.get("MOONDOCK_TEST_MODE") == "1":
             return self.run_test_mode(merged_config, json_output)
@@ -728,6 +913,12 @@ class Moondock:
 
             with self.resources_lock:
                 self.resources["instance_details"] = instance_details
+
+            if update_queue is not None:
+                logging.debug("Sending instance_details to TUI queue")
+                update_queue.put(
+                    {"type": "instance_details", "payload": instance_details}
+                )
 
             ssh_manager = None
             mutagen_session_name = None

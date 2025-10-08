@@ -1573,7 +1573,7 @@ def test_finally_block_calls_cleanup_if_not_already_done(moondock_module) -> Non
 
         moondock_instance.run()
 
-        assert moondock_instance.cleanup_in_progress is True
+        assert moondock_instance.cleanup_in_progress is False
         mock_ssh_instance.close.assert_called()
 
 
@@ -1905,3 +1905,117 @@ def test_validate_region_graceful_fallback(moondock_module, caplog) -> None:
         moondock_instance.validate_region("us-east-1")
 
     assert "Unable to validate region" in caplog.text
+
+
+def test_cleanup_flag_resets_after_cleanup(moondock_module) -> None:
+    """Test that cleanup_in_progress flag resets after cleanup completes."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    moondock_instance.resources = {
+        "ec2_manager": mock_ec2,
+        "instance_details": {"instance_id": "i-test123"},
+    }
+
+    assert moondock_instance.cleanup_in_progress is False
+
+    moondock_instance.cleanup_resources()
+
+    assert moondock_instance.cleanup_in_progress is False
+    mock_ec2.terminate_instance.assert_called_once()
+
+
+def test_multiple_run_calls_work_correctly(moondock_module) -> None:
+    """Test that multiple run() calls in same process work correctly.
+
+    This test verifies that the cleanup_in_progress flag is properly reset
+    between consecutive run() calls, ensuring the flag doesn't get stuck
+    in True state which would prevent subsequent runs from cleaning up.
+
+    This test ACTUALLY calls run() (not run_test_mode()) and exercises
+    the real cleanup path to catch flag reset regressions.
+    """
+    import os
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "1.2.3.4",
+        "state": "running",
+        "key_file": "/tmp/test-key.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test-unique-id",
+    }
+
+    cleanup_call_count = 0
+
+    original_cleanup = moondock_instance.cleanup_resources
+
+    def track_cleanup(signum=None, frame=None):
+        nonlocal cleanup_call_count
+        cleanup_call_count += 1
+        return original_cleanup(signum, frame)
+
+    with (
+        patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "0"}),
+        patch.object(moondock_instance, "cleanup_resources", side_effect=track_cleanup),
+    ):
+        moondock_instance.config_loader = MagicMock()
+        moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+        moondock_instance.config_loader.get_machine_config.return_value = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+        }
+        moondock_instance.config_loader.validate_config.return_value = None
+
+        with (
+            patch("moondock_cli.EC2Manager") as mock_ec2_class,
+            patch("moondock_cli.SSHManager") as mock_ssh_class,
+        ):
+            mock_ec2_instance = MagicMock()
+            mock_ec2_instance.launch_instance.return_value = mock_instance_details
+            mock_ec2_class.return_value = mock_ec2_instance
+
+            mock_ssh_instance = MagicMock()
+            mock_ssh_instance.filter_environment_variables.return_value = {}
+            mock_ssh_instance.build_command_with_env.side_effect = lambda c, e: c
+            mock_ssh_instance.execute_command.return_value = 0
+            mock_ssh_class.return_value = mock_ssh_instance
+
+            result1 = moondock_instance.run(plain=True)
+
+            assert result1 is not None
+            assert result1["instance_id"] == "i-test123"
+            assert moondock_instance.cleanup_in_progress is False
+            assert cleanup_call_count == 1
+
+            result2 = moondock_instance.run(plain=True)
+
+            assert result2 is not None
+            assert result2["instance_id"] == "i-test123"
+            assert moondock_instance.cleanup_in_progress is False
+            assert cleanup_call_count == 2
+
+
+def test_cleanup_flag_resets_even_with_cleanup_errors(moondock_module) -> None:
+    """Test that cleanup_in_progress flag resets even when cleanup has errors."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    mock_ec2.terminate_instance.side_effect = RuntimeError("EC2 error")
+
+    moondock_instance.resources = {
+        "ec2_manager": mock_ec2,
+        "instance_details": {"instance_id": "i-test123"},
+    }
+
+    moondock_instance.cleanup_resources()
+
+    assert moondock_instance.cleanup_in_progress is False
+    mock_ec2.terminate_instance.assert_called_once()
