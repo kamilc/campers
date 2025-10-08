@@ -29,7 +29,7 @@ class ConfigLoader:
         ----------
         config_path : str | None
             Path to YAML config file. If None, checks MOONDOCK_CONFIG env var,
-            then falls back to config/moondock.yaml
+            then falls back to moondock.yaml
 
         Returns
         -------
@@ -37,7 +37,7 @@ class ConfigLoader:
             Parsed configuration with defaults and machines sections
         """
         if config_path is None:
-            config_path = os.environ.get("MOONDOCK_CONFIG", "config/moondock.yaml")
+            config_path = os.environ.get("MOONDOCK_CONFIG", "moondock.yaml")
 
         config_file = Path(config_path)
 

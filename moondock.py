@@ -66,6 +66,114 @@ MAX_UPDATES_PER_TICK = 10
 Prevents queue flooding from blocking the UI thread by limiting updates per interval.
 """
 
+CONFIG_TEMPLATE = """# Moondock Configuration File
+# This file defines default settings and named machine configurations.
+# Location: moondock.yaml (or set MOONDOCK_CONFIG environment variable)
+
+# Required: Default settings used when no machine name is specified
+defaults:
+  # AWS Configuration (required)
+  region: us-east-1              # AWS region (e.g., us-east-1, us-west-2, eu-west-1)
+  instance_type: t3.medium       # EC2 instance type (e.g., t3.medium, m5.xlarge, p3.2xlarge)
+  disk_size: 50                  # Root disk size in GB
+  os_flavor: ubuntu-22.04        # Operating system (ubuntu-22.04, amazon-linux-2)
+
+  # File Synchronization (Mutagen)
+  # Single port:
+  # port: 8888
+  # Multiple ports:
+  ports:
+    - 8888                       # Local port for port forwarding (e.g., Jupyter, SSH tunnels)
+
+  include_vcs: false             # Include version control files (.git, .gitignore, etc.)
+  ignore:                        # File patterns to exclude from sync
+    - "*.pyc"
+    - "__pycache__"
+    - "*.log"
+    - ".DS_Store"
+    - "node_modules/"
+
+  # Environment Variable Forwarding
+  env_filter:                    # Regex patterns to match environment variable names
+    - "AWS_.*"                   # Forward all AWS credentials and config
+    - "HF_TOKEN"                 # Hugging Face token
+    - "WANDB_API_KEY"            # Weights & Biases API key
+
+  # Sync Paths (optional - configure directories to sync)
+  # sync_paths:
+  #   - local: ~/projects/myproject    # Local directory path
+  #     remote: ~/myproject            # Remote directory path (on EC2 instance)
+
+  # Default Command (optional - runs when using 'moondock run' without -c flag)
+  # command: bash                # Default shell or command to execute
+
+  # Setup Script (optional - runs once on instance creation)
+  # setup_script: |
+  #   sudo apt update
+  #   sudo apt install -y python3-pip git htop
+  #   pip3 install uv
+
+  # Startup Script (optional - runs before each command execution)
+  # startup_script: |
+  #   cd ~/myproject
+  #   source .venv/bin/activate
+
+# Optional: Named machine configurations
+# Each machine can override any default setting
+# machines:
+#   dev-workstation:
+#     instance_type: t3.large
+#     disk_size: 100
+#     setup_script: |
+#       sudo apt update
+#       sudo apt install -y python3-pip git htop
+#       pip3 install uv
+#     startup_script: |
+#       cd ~/myproject
+#       source .venv/bin/activate
+#
+#   jupyter-lab:
+#     instance_type: m5.xlarge
+#     disk_size: 200
+#     region: us-west-2
+#     ports:
+#       - 8888                   # Jupyter
+#       - 6006                   # TensorBoard
+#     include_vcs: true
+#     command: jupyter lab --port=8888 --no-browser
+#     ignore:
+#       - "*.pyc"
+#       - "__pycache__"
+#       - "data/"
+#       - "models/"
+#     setup_script: |
+#       pip install jupyter pandas numpy scipy matplotlib tensorboard
+#     startup_script: |
+#       cd ~/myproject
+#       export JUPYTER_CONFIG_DIR=~/.jupyter
+#
+#   ml-training:
+#     instance_type: p3.2xlarge
+#     disk_size: 200
+#     region: us-west-2
+#     ports:
+#       - 8888                   # Jupyter
+#       - 6006                   # TensorBoard
+#       - 5000                   # MLflow
+#     env_filter:
+#       - "AWS_.*"
+#       - "HF_.*"
+#       - "WANDB_.*"
+#       - "MLFLOW_.*"
+#     command: jupyter lab --port=8888 --no-browser
+#     setup_script: |
+#       pip install jupyter tensorboard mlflow torch
+#     startup_script: |
+#       cd ~/myproject
+#       source .venv/bin/activate
+#       export CUDA_VISIBLE_DEVICES=0
+"""
+
 
 class StreamFormatter(logging.Formatter):
     """Logging formatter that prepends stream tags based on extra parameter."""
@@ -1742,6 +1850,36 @@ class Moondock:
 
             self.log_and_print_error("AWS API error: %s", e)
             sys.exit(1)
+
+    def init(self, force: bool = False) -> None:
+        """Create a default moondock.yaml configuration file.
+
+        Parameters
+        ----------
+        force : bool
+            If True, overwrite an existing configuration file (default: False)
+
+        Raises
+        ------
+        SystemExit
+            Exits with code 1 if file exists and force is False
+        """
+        config_path = os.environ.get("MOONDOCK_CONFIG", "moondock.yaml")
+        config_file = Path(config_path)
+
+        if config_file.exists() and not force:
+            self.log_and_print_error(
+                "%s already exists. Use --force to overwrite.",
+                config_path,
+            )
+            sys.exit(1)
+
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(config_file, "w") as f:
+            f.write(CONFIG_TEMPLATE)
+
+        print(f"Created {config_path} configuration file.")
 
     def hello(self) -> str:
         """Test command to validate Fire CLI works.

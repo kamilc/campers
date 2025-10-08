@@ -2,7 +2,7 @@ Feature: YAML Configuration Loader
 
 @smoke
 Scenario: Load config with defaults only
-  Given config file "config/moondock.yaml" with defaults section
+  Given config file "moondock.yaml" with defaults section
   When I load configuration without machine name
   Then config contains region "us-east-1"
   And config contains instance_type "t3.medium"
