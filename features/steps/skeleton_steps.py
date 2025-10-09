@@ -8,11 +8,11 @@ from behave import given, then, when
 
 @given("moondock.py exists in project root")
 def step_moondock_exists(context) -> None:
-    """Verify moondock.py file exists in project root."""
+    """Verify moondock package exists in project root."""
     project_root = Path(__file__).parent.parent.parent
-    moondock_path = project_root / "moondock.py"
+    moondock_path = project_root / "moondock" / "__main__.py"
 
-    assert moondock_path.exists(), f"moondock.py not found at {moondock_path}"
+    assert moondock_path.exists(), f"moondock/__main__.py not found at {moondock_path}"
     context.moondock_path = moondock_path
 
 

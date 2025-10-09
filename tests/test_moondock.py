@@ -35,7 +35,7 @@ def moondock_module():
     import sys
 
     project_root = Path(__file__).parent.parent
-    moondock_script = project_root / "moondock.py"
+    moondock_script = project_root / "moondock" / "__main__.py"
 
     spec = importlib.util.spec_from_file_location("moondock_cli", moondock_script)
     module = importlib.util.module_from_spec(spec)
@@ -65,10 +65,9 @@ def test_hello_method_returns_correct_string(moondock_module) -> None:
 def test_hello_command_via_uv_run() -> None:
     """Test that hello command works via uv run execution."""
     project_root = Path(__file__).parent.parent
-    moondock_path = project_root / "moondock.py"
 
     result = subprocess.run(
-        ["uv", "run", str(moondock_path), "hello"],
+        ["uv", "run", "-m", "moondock", "hello"],
         cwd=project_root,
         capture_output=True,
         text=True,

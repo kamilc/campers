@@ -82,7 +82,7 @@ def step_run_init_command(context) -> None:
         env["MOONDOCK_CONFIG"] = path
 
     result = subprocess.run(
-        ["uv", "run", "python", "moondock.py", "init"],
+        ["uv", "run", "-m", "moondock", "init"],
         cwd=str(context.project_root),
         capture_output=True,
         text=True,
@@ -109,7 +109,7 @@ def step_run_init_command_with_flag(context, flag: str) -> None:
         env["MOONDOCK_CONFIG"] = path
 
     result = subprocess.run(
-        ["uv", "run", "python", "moondock.py", "init", flag],
+        ["uv", "run", "-m", "moondock", "init", flag],
         cwd=str(context.project_root),
         capture_output=True,
         text=True,

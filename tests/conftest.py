@@ -12,14 +12,14 @@ import yaml
 
 @pytest.fixture(scope="session")
 def moondock_module() -> Any:
-    """Load moondock.py as a module.
+    """Load moondock package as a module.
 
     Returns
     -------
     Any
         The moondock module with Moondock class available.
     """
-    moondock_script_path = Path(__file__).parent.parent / "moondock.py"
+    moondock_script_path = Path(__file__).parent.parent / "moondock" / "__main__.py"
     spec = importlib.util.spec_from_file_location(
         "moondock_script", moondock_script_path
     )

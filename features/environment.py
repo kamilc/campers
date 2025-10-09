@@ -86,7 +86,7 @@ def before_all(context: Context) -> None:
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     os.environ["MOONDOCK_TEST_MODE"] = "1"
 
-    moondock_script = project_root / "moondock.py"
+    moondock_script = project_root / "moondock" / "__main__.py"
     spec = importlib.util.spec_from_file_location("moondock_module", moondock_script)
     moondock_module = importlib.util.module_from_spec(spec)
     sys.modules["moondock_module"] = moondock_module

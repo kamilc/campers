@@ -15,6 +15,9 @@ dependencies = [
     "textual>=6.2.0",
 ]
 
+[project.scripts]
+moondock = "moondock.__main__:main"
+
 [dependency-groups]
 dev = [
     "moto[ec2]>=5.1.13",

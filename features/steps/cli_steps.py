@@ -163,8 +163,6 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
 
     os.environ["MOONDOCK_CONFIG"] = context.temp_config_file
 
-    moondock_path = Path(__file__).parent.parent.parent / "moondock.py"
-
     args = shlex.split(moondock_args)
 
     if args and args[0] == "run":
@@ -172,7 +170,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
         args.append("True")
 
     result = subprocess.run(
-        [sys.executable, str(moondock_path)] + args,
+        [sys.executable, "-m", "moondock"] + args,
         capture_output=True,
         text=True,
         env=os.environ.copy(),
