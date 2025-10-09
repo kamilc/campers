@@ -10,7 +10,6 @@ test_moondock_class_exists
 
 """
 
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -466,6 +465,7 @@ def test_test_mode_bypasses_mutagen_check_with_sync_paths(moondock_module) -> No
     """Test that test mode skips mutagen installation check even with sync_paths."""
     import os
     from unittest.mock import MagicMock, patch
+    from moto import mock_aws
 
     moondock_instance = moondock_module()
     moondock_instance._config_loader = MagicMock()
@@ -478,18 +478,19 @@ def test_test_mode_bypasses_mutagen_check_with_sync_paths(moondock_module) -> No
     }
     moondock_instance._config_loader.validate_config.return_value = None
 
-    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
-        with patch("moondock_cli.MutagenManager") as mock_mutagen:
-            mock_mutagen_instance = MagicMock()
-            mock_mutagen.return_value = mock_mutagen_instance
+    with mock_aws():
+        with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
+            with patch("moondock_cli.MutagenManager") as mock_mutagen:
+                mock_mutagen_instance = MagicMock()
+                mock_mutagen.return_value = mock_mutagen_instance
 
-            result = moondock_instance.run()
+                result = moondock_instance.run()
 
-            mock_mutagen_instance.check_mutagen_installed.assert_not_called()
+                mock_mutagen_instance.check_mutagen_installed.assert_not_called()
 
-            assert result is not None
-            assert result["instance_id"] == "i-mock123"
-            assert result["public_ip"] == "203.0.113.1"
+                assert result is not None
+                assert result["instance_id"] == "i-mock123"
+                assert result["public_ip"] == "203.0.113.1"
 
 
 def test_build_command_in_directory(moondock_module) -> None:
@@ -1930,7 +1931,9 @@ def test_multiple_run_calls_work_correctly(moondock_module) -> None:
 
     with (
         patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "0"}),
-        patch.object(moondock_instance, "_cleanup_resources", side_effect=track_cleanup),
+        patch.object(
+            moondock_instance, "_cleanup_resources", side_effect=track_cleanup
+        ),
     ):
         moondock_instance._config_loader = MagicMock()
         moondock_instance._config_loader.load_config.return_value = {"defaults": {}}

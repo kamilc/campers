@@ -60,7 +60,26 @@ def step_run_command(context, command: str) -> None:
     not user input, so the security risk is minimal.
 
     """
+    import os
+
     project_root = Path(__file__).parent.parent.parent
+
+    env = os.environ.copy()
+
+    if "moondock" in command and ("setup" in command or "doctor" in command):
+        import boto3
+
+        try:
+            ec2_client = boto3.client("ec2", region_name="us-east-1")
+            vpcs = ec2_client.describe_vpcs(
+                Filters=[{"Name": "isDefault", "Values": ["true"]}]
+            )
+            vpc_exists = bool(vpcs.get("Vpcs", []))
+            env["MOONDOCK_TEST_VPC_EXISTS"] = "true" if vpc_exists else "false"
+        except Exception:
+            env["MOONDOCK_TEST_VPC_EXISTS"] = "false"
+
+        command = command.replace("moondock", "uv run python -m moondock")
 
     result = subprocess.run(
         command,
@@ -68,6 +87,7 @@ def step_run_command(context, command: str) -> None:
         cwd=project_root,
         capture_output=True,
         text=True,
+        env=env,
     )
 
     context.result = result

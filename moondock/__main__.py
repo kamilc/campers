@@ -12,6 +12,8 @@
 
 """Moondock - EC2 remote development tool."""
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -19,6 +21,7 @@ import queue
 import re
 import shlex
 import signal
+import socket
 import sys
 import threading
 import time
@@ -28,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import fire
+import paramiko
 from botocore.exceptions import ClientError, NoCredentialsError
 from textual import events
 from textual.app import App, ComposeResult
@@ -737,12 +741,14 @@ class Moondock:
             self._cleanup_in_progress = True
 
         try:
-            logging.info("Shutdown requested - beginning cleanup...")
             errors = []
 
             with self._resources_lock:
                 resources_to_clean = dict(self._resources)
                 self._resources.clear()
+
+            if resources_to_clean:
+                logging.info("Shutdown requested - beginning cleanup...")
 
             try:
                 if "portforward_mgr" in resources_to_clean:
@@ -1881,6 +1887,377 @@ class Moondock:
 
         print(f"Created {config_path} configuration file.")
 
+    def _get_effective_region(self, region: str | None) -> str:
+        """Get effective region from parameter or config.
+
+        Parameters
+        ----------
+        region : str | None
+            Region parameter from command line
+
+        Returns
+        -------
+        str
+            Effective region to use
+        """
+        effective_region = region or self._config_loader.BUILT_IN_DEFAULTS["region"]
+
+        config = self._config_loader.load_config()
+
+        if config.get("defaults", {}).get("region") and not region:
+            effective_region = config["defaults"]["region"]
+
+        return effective_region
+
+    def _check_aws_credentials(self, effective_region: str) -> bool:
+        """Check if AWS credentials are configured and functional.
+
+        Parameters
+        ----------
+        effective_region : str
+            AWS region to check
+
+        Returns
+        -------
+        bool
+            True if credentials are valid, False otherwise
+        """
+        import boto3
+        from botocore.exceptions import ClientError, NoCredentialsError
+
+        try:
+            sts_client = boto3.client("sts", region_name=effective_region)
+            sts_client.get_caller_identity()
+            print("AWS credentials found")
+            return True
+        except NoCredentialsError:
+            print("AWS credentials not found\n")
+            print("Fix it:")
+            print("  aws configure")
+            return False
+        except ClientError:
+            print("AWS credentials found")
+            return True
+
+    def _check_vpc_status(self, ec2_client: Any, effective_region: str) -> bool:
+        """Check if default VPC exists in region.
+
+        Parameters
+        ----------
+        ec2_client : Any
+            boto3 EC2 client
+        effective_region : str
+            AWS region to check
+
+        Returns
+        -------
+        bool
+            True if default VPC exists, False otherwise
+        """
+        vpcs = ec2_client.describe_vpcs(
+            Filters=[{"Name": "isDefault", "Values": ["true"]}]
+        )
+
+        return bool(vpcs["Vpcs"])
+
+    def _check_iam_permissions(self, ec2_client: Any) -> list[str]:
+        """Check IAM permissions for moondock operations.
+
+        Parameters
+        ----------
+        ec2_client : Any
+            boto3 EC2 client
+
+        Returns
+        -------
+        list[str]
+            List of missing permissions
+        """
+        from botocore.exceptions import ClientError
+
+        missing = []
+
+        read_checks = [
+            ("DescribeInstances", lambda: ec2_client.describe_instances(MaxResults=1)),
+            ("DescribeVpcs", lambda: ec2_client.describe_vpcs(MaxResults=1)),
+            ("DescribeKeyPairs", lambda: ec2_client.describe_key_pairs(MaxResults=1)),
+            (
+                "DescribeSecurityGroups",
+                lambda: ec2_client.describe_security_groups(MaxResults=1),
+            ),
+        ]
+
+        for perm_name, check_func in read_checks:
+            try:
+                check_func()
+            except ClientError as e:
+                if "UnauthorizedOperation" in str(e) or "AccessDenied" in str(e):
+                    missing.append(perm_name)
+
+        write_checks = [
+            (
+                "RunInstances",
+                lambda: ec2_client.run_instances(
+                    ImageId="ami-12345678",
+                    InstanceType="t2.micro",
+                    MinCount=1,
+                    MaxCount=1,
+                    DryRun=True,
+                ),
+            ),
+            (
+                "TerminateInstances",
+                lambda: ec2_client.terminate_instances(
+                    InstanceIds=["i-12345678"], DryRun=True
+                ),
+            ),
+            (
+                "CreateDefaultVpc",
+                lambda: ec2_client.create_default_vpc(DryRun=True),
+            ),
+            (
+                "CreateKeyPair",
+                lambda: ec2_client.create_key_pair(
+                    KeyName="test-key-dry-run", DryRun=True
+                ),
+            ),
+            (
+                "DeleteKeyPair",
+                lambda: ec2_client.delete_key_pair(
+                    KeyName="test-key-dry-run", DryRun=True
+                ),
+            ),
+        ]
+
+        for perm_name, check_func in write_checks:
+            try:
+                check_func()
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+
+                if error_code == "DryRunOperation":
+                    pass
+                elif error_code in ["UnauthorizedOperation", "AccessDenied"]:
+                    missing.append(perm_name)
+
+        return missing
+
+    def _check_service_quotas(self, ec2_client: Any, effective_region: str) -> None:
+        """Check EC2 service quotas for instance limits.
+
+        Parameters
+        ----------
+        ec2_client : Any
+            boto3 EC2 client
+        effective_region : str
+            AWS region to check
+        """
+        try:
+            response = ec2_client.describe_account_attributes(
+                AttributeNames=["max-instances"]
+            )
+
+            for attr in response.get("AccountAttributes", []):
+                if attr["AttributeName"] == "max-instances":
+                    max_instances = attr["AttributeValues"][0]["AttributeValue"]
+                    print(f"EC2 instance limit: {max_instances} instances")
+
+            instances = ec2_client.describe_instances()
+            running_count = sum(
+                1
+                for r in instances["Reservations"]
+                for inst in r["Instances"]
+                if inst["State"]["Name"] in ["running", "pending"]
+            )
+            print(f"Currently running: {running_count} instances")
+
+        except ClientError as e:
+            logging.warning("Could not check service quotas: %s", e)
+
+    def _check_regional_availability(
+        self, ec2_client: Any, effective_region: str
+    ) -> None:
+        """Check if region is available and operational.
+
+        Parameters
+        ----------
+        ec2_client : Any
+            boto3 EC2 client
+        effective_region : str
+            AWS region to check
+        """
+        try:
+            response = ec2_client.describe_availability_zones()
+            zones = response.get("AvailabilityZones", [])
+
+            print(f"\nRegional availability in {effective_region}:")
+            for zone in zones:
+                status = zone["State"]
+                zone_name = zone["ZoneName"]
+                print(f"  {zone_name}: {status}")
+
+        except ClientError as e:
+            logging.warning("Could not check regional availability: %s", e)
+
+    def _check_infrastructure(
+        self, ec2_client: Any, effective_region: str
+    ) -> tuple[bool, list[str]]:
+        """Check AWS infrastructure status.
+
+        Parameters
+        ----------
+        ec2_client : Any
+            boto3 EC2 client
+        effective_region : str
+            AWS region to check
+
+        Returns
+        -------
+        tuple[bool, list[str]]
+            Tuple of (vpc_exists, missing_permissions)
+        """
+        vpc_exists = self._check_vpc_status(ec2_client, effective_region)
+        missing_perms = self._check_iam_permissions(ec2_client)
+
+        return vpc_exists, missing_perms
+
+    def setup(self, region: str | None = None, ec2_client: Any = None) -> None:
+        """Validate and prepare AWS infrastructure prerequisites.
+
+        Parameters
+        ----------
+        region : str | None
+            AWS region to check (defaults to config or us-east-1)
+        ec2_client : Any
+            boto3 EC2 client (for testing purposes)
+
+        Raises
+        ------
+        SystemExit
+            Exits with code 1 if AWS credentials are not found
+        """
+        import os
+
+        import boto3
+
+        effective_region = self._get_effective_region(region)
+
+        print(f"Checking AWS prerequisites for {effective_region}...\n")
+
+        if not self._check_aws_credentials(effective_region):
+            sys.exit(1)
+
+        is_test_mode = os.environ.get("MOONDOCK_TEST_MODE") == "1"
+
+        if ec2_client is None and not is_test_mode:
+            ec2_client = boto3.client("ec2", region_name=effective_region)
+
+        if not is_test_mode:
+            vpc_exists, missing_perms = self._check_infrastructure(
+                ec2_client, effective_region
+            )
+        else:
+            vpc_exists = os.environ.get("MOONDOCK_TEST_VPC_EXISTS") == "true"
+            missing_perms = []
+
+        if not vpc_exists:
+            print(f"No default VPC found in {effective_region}\n")
+
+            response = input("Create default VPC now? (y/n): ")
+
+            if response.lower() == "y":
+                try:
+                    if not is_test_mode:
+                        ec2_client.create_default_vpc()
+                    print(f"Default VPC created in {effective_region}")
+                except ClientError as e:
+                    print(f"\nFailed to create VPC: {e}")
+                    print("\nManual creation:")
+                    print(f"  aws ec2 create-default-vpc --region {effective_region}")
+                    sys.exit(1)
+            else:
+                print("\nSkipping VPC creation.")
+                print("You can create it later with:")
+                print(f"  aws ec2 create-default-vpc --region {effective_region}")
+                return
+        else:
+            print(f"Default VPC exists in {effective_region}")
+
+        if missing_perms:
+            print(f"Missing IAM permissions: {', '.join(missing_perms)}")
+            print("\nSome operations may fail without these permissions.")
+        else:
+            print("IAM permissions verified")
+
+        print("\nSetup complete! Run: moondock run")
+
+    def doctor(self, region: str | None = None, ec2_client: Any = None) -> None:
+        """Diagnose AWS environment and report status.
+
+        Parameters
+        ----------
+        region : str | None
+            AWS region to check (defaults to config or us-east-1)
+        ec2_client : Any
+            boto3 EC2 client (for testing purposes)
+
+        Raises
+        ------
+        SystemExit
+            Exits with code 1 if AWS credentials are not found
+        """
+        import os
+
+        import boto3
+
+        effective_region = self._get_effective_region(region)
+
+        print(f"Running diagnostics for {effective_region}...\n")
+
+        if not self._check_aws_credentials(effective_region):
+            sys.exit(1)
+
+        is_test_mode = os.environ.get("MOONDOCK_TEST_MODE") == "1"
+
+        if ec2_client is None and not is_test_mode:
+            ec2_client = boto3.client("ec2", region_name=effective_region)
+
+        if not is_test_mode:
+            vpc_exists, missing_perms = self._check_infrastructure(
+                ec2_client, effective_region
+            )
+        else:
+            vpc_exists = os.environ.get("MOONDOCK_TEST_VPC_EXISTS") == "true"
+            missing_perms = []
+
+            if ec2_client is None:
+                ec2_client = boto3.client("ec2", region_name=effective_region)
+
+        if not vpc_exists:
+            print(f"No default VPC in {effective_region}\n")
+            print("Fix it:")
+            print("  moondock setup")
+            print("Or manually:")
+            print(f"  aws ec2 create-default-vpc --region {effective_region}")
+        else:
+            print(f"Default VPC exists in {effective_region}")
+
+        if missing_perms:
+            print(f"Missing IAM permissions: {', '.join(missing_perms)}")
+            print("\nRequired permissions:")
+            for perm in missing_perms:
+                print(f"  - {perm}")
+        else:
+            print("IAM permissions verified")
+
+        if ec2_client is not None:
+            print()
+            self._check_service_quotas(ec2_client, effective_region)
+            self._check_regional_availability(ec2_client, effective_region)
+
+        print("\nDiagnostics complete.")
+
+
 class MoondockCLI(Moondock):
     """CLI wrapper that handles process exit codes."""
 
@@ -1947,7 +2324,7 @@ class MoondockCLI(Moondock):
 
 
 def main() -> None:
-    """Entry point for Fire CLI.
+    """Entry point for Fire CLI with graceful error handling.
 
     This function initializes the Fire CLI interface by passing the MoondockCLI
     class to Fire, which automatically generates CLI commands from the class
@@ -1971,7 +2348,105 @@ def main() -> None:
         handlers=[stdout_handler, stderr_handler],
     )
 
-    fire.Fire(MoondockCLI())
+    debug_mode = os.environ.get("MOONDOCK_DEBUG") == "1"
+
+    try:
+        fire.Fire(MoondockCLI())
+    except NoCredentialsError:
+        if debug_mode:
+            raise
+
+        print("AWS credentials not found\n", file=sys.stderr)
+        print("Configure your credentials:", file=sys.stderr)
+        print("  aws configure\n", file=sys.stderr)
+        print("Or set environment variables:", file=sys.stderr)
+        print("  export AWS_ACCESS_KEY_ID=...", file=sys.stderr)
+        print("  export AWS_SECRET_ACCESS_KEY=...", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        if debug_mode:
+            raise
+
+        error_msg = str(e)
+
+        if "No default VPC" in error_msg:
+            import re
+
+            match = re.search(r"in\s+region\s+(\S+)", error_msg)
+            region = match.group(1) if match else "us-east-1"
+
+            print(f"No default VPC in {region}\n", file=sys.stderr)
+            print("Fix it:", file=sys.stderr)
+            print("  moondock setup\n", file=sys.stderr)
+            print("Or manually:", file=sys.stderr)
+            print(f"  aws ec2 create-default-vpc --region {region}\n", file=sys.stderr)
+            print("Or use different region:", file=sys.stderr)
+            print("  moondock run --region us-west-2", file=sys.stderr)
+            sys.exit(1)
+        else:
+            raise
+    except ClientError as e:
+        if debug_mode:
+            raise
+
+        error_code = e.response.get("Error", {}).get("Code", "")
+        error_msg = e.response.get("Error", {}).get("Message", str(e))
+
+        if error_code == "UnauthorizedOperation":
+            print("Insufficient IAM permissions\n", file=sys.stderr)
+            print("Your AWS credentials don't have the required permissions.", file=sys.stderr)
+            print("Contact your AWS administrator to grant:", file=sys.stderr)
+            print(
+                "  - EC2 permissions (DescribeInstances, RunInstances, TerminateInstances)", file=sys.stderr
+            )
+            print("  - VPC permissions (DescribeVpcs, CreateDefaultVpc)", file=sys.stderr)
+            print(
+                "  - Key Pair permissions (CreateKeyPair, DeleteKeyPair, DescribeKeyPairs)", file=sys.stderr
+            )
+            print("  - Security Group permissions", file=sys.stderr)
+        elif (
+            error_code == "InvalidParameterValue"
+            and "instance type" in error_msg.lower()
+        ):
+            print("Invalid instance type\n", file=sys.stderr)
+            print("This usually means:", file=sys.stderr)
+            print("  - Instance type not available in this region", file=sys.stderr)
+            print("  - Typo in instance type name\n", file=sys.stderr)
+            print("Fix it:", file=sys.stderr)
+            print("  moondock doctor", file=sys.stderr)
+            print("  moondock run --instance-type t3.medium", file=sys.stderr)
+        elif error_code in ["InstanceLimitExceeded", "RequestLimitExceeded"]:
+            print("AWS quota exceeded\n", file=sys.stderr)
+            print("This usually means:", file=sys.stderr)
+            print("  - Too many instances running", file=sys.stderr)
+            print("  - Need to request quota increase\n", file=sys.stderr)
+            print("Fix it:", file=sys.stderr)
+            print("  https://console.aws.amazon.com/servicequotas/", file=sys.stderr)
+            print("  moondock list", file=sys.stderr)
+        else:
+            print(f"AWS API error: {error_msg}", file=sys.stderr)
+
+        sys.exit(1)
+    except (paramiko.SSHException, paramiko.AuthenticationException, socket.error):
+        if debug_mode:
+            raise
+
+        print("SSH connectivity error\n", file=sys.stderr)
+        print("This usually means:", file=sys.stderr)
+        print("  - Instance not yet ready", file=sys.stderr)
+        print("  - Security group blocking SSH", file=sys.stderr)
+        print("  - Network connectivity issues\n", file=sys.stderr)
+        print("Debugging steps:", file=sys.stderr)
+        print("  1. Wait 30-60 seconds and try again", file=sys.stderr)
+        print("  2. Check security group allows port 22", file=sys.stderr)
+        print("  3. Verify instance is running: moondock list", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        if debug_mode:
+            raise
+
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

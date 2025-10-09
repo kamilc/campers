@@ -4,7 +4,6 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
 
 import yaml
 from behave import given, then, when
@@ -198,7 +197,11 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
 
 @then('final config contains instance_type "{expected}"')
 def step_final_config_contains_instance_type(context: Context, expected: str) -> None:
-    assert context.exit_code == 0
+    assert context.exit_code == 0, (
+        f"Expected exit code 0, got {context.exit_code}\n"
+        f"stdout: {context.stdout}\n"
+        f"stderr: {context.stderr}"
+    )
 
 
 @then("final config contains defaults for unspecified fields")
