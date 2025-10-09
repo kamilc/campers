@@ -343,7 +343,7 @@ class MoondockTUI(App):
         super().__init__()
         self.moondock = moondock_instance
         self.run_kwargs = run_kwargs
-        self.update_queue = update_queue
+        self._update_queue = update_queue
         self.original_handlers: list[logging.Handler] = []
         self.worker_exit_code = 0
         self.instance_start_time: datetime | None = None
@@ -405,7 +405,7 @@ class MoondockTUI(App):
 
         while updates_processed < MAX_UPDATES_PER_TICK:
             try:
-                data = self.update_queue.get_nowait()
+                data = self._update_queue.get_nowait()
                 logging.debug("Processing update from queue: type=%s", data.get("type"))
                 update_type = data.get("type")
                 payload = data.get("payload", {})
@@ -581,20 +581,20 @@ class MoondockTUI(App):
         root_logger = logging.getLogger()
         root_logger.handlers = self.original_handlers
 
-        while not self.update_queue.empty():
+        while not self._update_queue.empty():
             try:
-                self.update_queue.get_nowait()
+                self._update_queue.get_nowait()
             except queue.Empty:
                 break
 
-        if not self.moondock.cleanup_in_progress:
+        if not self.moondock._cleanup_in_progress:
             self.moondock._cleanup_resources()
 
     def run_moondock_logic(self) -> None:
         """Run moondock logic in worker thread."""
         try:
             result = self.moondock._execute_run(
-                tui_mode=True, update_queue=self.update_queue, **self.run_kwargs
+                tui_mode=True, update_queue=self._update_queue, **self.run_kwargs
             )
             self.worker_exit_code = 0
 
@@ -643,7 +643,7 @@ class MoondockTUI(App):
 
     def action_quit(self) -> None:
         """Handle quit action (q key or first Ctrl+C)."""
-        if not self.moondock.cleanup_in_progress:
+        if not self.moondock._cleanup_in_progress:
             self.moondock._cleanup_resources()
         self.exit(130)
 
@@ -657,12 +657,12 @@ class Moondock:
         Creates a ConfigLoader instance for handling configuration loading,
         merging, and validation. Also initializes cleanup tracking state.
         """
-        self.config_loader = ConfigLoader()
-        self.cleanup_lock = threading.Lock()
-        self.resources_lock = threading.Lock()
-        self.cleanup_in_progress = False
-        self.resources: dict[str, Any] = {}
-        self.update_queue: queue.Queue | None = None
+        self._config_loader = ConfigLoader()
+        self._cleanup_lock = threading.Lock()
+        self._resources_lock = threading.Lock()
+        self._cleanup_in_progress = False
+        self._resources: dict[str, Any] = {}
+        self._update_queue: queue.Queue | None = None
 
     def _log_and_print_error(self, message: str, *args: Any) -> None:
         """Log error message and print to stderr.
@@ -730,26 +730,26 @@ class Moondock:
         cleanup if signal handler invokes this method before finally block.
         Thread safety is ensured using cleanup_lock to prevent race conditions.
         """
-        with self.cleanup_lock:
-            if self.cleanup_in_progress:
+        with self._cleanup_lock:
+            if self._cleanup_in_progress:
                 logging.info("Cleanup already in progress, please wait...")
                 return
-            self.cleanup_in_progress = True
+            self._cleanup_in_progress = True
 
         try:
             logging.info("Shutdown requested - beginning cleanup...")
             errors = []
 
-            with self.resources_lock:
-                resources_to_clean = dict(self.resources)
-                self.resources.clear()
+            with self._resources_lock:
+                resources_to_clean = dict(self._resources)
+                self._resources.clear()
 
             try:
                 if "portforward_mgr" in resources_to_clean:
                     logging.info("Stopping SSH port forwarding tunnels...")
 
-                    if self.update_queue is not None:
-                        self.update_queue.put(
+                    if self._update_queue is not None:
+                        self._update_queue.put(
                             {
                                 "type": "cleanup_event",
                                 "payload": {
@@ -762,8 +762,8 @@ class Moondock:
                     try:
                         resources_to_clean["portforward_mgr"].stop_all_tunnels()
 
-                        if self.update_queue is not None:
-                            self.update_queue.put(
+                        if self._update_queue is not None:
+                            self._update_queue.put(
                                 {
                                     "type": "cleanup_event",
                                     "payload": {
@@ -776,8 +776,8 @@ class Moondock:
                         logging.error("Error stopping tunnels: %s", e)
                         errors.append(e)
 
-                        if self.update_queue is not None:
-                            self.update_queue.put(
+                        if self._update_queue is not None:
+                            self._update_queue.put(
                                 {
                                     "type": "cleanup_event",
                                     "payload": {
@@ -790,8 +790,8 @@ class Moondock:
                 if "mutagen_session_name" in resources_to_clean:
                     logging.info("Terminating Mutagen sync session...")
 
-                    if self.update_queue is not None:
-                        self.update_queue.put(
+                    if self._update_queue is not None:
+                        self._update_queue.put(
                             {
                                 "type": "cleanup_event",
                                 "payload": {
@@ -806,8 +806,8 @@ class Moondock:
                             resources_to_clean["mutagen_session_name"]
                         )
 
-                        if self.update_queue is not None:
-                            self.update_queue.put(
+                        if self._update_queue is not None:
+                            self._update_queue.put(
                                 {
                                     "type": "cleanup_event",
                                     "payload": {
@@ -820,8 +820,8 @@ class Moondock:
                         logging.error("Error terminating Mutagen session: %s", e)
                         errors.append(e)
 
-                        if self.update_queue is not None:
-                            self.update_queue.put(
+                        if self._update_queue is not None:
+                            self._update_queue.put(
                                 {
                                     "type": "cleanup_event",
                                     "payload": {
@@ -834,8 +834,8 @@ class Moondock:
                 if "ssh_manager" in resources_to_clean:
                     logging.info("Closing SSH connection...")
 
-                    if self.update_queue is not None:
-                        self.update_queue.put(
+                    if self._update_queue is not None:
+                        self._update_queue.put(
                             {
                                 "type": "cleanup_event",
                                 "payload": {
@@ -848,8 +848,8 @@ class Moondock:
                     try:
                         resources_to_clean["ssh_manager"].close()
 
-                        if self.update_queue is not None:
-                            self.update_queue.put(
+                        if self._update_queue is not None:
+                            self._update_queue.put(
                                 {
                                     "type": "cleanup_event",
                                     "payload": {
@@ -862,8 +862,8 @@ class Moondock:
                         logging.error("Error closing SSH: %s", e)
                         errors.append(e)
 
-                        if self.update_queue is not None:
-                            self.update_queue.put(
+                        if self._update_queue is not None:
+                            self._update_queue.put(
                                 {
                                     "type": "cleanup_event",
                                     "payload": {
@@ -877,14 +877,14 @@ class Moondock:
                     instance_id = resources_to_clean["instance_details"]["instance_id"]
                     logging.info("Terminating EC2 instance %s...", instance_id)
 
-                    if self.update_queue is not None:
-                        self.update_queue.put(
+                    if self._update_queue is not None:
+                        self._update_queue.put(
                             {
                                 "type": "status_update",
                                 "payload": {"status": "terminating"},
                             }
                         )
-                        self.update_queue.put(
+                        self._update_queue.put(
                             {
                                 "type": "cleanup_event",
                                 "payload": {
@@ -899,8 +899,8 @@ class Moondock:
                             instance_id
                         )
 
-                        if self.update_queue is not None:
-                            self.update_queue.put(
+                        if self._update_queue is not None:
+                            self._update_queue.put(
                                 {
                                     "type": "cleanup_event",
                                     "payload": {
@@ -913,8 +913,8 @@ class Moondock:
                         logging.error("Error terminating instance: %s", e)
                         errors.append(e)
 
-                        if self.update_queue is not None:
-                            self.update_queue.put(
+                        if self._update_queue is not None:
+                            self._update_queue.put(
                                 {
                                     "type": "cleanup_event",
                                     "payload": {
@@ -939,8 +939,8 @@ class Moondock:
                     sys.exit(exit_code)
 
         finally:
-            with self.cleanup_lock:
-                self.cleanup_in_progress = False
+            with self._cleanup_lock:
+                self._cleanup_in_progress = False
 
     def _run_test_mode(
         self, merged_config: dict[str, Any], json_output: bool
@@ -1219,9 +1219,9 @@ class Moondock:
         ValueError
             If include_vcs is not "true" or "false", or if machine name is invalid
         """
-        config = self.config_loader.load_config()
+        config = self._config_loader.load_config()
 
-        merged_config = self.config_loader.get_machine_config(config, machine_name)
+        merged_config = self._config_loader.get_machine_config(config, machine_name)
 
         self._apply_cli_overrides(
             merged_config,
@@ -1234,7 +1234,7 @@ class Moondock:
             ignore,
         )
 
-        self.config_loader.validate_config(merged_config)
+        self._config_loader.validate_config(merged_config)
 
         if machine_name is not None:
             merged_config["machine_name"] = machine_name
@@ -1256,7 +1256,7 @@ class Moondock:
         if os.environ.get("MOONDOCK_TEST_MODE") == "1":
             return self._run_test_mode(merged_config, json_output)
 
-        self.update_queue = update_queue
+        self._update_queue = update_queue
 
         if not tui_mode:
             original_sigint = signal.signal(signal.SIGINT, self._cleanup_resources)
@@ -1270,13 +1270,13 @@ class Moondock:
 
             ec2_manager = EC2Manager(region=merged_config["region"])
 
-            with self.resources_lock:
-                self.resources["ec2_manager"] = ec2_manager
+            with self._resources_lock:
+                self._resources["ec2_manager"] = ec2_manager
 
             instance_details = ec2_manager.launch_instance(merged_config)
 
-            with self.resources_lock:
-                self.resources["instance_details"] = instance_details
+            with self._resources_lock:
+                self._resources["instance_details"] = instance_details
 
             if update_queue is not None:
                 logging.debug("Sending instance_details to TUI queue")
@@ -1320,8 +1320,8 @@ class Moondock:
                     {"type": "status_update", "payload": {"status": "running"}}
                 )
 
-            with self.resources_lock:
-                self.resources["ssh_manager"] = ssh_manager
+            with self._resources_lock:
+                self._resources["ssh_manager"] = ssh_manager
 
             env_vars = ssh_manager.filter_environment_variables(
                 merged_config.get("env_filter")
@@ -1331,9 +1331,9 @@ class Moondock:
                 mutagen_session_name = f"moondock-{instance_details['unique_id']}"
                 mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)
 
-                with self.resources_lock:
-                    self.resources["mutagen_mgr"] = mutagen_mgr
-                    self.resources["mutagen_session_name"] = mutagen_session_name
+                with self._resources_lock:
+                    self._resources["mutagen_mgr"] = mutagen_mgr
+                    self._resources["mutagen_session_name"] = mutagen_session_name
             else:
                 if update_queue is not None:
                     update_queue.put(
@@ -1409,8 +1409,8 @@ class Moondock:
             if merged_config.get("ports"):
                 portforward_mgr = PortForwardManager()
 
-                with self.resources_lock:
-                    self.resources["portforward_mgr"] = portforward_mgr
+                with self._resources_lock:
+                    self._resources["portforward_mgr"] = portforward_mgr
 
                 try:
                     portforward_mgr.create_tunnels(
@@ -1467,7 +1467,7 @@ class Moondock:
             return instance_details
 
         finally:
-            if not tui_mode and not self.cleanup_in_progress:
+            if not tui_mode and not self._cleanup_in_progress:
                 self._cleanup_resources()
 
             if not tui_mode:
@@ -1710,7 +1710,7 @@ class Moondock:
         ValueError
             If provided region is not a valid AWS region
         """
-        default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
+        default_region = self._config_loader.BUILT_IN_DEFAULTS["region"]
 
         if region is not None:
             self._validate_region(region)
@@ -1775,7 +1775,7 @@ class Moondock:
             Exits with code 1 if no instance matches, multiple instances match,
             or AWS errors occur. Returns normally on successful termination.
         """
-        default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
+        default_region = self._config_loader.BUILT_IN_DEFAULTS["region"]
 
         if region:
             self._validate_region(region)

@@ -114,15 +114,15 @@ def test_run_executes_setup_script_before_command(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "setup_script": "echo setup",
         "command": "echo command",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -167,15 +167,15 @@ def test_run_setup_script_failure_prevents_command(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "setup_script": "exit 1",
         "command": "echo command",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -212,13 +212,13 @@ def test_run_skips_ssh_when_no_setup_script_or_command(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -248,14 +248,14 @@ def test_run_only_setup_script_no_command(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "setup_script": "sudo apt update",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -292,14 +292,14 @@ def test_run_startup_script_without_sync_paths_raises_error(moondock_module) -> 
     from unittest.mock import MagicMock
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "startup_script": "source .venv/bin/activate",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     with pytest.raises(
         ValueError, match="startup_script is defined but no sync_paths configured"
@@ -312,15 +312,15 @@ def test_run_with_sync_paths_creates_mutagen_session(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
         "command": "echo test",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -364,15 +364,15 @@ def test_run_executes_command_from_synced_directory(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
         "command": "pwd",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -415,16 +415,16 @@ def test_run_executes_startup_script_from_synced_directory(moondock_module) -> N
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
         "startup_script": "source .venv/bin/activate",
         "command": "python app.py",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -468,15 +468,15 @@ def test_test_mode_bypasses_mutagen_check_with_sync_paths(moondock_module) -> No
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
         "command": "echo test",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
         with patch("moondock_cli.MutagenManager") as mock_mutagen:
@@ -534,16 +534,16 @@ def test_run_startup_script_failure_prevents_command(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
         "startup_script": "exit 42",
         "command": "echo hello",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -586,21 +586,21 @@ def test_run_multiline_startup_script(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
 
     multiline_script = """source .venv/bin/activate
 export DEBUG=1
 cd src"""
 
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
         "startup_script": multiline_script,
         "command": "pwd",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -687,15 +687,15 @@ def test_run_with_port_forwarding_creates_tunnels(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "ports": [8888, 8080],
         "command": "echo test",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -741,15 +741,15 @@ def test_run_port_forwarding_cleanup_order(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "ports": [8888],
         "command": "echo test",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -795,15 +795,15 @@ def test_run_port_forwarding_error_triggers_cleanup(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "ports": [8888],
         "command": "echo test",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -846,16 +846,16 @@ def test_run_port_forwarding_with_sync_paths(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "ports": [8888],
         "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
         "command": "echo test",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -900,9 +900,9 @@ def test_run_port_forwarding_with_startup_script(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "ports": [8888],
@@ -910,7 +910,7 @@ def test_run_port_forwarding_with_startup_script(moondock_module) -> None:
         "startup_script": "echo startup",
         "command": "echo command",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -977,7 +977,7 @@ def test_run_validates_env_filter_regex_patterns(
     from moondock.config import ConfigLoader
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = ConfigLoader()
+    moondock_instance._config_loader = ConfigLoader()
 
     config_data = {
         "defaults": {
@@ -989,7 +989,7 @@ def test_run_validates_env_filter_regex_patterns(
     }
 
     with pytest.raises(ValueError) as exc_info:
-        moondock_instance.config_loader.validate_config(config_data["defaults"])
+        moondock_instance._config_loader.validate_config(config_data["defaults"])
 
     assert expected_error in str(exc_info.value)
 
@@ -1001,15 +1001,15 @@ def test_run_filters_environment_variables_after_ssh_connection(
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "env_filter": ["AWS_.*"],
         "command": "aws s3 ls",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -1052,15 +1052,15 @@ def test_run_forwards_env_to_setup_script(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "env_filter": ["AWS_.*"],
         "setup_script": "aws s3 cp s3://bucket/setup.sh .",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -1102,16 +1102,16 @@ def test_run_forwards_env_to_startup_script(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "env_filter": ["HF_TOKEN"],
         "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
         "startup_script": "huggingface-cli login",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -1154,15 +1154,15 @@ def test_run_forwards_env_to_main_command(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "env_filter": ["WANDB_.*"],
         "command": "python train.py",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -1203,11 +1203,11 @@ def test_moondock_init_cleanup_state(moondock_module) -> None:
     """Test that Moondock instance initializes with cleanup state tracking."""
     moondock_instance = moondock_module()
 
-    assert hasattr(moondock_instance, "cleanup_in_progress")
-    assert moondock_instance.cleanup_in_progress is False
-    assert hasattr(moondock_instance, "resources")
-    assert isinstance(moondock_instance.resources, dict)
-    assert len(moondock_instance.resources) == 0
+    assert hasattr(moondock_instance, "_cleanup_in_progress")
+    assert moondock_instance._cleanup_in_progress is False
+    assert hasattr(moondock_instance, "_resources")
+    assert isinstance(moondock_instance._resources, dict)
+    assert len(moondock_instance._resources) == 0
 
 
 def test_signal_handlers_registered_during_run(moondock_module) -> None:
@@ -1216,13 +1216,13 @@ def test_signal_handlers_registered_during_run(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -1254,13 +1254,13 @@ def test_signal_handlers_restored_after_run(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -1322,7 +1322,7 @@ def test_cleanup_resources_executes_in_correct_order(moondock_module) -> None:
     mock_ssh.close.side_effect = lambda: cleanup_order.append("ssh")
     mock_ec2.terminate_instance.side_effect = lambda id: cleanup_order.append("ec2")
 
-    moondock_instance.resources = {
+    moondock_instance._resources = {
         "portforward_mgr": mock_portforward,
         "mutagen_mgr": mock_mutagen,
         "mutagen_session_name": "test-session",
@@ -1349,7 +1349,7 @@ def test_cleanup_resources_continues_on_error(moondock_module) -> None:
 
     mock_mutagen.terminate_session.side_effect = RuntimeError("Mutagen error")
 
-    moondock_instance.resources = {
+    moondock_instance._resources = {
         "portforward_mgr": mock_portforward,
         "mutagen_mgr": mock_mutagen,
         "mutagen_session_name": "test-session",
@@ -1372,7 +1372,7 @@ def test_cleanup_resources_exits_with_sigint_code(moondock_module) -> None:
 
     moondock_instance = moondock_module()
 
-    moondock_instance.resources = {}
+    moondock_instance._resources = {}
 
     with pytest.raises(SystemExit) as exc_info:
         moondock_instance._cleanup_resources(signum=signal.SIGINT, frame=None)
@@ -1386,7 +1386,7 @@ def test_cleanup_resources_exits_with_sigterm_code(moondock_module) -> None:
 
     moondock_instance = moondock_module()
 
-    moondock_instance.resources = {}
+    moondock_instance._resources = {}
 
     with pytest.raises(SystemExit) as exc_info:
         moondock_instance._cleanup_resources(signum=signal.SIGTERM, frame=None)
@@ -1401,12 +1401,12 @@ def test_cleanup_resources_prevents_duplicate_cleanup(moondock_module) -> None:
     moondock_instance = moondock_module()
 
     mock_ec2 = MagicMock()
-    moondock_instance.resources = {
+    moondock_instance._resources = {
         "ec2_manager": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    moondock_instance.cleanup_in_progress = True
+    moondock_instance._cleanup_in_progress = True
 
     moondock_instance._cleanup_resources()
 
@@ -1422,7 +1422,7 @@ def test_cleanup_resources_only_cleans_tracked_resources(moondock_module) -> Non
     mock_ec2 = MagicMock()
     mock_ssh = MagicMock()
 
-    moondock_instance.resources = {
+    moondock_instance._resources = {
         "ec2_manager": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
         "ssh_manager": mock_ssh,
@@ -1439,16 +1439,16 @@ def test_run_tracks_resources_incrementally(moondock_module) -> None:
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "ports": [8888],
         "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
         "command": "echo test",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -1462,7 +1462,7 @@ def test_run_tracks_resources_incrementally(moondock_module) -> None:
     captured_resources = {}
 
     def capture_cleanup():
-        captured_resources.update(moondock_instance.resources)
+        captured_resources.update(moondock_instance._resources)
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
@@ -1507,14 +1507,14 @@ def test_finally_block_calls_cleanup_if_not_already_done(moondock_module) -> Non
     from unittest.mock import MagicMock, patch
 
     moondock_instance = moondock_module()
-    moondock_instance.config_loader = MagicMock()
-    moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance.config_loader.get_machine_config.return_value = {
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+    moondock_instance._config_loader.get_machine_config.return_value = {
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "command": "echo test",
     }
-    moondock_instance.config_loader.validate_config.return_value = None
+    moondock_instance._config_loader.validate_config.return_value = None
 
     mock_instance_details = {
         "instance_id": "i-test123",
@@ -1541,7 +1541,7 @@ def test_finally_block_calls_cleanup_if_not_already_done(moondock_module) -> Non
 
         moondock_instance.run()
 
-        assert moondock_instance.cleanup_in_progress is False
+        assert moondock_instance._cleanup_in_progress is False
         mock_ssh_instance.close.assert_called()
 
 
@@ -1882,16 +1882,16 @@ def test_cleanup_flag_resets_after_cleanup(moondock_module) -> None:
     moondock_instance = moondock_module()
 
     mock_ec2 = MagicMock()
-    moondock_instance.resources = {
+    moondock_instance._resources = {
         "ec2_manager": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    assert moondock_instance.cleanup_in_progress is False
+    assert moondock_instance._cleanup_in_progress is False
 
     moondock_instance._cleanup_resources()
 
-    assert moondock_instance.cleanup_in_progress is False
+    assert moondock_instance._cleanup_in_progress is False
     mock_ec2.terminate_instance.assert_called_once()
 
 
@@ -1932,13 +1932,13 @@ def test_multiple_run_calls_work_correctly(moondock_module) -> None:
         patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "0"}),
         patch.object(moondock_instance, "_cleanup_resources", side_effect=track_cleanup),
     ):
-        moondock_instance.config_loader = MagicMock()
-        moondock_instance.config_loader.load_config.return_value = {"defaults": {}}
-        moondock_instance.config_loader.get_machine_config.return_value = {
+        moondock_instance._config_loader = MagicMock()
+        moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
+        moondock_instance._config_loader.get_machine_config.return_value = {
             "region": "us-east-1",
             "instance_type": "t3.medium",
         }
-        moondock_instance.config_loader.validate_config.return_value = None
+        moondock_instance._config_loader.validate_config.return_value = None
 
         with (
             patch("moondock_cli.EC2Manager") as mock_ec2_class,
@@ -1958,14 +1958,14 @@ def test_multiple_run_calls_work_correctly(moondock_module) -> None:
 
             assert result1 is not None
             assert result1["instance_id"] == "i-test123"
-            assert moondock_instance.cleanup_in_progress is False
+            assert moondock_instance._cleanup_in_progress is False
             assert cleanup_call_count == 1
 
             result2 = moondock_instance.run(plain=True)
 
             assert result2 is not None
             assert result2["instance_id"] == "i-test123"
-            assert moondock_instance.cleanup_in_progress is False
+            assert moondock_instance._cleanup_in_progress is False
             assert cleanup_call_count == 2
 
 
@@ -1978,12 +1978,12 @@ def test_cleanup_flag_resets_even_with_cleanup_errors(moondock_module) -> None:
     mock_ec2 = MagicMock()
     mock_ec2.terminate_instance.side_effect = RuntimeError("EC2 error")
 
-    moondock_instance.resources = {
+    moondock_instance._resources = {
         "ec2_manager": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
     }
 
     moondock_instance._cleanup_resources()
 
-    assert moondock_instance.cleanup_in_progress is False
+    assert moondock_instance._cleanup_in_progress is False
     mock_ec2.terminate_instance.assert_called_once()

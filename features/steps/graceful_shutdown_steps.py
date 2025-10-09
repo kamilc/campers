@@ -76,7 +76,7 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
     context : Context
         Behave test context
     """
-    context.mock_moondock.resources = {
+    context.mock_moondock._resources = {
         "ec2_manager": MagicMock(),
         "instance_details": {"instance_id": TEST_INSTANCE_ID},
         "ssh_manager": MagicMock(),
@@ -86,16 +86,16 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
     }
     context.cleanup_order = []
 
-    context.mock_moondock.resources["portforward_mgr"].stop_all_tunnels.side_effect = (
+    context.mock_moondock._resources["portforward_mgr"].stop_all_tunnels.side_effect = (
         lambda: context.cleanup_order.append("portforward")
     )
-    context.mock_moondock.resources["mutagen_mgr"].terminate_session.side_effect = (
+    context.mock_moondock._resources["mutagen_mgr"].terminate_session.side_effect = (
         lambda name: context.cleanup_order.append("mutagen")
     )
-    context.mock_moondock.resources["ssh_manager"].close.side_effect = (
+    context.mock_moondock._resources["ssh_manager"].close.side_effect = (
         lambda: context.cleanup_order.append("ssh")
     )
-    context.mock_moondock.resources["ec2_manager"].terminate_instance.side_effect = (
+    context.mock_moondock._resources["ec2_manager"].terminate_instance.side_effect = (
         lambda id: context.cleanup_order.append("ec2")
     )
 
@@ -121,13 +121,13 @@ def step_instance_launch_in_progress(context: Context) -> None:
     context : Context
         Behave test context
     """
-    context.mock_moondock.resources = {
+    context.mock_moondock._resources = {
         "ec2_manager": MagicMock(),
         "instance_details": {"instance_id": TEST_INSTANCE_ID},
     }
     context.cleanup_order = []
 
-    context.mock_moondock.resources["ec2_manager"].terminate_instance.side_effect = (
+    context.mock_moondock._resources["ec2_manager"].terminate_instance.side_effect = (
         lambda id: context.cleanup_order.append("ec2")
     )
 
@@ -142,8 +142,8 @@ def step_ssh_not_connected(context: Context) -> None:
         Behave test context
     """
 
-    if "ssh_manager" in context.mock_moondock.resources:
-        del context.mock_moondock.resources["ssh_manager"]
+    if "ssh_manager" in context.mock_moondock._resources:
+        del context.mock_moondock._resources["ssh_manager"]
 
 
 @given("mutagen termination will fail")
@@ -157,7 +157,7 @@ def step_mutagen_will_fail(context: Context) -> None:
     """
     context.cleanup_order = []
 
-    context.mock_moondock.resources["portforward_mgr"].stop_all_tunnels.side_effect = (
+    context.mock_moondock._resources["portforward_mgr"].stop_all_tunnels.side_effect = (
         lambda: context.cleanup_order.append("portforward")
     )
 
@@ -165,21 +165,21 @@ def step_mutagen_will_fail(context: Context) -> None:
         context.cleanup_order.append("mutagen_fail")
         raise RuntimeError("Mutagen error")
 
-    context.mock_moondock.resources[
+    context.mock_moondock._resources[
         "mutagen_mgr"
     ].terminate_session.side_effect = mutagen_fail
 
-    context.mock_moondock.resources["ssh_manager"].close.side_effect = (
+    context.mock_moondock._resources["ssh_manager"].close.side_effect = (
         lambda: context.cleanup_order.append("ssh")
     )
-    context.mock_moondock.resources["ec2_manager"].terminate_instance.side_effect = (
+    context.mock_moondock._resources["ec2_manager"].terminate_instance.side_effect = (
         lambda id: context.cleanup_order.append("ec2")
     )
 
 
 @given("cleanup is already in progress")
 def step_cleanup_in_progress(context: Context) -> None:
-    context.mock_moondock.cleanup_in_progress = True
+    context.mock_moondock._cleanup_in_progress = True
 
 
 @when("SIGINT signal is received")
@@ -223,7 +223,7 @@ def step_another_sigint_received(context: Context) -> None:
 
 @when("moondock run completes normally")
 def step_moondock_run_completes(context: Context) -> None:
-    context.mock_moondock.cleanup_in_progress = False
+    context.mock_moondock._cleanup_in_progress = False
     context.mock_moondock._cleanup_resources()
 
 
@@ -337,12 +337,12 @@ def step_second_cleanup_skipped(context: Context) -> None:
 
 @then("no duplicate cleanup errors occur")
 def step_no_duplicate_cleanup_errors(context: Context) -> None:
-    assert context.mock_moondock.cleanup_in_progress is True
+    assert context.mock_moondock._cleanup_in_progress is True
 
 
 @then("cleanup happens in finally block")
 def step_cleanup_in_finally(context: Context) -> None:
-    assert context.mock_moondock.cleanup_in_progress is False
+    assert context.mock_moondock._cleanup_in_progress is False
 
 
 @then("cleanup sequence executes on mock resources")
@@ -362,4 +362,4 @@ def step_cleanup_on_mock_resources(context: Context) -> None:
 
 @then("no actual AWS operations occur")
 def step_no_actual_aws_operations(context: Context) -> None:
-    assert context.mock_moondock.resources is not None
+    assert context.mock_moondock._resources is not None
