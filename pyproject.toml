@@ -21,6 +21,9 @@ dev = [
     "ruff>=0.13.2",
 ]
 
+[tool.setuptools]
+packages = ["moondock"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["tmp", ".git", ".venv", "__pycache__"]
