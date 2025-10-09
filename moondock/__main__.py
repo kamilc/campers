@@ -588,7 +588,7 @@ class MoondockTUI(App):
                 break
 
         if not self.moondock.cleanup_in_progress:
-            self.moondock.cleanup_resources()
+            self.moondock._cleanup_resources()
 
     def run_moondock_logic(self) -> None:
         """Run moondock logic in worker thread."""
@@ -644,7 +644,7 @@ class MoondockTUI(App):
     def action_quit(self) -> None:
         """Handle quit action (q key or first Ctrl+C)."""
         if not self.moondock.cleanup_in_progress:
-            self.moondock.cleanup_resources()
+            self.moondock._cleanup_resources()
         self.exit(130)
 
 
@@ -664,7 +664,7 @@ class Moondock:
         self.resources: dict[str, Any] = {}
         self.update_queue: queue.Queue | None = None
 
-    def log_and_print_error(self, message: str, *args: Any) -> None:
+    def _log_and_print_error(self, message: str, *args: Any) -> None:
         """Log error message and print to stderr.
 
         Parameters
@@ -678,7 +678,7 @@ class Moondock:
         formatted_msg = message % args if args else message
         print(f"Error: {formatted_msg}", file=sys.stderr)
 
-    def extract_exit_code_from_script(self, script: str) -> int:
+    def _extract_exit_code_from_script(self, script: str) -> int:
         """Extract exit code from script if it contains 'exit N' command.
 
         Parameters
@@ -697,7 +697,7 @@ class Moondock:
         match = re.search(r"exit\s+(\d+)", script)
         return int(match.group(1)) if match else 0
 
-    def log_port_forwarding_setup(self, ports: list[int]) -> None:
+    def _log_port_forwarding_setup(self, ports: list[int]) -> None:
         """Log SSH tunnel creation messages for each port.
 
         Parameters
@@ -711,7 +711,7 @@ class Moondock:
                 "SSH tunnel established: localhost:%s -> remote:%s", port, port
             )
 
-    def cleanup_resources(
+    def _cleanup_resources(
         self, signum: int | None = None, frame: types.FrameType | None = None
     ) -> None:
         """Perform graceful cleanup of all resources.
@@ -942,7 +942,7 @@ class Moondock:
             with self.cleanup_lock:
                 self.cleanup_in_progress = False
 
-    def run_test_mode(
+    def _run_test_mode(
         self, merged_config: dict[str, Any], json_output: bool
     ) -> dict[str, Any] | str:
         """Handle test mode execution without real AWS/SSH operations.
@@ -1013,7 +1013,7 @@ class Moondock:
             if merged_config.get("setup_script", "").strip():
                 logging.info("Running setup_script...")
 
-                script_exit_code = self.extract_exit_code_from_script(
+                script_exit_code = self._extract_exit_code_from_script(
                     merged_config["setup_script"]
                 )
 
@@ -1037,12 +1037,12 @@ class Moondock:
                 logging.info("File sync completed")
 
             if merged_config.get("ports"):
-                self.log_port_forwarding_setup(merged_config["ports"])
+                self._log_port_forwarding_setup(merged_config["ports"])
 
             if merged_config.get("startup_script"):
                 logging.info("Running startup_script...")
 
-                script_exit_code = self.extract_exit_code_from_script(
+                script_exit_code = self._extract_exit_code_from_script(
                     merged_config["startup_script"]
                 )
 
@@ -1055,7 +1055,7 @@ class Moondock:
 
             if merged_config.get("command"):
                 cmd = merged_config["command"]
-                exit_code = self.extract_exit_code_from_script(cmd)
+                exit_code = self._extract_exit_code_from_script(cmd)
 
                 logging.info("Executing command: %s", cmd)
                 logging.info("Command completed with exit code: %s", exit_code)
@@ -1139,8 +1139,8 @@ class Moondock:
                 moondock_instance=self, run_kwargs=run_kwargs, update_queue=update_queue
             )
 
-            original_sigint = signal.signal(signal.SIGINT, self.cleanup_resources)
-            original_sigterm = signal.signal(signal.SIGTERM, self.cleanup_resources)
+            original_sigint = signal.signal(signal.SIGINT, self._cleanup_resources)
+            original_sigterm = signal.signal(signal.SIGTERM, self._cleanup_resources)
 
             try:
                 exit_code = app.run()
@@ -1223,7 +1223,7 @@ class Moondock:
 
         merged_config = self.config_loader.get_machine_config(config, machine_name)
 
-        self.apply_cli_overrides(
+        self._apply_cli_overrides(
             merged_config,
             command,
             instance_type,
@@ -1247,20 +1247,20 @@ class Moondock:
                 "startup_script requires a synced directory to run in."
             )
 
-        self.validate_sync_paths_config(merged_config.get("sync_paths"))
+        self._validate_sync_paths_config(merged_config.get("sync_paths"))
 
         if update_queue is not None:
             logging.debug("Sending merged_config to TUI queue")
             update_queue.put({"type": "merged_config", "payload": merged_config})
 
         if os.environ.get("MOONDOCK_TEST_MODE") == "1":
-            return self.run_test_mode(merged_config, json_output)
+            return self._run_test_mode(merged_config, json_output)
 
         self.update_queue = update_queue
 
         if not tui_mode:
-            original_sigint = signal.signal(signal.SIGINT, self.cleanup_resources)
-            original_sigterm = signal.signal(signal.SIGTERM, self.cleanup_resources)
+            original_sigint = signal.signal(signal.SIGINT, self._cleanup_resources)
+            original_sigterm = signal.signal(signal.SIGTERM, self._cleanup_resources)
 
         try:
             mutagen_mgr = MutagenManager()
@@ -1428,7 +1428,7 @@ class Moondock:
 
                 logging.info("Running startup_script...")
 
-                startup_command = self.build_command_in_directory(
+                startup_command = self._build_command_in_directory(
                     working_dir, merged_config["startup_script"]
                 )
                 startup_with_env = ssh_manager.build_command_with_env(
@@ -1449,7 +1449,7 @@ class Moondock:
 
                 if merged_config.get("sync_paths"):
                     working_dir = merged_config["sync_paths"][0]["remote"]
-                    full_command = self.build_command_in_directory(working_dir, cmd)
+                    full_command = self._build_command_in_directory(working_dir, cmd)
                     command_with_env = ssh_manager.build_command_with_env(
                         full_command, env_vars
                     )
@@ -1468,13 +1468,13 @@ class Moondock:
 
         finally:
             if not tui_mode and not self.cleanup_in_progress:
-                self.cleanup_resources()
+                self._cleanup_resources()
 
             if not tui_mode:
                 signal.signal(signal.SIGINT, original_sigint)
                 signal.signal(signal.SIGTERM, original_sigterm)
 
-    def apply_cli_overrides(
+    def _apply_cli_overrides(
         self,
         config: dict[str, Any],
         command: str | None,
@@ -1520,16 +1520,16 @@ class Moondock:
             config["region"] = region
 
         if port is not None:
-            config["ports"] = self.parse_port_parameter(port)
+            config["ports"] = self._parse_port_parameter(port)
             config.pop("port", None)
 
         if include_vcs is not None:
-            config["include_vcs"] = self.parse_include_vcs(include_vcs)
+            config["include_vcs"] = self._parse_include_vcs(include_vcs)
 
         if ignore is not None:
-            config["ignore"] = self.parse_ignore_patterns(ignore)
+            config["ignore"] = self._parse_ignore_patterns(ignore)
 
-    def parse_port_parameter(
+    def _parse_port_parameter(
         self, port: str | list[int] | tuple[int, ...]
     ) -> list[int]:
         """Parse port parameter into list of integers.
@@ -1550,7 +1550,7 @@ class Moondock:
 
         return [int(p.strip()) for p in str(port).split(",") if p.strip()]
 
-    def parse_include_vcs(self, include_vcs: str | bool) -> bool:
+    def _parse_include_vcs(self, include_vcs: str | bool) -> bool:
         """Parse include_vcs parameter into boolean.
 
         Parameters
@@ -1584,7 +1584,7 @@ class Moondock:
 
         raise ValueError(f"Unexpected type for include_vcs: {type(include_vcs)}")
 
-    def parse_ignore_patterns(self, ignore: str) -> list[str]:
+    def _parse_ignore_patterns(self, ignore: str) -> list[str]:
         """Parse comma-separated ignore patterns into list.
 
         Parameters
@@ -1599,7 +1599,7 @@ class Moondock:
         """
         return [pattern.strip() for pattern in ignore.split(",") if pattern.strip()]
 
-    def validate_sync_paths_config(self, sync_paths: list | None) -> None:
+    def _validate_sync_paths_config(self, sync_paths: list | None) -> None:
         """Validate sync_paths configuration structure.
 
         Parameters
@@ -1626,7 +1626,7 @@ class Moondock:
                 f"Got: {sync_config}"
             )
 
-    def build_command_in_directory(self, working_dir: str, command: str) -> str:
+    def _build_command_in_directory(self, working_dir: str, command: str) -> str:
         """Build command that executes in specific working directory.
 
         Parameters
@@ -1643,7 +1643,7 @@ class Moondock:
         """
         return f"cd {shlex.quote(working_dir)} && bash -c {repr(command)}"
 
-    def truncate_name(self, name: str) -> str:
+    def _truncate_name(self, name: str) -> str:
         """Truncate machine config name to fit in column width.
 
         Parameters
@@ -1661,7 +1661,7 @@ class Moondock:
 
         return name
 
-    def validate_region(self, region: str) -> None:
+    def _validate_region(self, region: str) -> None:
         """Validate that a region string is a valid AWS region.
 
         Parameters
@@ -1713,7 +1713,7 @@ class Moondock:
         default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
 
         if region is not None:
-            self.validate_region(region)
+            self._validate_region(region)
 
         try:
             ec2_manager = EC2Manager(region=region or default_region)
@@ -1731,7 +1731,7 @@ class Moondock:
                 print("-" * 79)
 
                 for inst in instances:
-                    name = self.truncate_name(inst["machine_config"])
+                    name = self._truncate_name(inst["machine_config"])
                     launched = format_time_ago(inst["launch_time"])
                     print(
                         f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['instance_type']:<15} {launched:<12}"
@@ -1743,7 +1743,7 @@ class Moondock:
                 print("-" * 94)
 
                 for inst in instances:
-                    name = self.truncate_name(inst["machine_config"])
+                    name = self._truncate_name(inst["machine_config"])
                     launched = format_time_ago(inst["launch_time"])
                     print(
                         f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['region']:<15} {inst['instance_type']:<15} {launched:<12}"
@@ -1778,7 +1778,7 @@ class Moondock:
         default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
 
         if region:
-            self.validate_region(region)
+            self._validate_region(region)
 
         target: dict[str, Any] | None = None
 
@@ -1789,7 +1789,7 @@ class Moondock:
             )
 
             if not matches:
-                self.log_and_print_error(
+                self._log_and_print_error(
                     "No moondock-managed instances matched '%s'.", name_or_id
                 )
                 sys.exit(1)
@@ -1825,17 +1825,17 @@ class Moondock:
             print(f"Instance {target['instance_id']} has been successfully terminated.")
         except RuntimeError as e:
             if target is not None:
-                self.log_and_print_error(
+                self._log_and_print_error(
                     "Failed to terminate instance %s: %s",
                     target["instance_id"],
                     str(e),
                 )
             else:
-                self.log_and_print_error("Failed to terminate instance: %s", str(e))
+                self._log_and_print_error("Failed to terminate instance: %s", str(e))
 
             sys.exit(1)
         except NoCredentialsError:
-            self.log_and_print_error(
+            self._log_and_print_error(
                 "AWS credentials not configured. Please set up AWS credentials."
             )
             sys.exit(1)
@@ -1843,12 +1843,12 @@ class Moondock:
             error_code = e.response.get("Error", {}).get("Code", "")
 
             if error_code == "UnauthorizedOperation":
-                self.log_and_print_error(
+                self._log_and_print_error(
                     "Insufficient AWS permissions to perform this operation."
                 )
                 sys.exit(1)
 
-            self.log_and_print_error("AWS API error: %s", e)
+            self._log_and_print_error("AWS API error: %s", e)
             sys.exit(1)
 
     def init(self, force: bool = False) -> None:
@@ -1868,7 +1868,7 @@ class Moondock:
         config_file = Path(config_path)
 
         if config_file.exists() and not force:
-            self.log_and_print_error(
+            self._log_and_print_error(
                 "%s already exists. Use --force to overwrite.",
                 config_path,
             )
@@ -1880,17 +1880,6 @@ class Moondock:
             f.write(CONFIG_TEMPLATE)
 
         print(f"Created {config_path} configuration file.")
-
-    def hello(self) -> str:
-        """Test command to validate Fire CLI works.
-
-        Returns
-        -------
-        str
-            Version and status message confirming skeleton is ready.
-        """
-        return "moondock v0.1.0 - skeleton ready"
-
 
 class MoondockCLI(Moondock):
     """CLI wrapper that handles process exit codes."""

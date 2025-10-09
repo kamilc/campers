@@ -265,14 +265,14 @@ def step_graceful_shutdown_initiated(context: Context) -> None:
             await pilot.pause()
             shutdown_initiated = False
 
-            original_cleanup = mock_moondock.cleanup_resources
+            original_cleanup = mock_moondock._cleanup_resources
 
             def mock_cleanup(signum=None, frame=None):
                 nonlocal shutdown_initiated
                 shutdown_initiated = True
                 original_cleanup(signum, frame)
 
-            mock_moondock.cleanup_resources = mock_cleanup
+            mock_moondock._cleanup_resources = mock_cleanup
             await pilot.press("q")
             await pilot.pause()
             assert shutdown_initiated or app.is_running is False, (

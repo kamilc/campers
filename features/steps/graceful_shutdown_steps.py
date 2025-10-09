@@ -193,7 +193,7 @@ def step_sigint_received(context: Context) -> None:
     """
     capture_logs_during_cleanup(
         context,
-        context.mock_moondock.cleanup_resources,
+        context.mock_moondock._cleanup_resources,
         signum=signal.SIGINT,
         frame=None,
     )
@@ -210,7 +210,7 @@ def step_sigterm_received(context: Context) -> None:
     """
     capture_logs_during_cleanup(
         context,
-        context.mock_moondock.cleanup_resources,
+        context.mock_moondock._cleanup_resources,
         signum=signal.SIGTERM,
         frame=None,
     )
@@ -218,13 +218,13 @@ def step_sigterm_received(context: Context) -> None:
 
 @when("another SIGINT signal is received")
 def step_another_sigint_received(context: Context) -> None:
-    context.mock_moondock.cleanup_resources(signum=signal.SIGINT, frame=None)
+    context.mock_moondock._cleanup_resources(signum=signal.SIGINT, frame=None)
 
 
 @when("moondock run completes normally")
 def step_moondock_run_completes(context: Context) -> None:
     context.mock_moondock.cleanup_in_progress = False
-    context.mock_moondock.cleanup_resources()
+    context.mock_moondock._cleanup_resources()
 
 
 @when("SIGINT signal is received during execution")
@@ -240,7 +240,7 @@ def step_sigint_during_execution(context: Context) -> None:
 
     capture_logs_during_cleanup(
         context,
-        context.mock_moondock.cleanup_resources,
+        context.mock_moondock._cleanup_resources,
         signum=signal.SIGINT,
         frame=None,
     )

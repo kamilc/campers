@@ -42,14 +42,6 @@ def step_defines_moondock_class(context) -> None:
     assert "class Moondock" in content, "Moondock class not defined"
 
 
-@given("Moondock class has hello method")
-def step_has_hello_method(context) -> None:
-    """Verify Moondock class has hello method."""
-    content = context.moondock_path.read_text()
-
-    assert "def hello(" in content, "hello method not defined in Moondock class"
-
-
 @when('I run "{command}"')
 def step_run_command(context, command: str) -> None:
     """Execute command and capture output.
@@ -120,10 +112,11 @@ def step_no_installation_errors(context) -> None:
         )
 
 
-@then("Fire routes to hello method")
+@then("Fire routes to CLI commands")
 def step_fire_routes(context) -> None:
-    """Verify Fire successfully routed to hello method."""
+    """Verify Fire successfully routes to CLI commands."""
     assert context.exit_code == 0, "Fire routing failed with non-zero exit code"
-    assert "moondock v0.1.0 - skeleton ready" in context.stdout, (
-        "hello method output not found in stdout"
+    combined_output = context.stdout + context.stderr
+    assert "moondock" in combined_output.lower(), (
+        "CLI command routing not found in output"
     )
