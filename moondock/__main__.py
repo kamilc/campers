@@ -1982,7 +1982,7 @@ def main() -> None:
         handlers=[stdout_handler, stderr_handler],
     )
 
-    fire.Fire(MoondockCLI)
+    fire.Fire(MoondockCLI())
 
 
 if __name__ == "__main__":
