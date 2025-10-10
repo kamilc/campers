@@ -377,7 +377,6 @@ class MoondockTUI(App):
             yield Static("Mutagen: Not syncing", id="mutagen-widget")
             yield Static("Machine Name: loading...", id="machine-name-widget")
             yield Static("Command: loading...", id="command-widget")
-            yield Static("Forwarded Ports: loading...", id="ports-widget")
             yield Static("SSH: loading...", id="ssh-widget")
         with Container(id="log-panel"):
             yield Log()
@@ -540,16 +539,6 @@ class MoondockTUI(App):
             except Exception as e:
                 logging.error("Failed to update command widget: %s", e)
 
-        if "ports" in config and config["ports"]:
-            try:
-                ports_display = ", ".join(
-                    f"localhost:{port}" for port in config["ports"]
-                )
-                self.query_one("#ports-widget").update(
-                    f"Forwarded Ports: {ports_display}"
-                )
-            except Exception as e:
-                logging.error("Failed to update ports widget: %s", e)
 
     def update_from_instance_details(self, details: dict[str, Any]) -> None:
         """Update widgets from instance details data.
@@ -639,16 +628,50 @@ class MoondockTUI(App):
                 self.last_ctrl_c_time > 0
                 and (current_time - self.last_ctrl_c_time) < 1.5
             ):
-                logging.info("Force exit requested")
-                self.exit(130)
+                try:
+                    log_widget = self.query_one(Log)
+                    log_widget.write_line("Force exit - skipping cleanup!")
+                except Exception:
+                    pass
+                import os
+                os._exit(130)
             else:
                 self.last_ctrl_c_time = current_time
                 self.action_quit()
 
     def action_quit(self) -> None:
         """Handle quit action (q key or first Ctrl+C)."""
+        try:
+            log_widget = self.query_one(Log)
+            log_widget.write_line("Shutting down - cleaning up resources...")
+            log_widget.write_line("Press Ctrl+C again to force exit")
+        except Exception:
+            pass
+
         if not self.moondock._cleanup_in_progress:
-            self.moondock._cleanup_resources()
+            root_logger = logging.getLogger()
+            tui_handlers = [h for h in root_logger.handlers if isinstance(h, TuiLogHandler)]
+            for handler in tui_handlers:
+                root_logger.removeHandler(handler)
+
+            try:
+                self.moondock._cleanup_resources()
+            except Exception as e:
+                try:
+                    log_widget = self.query_one(Log)
+                    log_widget.write_line(f"Cleanup error: {e}")
+                except Exception:
+                    pass
+
+            for handler in tui_handlers:
+                root_logger.addHandler(handler)
+
+        try:
+            log_widget = self.query_one(Log)
+            log_widget.write_line("Cleanup complete, exiting...")
+        except Exception:
+            pass
+
         self.exit(130)
 
 
