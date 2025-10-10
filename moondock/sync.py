@@ -221,19 +221,31 @@ class MutagenManager:
 
         logger.debug("SSH key added to agent successfully")
 
-        logger.debug("Testing SSH connection...")
-        test_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-                    f"{username}@{host}", "echo", "SSH_OK"]
+        logger.debug("Adding host to known_hosts...")
+        ssh_path = shutil.which("ssh")
+        if not ssh_path:
+            raise RuntimeError("ssh not found. Please install OpenSSH or add it to your PATH.")
+
+        add_host_cmd = [
+            ssh_path,
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=30",
+            "-o", "StrictHostKeyChecking=accept-new",
+            f"{username}@{host}",
+            "echo", "SSH_OK"
+        ]
         try:
-            test_result = subprocess.run(
-                test_cmd, capture_output=True, text=True, timeout=30
+            host_result = subprocess.run(
+                add_host_cmd, capture_output=True, text=True, timeout=30
             )
-            if test_result.returncode == 0 and "SSH_OK" in test_result.stdout:
-                logger.debug("SSH test successful")
+            if host_result.returncode == 0 and "SSH_OK" in host_result.stdout:
+                logger.debug("Host added to known_hosts successfully")
             else:
-                logger.warning("SSH test failed: %s", test_result.stderr)
+                logger.warning("Failed to add host to known_hosts: %s", host_result.stderr)
+                raise RuntimeError(f"SSH connection test failed: {host_result.stderr}")
         except subprocess.TimeoutExpired:
-            logger.warning("SSH test timed out")
+            logger.error("SSH connection timed out")
+            raise RuntimeError("SSH connection timed out. The instance may not be ready yet.")
 
         logger.debug("Mutagen create command: %s", " ".join(cmd))
 
