@@ -1978,12 +1978,12 @@ class Moondock:
         missing = []
 
         read_checks = [
-            ("DescribeInstances", lambda: ec2_client.describe_instances(MaxResults=1)),
-            ("DescribeVpcs", lambda: ec2_client.describe_vpcs(MaxResults=1)),
-            ("DescribeKeyPairs", lambda: ec2_client.describe_key_pairs(MaxResults=1)),
+            ("DescribeInstances", lambda: ec2_client.describe_instances(MaxResults=5)),
+            ("DescribeVpcs", lambda: ec2_client.describe_vpcs(MaxResults=5)),
+            ("DescribeKeyPairs", lambda: ec2_client.describe_key_pairs(MaxResults=5)),
             (
                 "DescribeSecurityGroups",
-                lambda: ec2_client.describe_security_groups(MaxResults=1),
+                lambda: ec2_client.describe_security_groups(MaxResults=5),
             ),
         ]
 
@@ -2423,6 +2423,15 @@ def main() -> None:
             print("Fix it:", file=sys.stderr)
             print("  https://console.aws.amazon.com/servicequotas/", file=sys.stderr)
             print("  moondock list", file=sys.stderr)
+        elif error_code in ["ExpiredToken", "RequestExpired", "ExpiredTokenException"]:
+            print("AWS credentials have expired\n", file=sys.stderr)
+            print("This usually means:", file=sys.stderr)
+            print("  - Your temporary credentials (STS) have expired", file=sys.stderr)
+            print("  - Your session token needs to be refreshed\n", file=sys.stderr)
+            print("Fix it:", file=sys.stderr)
+            print("  aws sso login           # If using AWS SSO", file=sys.stderr)
+            print("  aws configure           # Re-configure credentials", file=sys.stderr)
+            print("  # Or refresh your temporary credentials", file=sys.stderr)
         else:
             print(f"AWS API error: {error_msg}", file=sys.stderr)
 
