@@ -547,14 +547,6 @@ class MoondockTUI(App):
         details : dict[str, Any]
             Instance details data
         """
-        if "instance_id" in details:
-            try:
-                self.query_one("#instance-id-widget").update(
-                    f"Instance ID: {details['instance_id']}"
-                )
-            except Exception as e:
-                logging.error("Failed to update instance ID widget: %s", e)
-
         if "state" in details:
             try:
                 self.query_one("#status-widget").update(f"Status: {details['state']}")
@@ -584,6 +576,8 @@ class MoondockTUI(App):
 
     def run_moondock_logic(self) -> None:
         """Run moondock logic in worker thread."""
+        error_message = None
+
         try:
             result = self.moondock._execute_run(
                 tui_mode=True, update_queue=self._update_queue, **self.run_kwargs
@@ -598,16 +592,63 @@ class MoondockTUI(App):
         except KeyboardInterrupt:
             logging.info("Operation cancelled by user")
             self.worker_exit_code = 130
+        except NoCredentialsError:
+            error_message = (
+                "AWS credentials not found\n\n"
+                "Configure your credentials:\n"
+                "  aws configure\n\n"
+                "Or set environment variables:\n"
+                "  export AWS_ACCESS_KEY_ID=...\n"
+                "  export AWS_SECRET_ACCESS_KEY=..."
+            )
+            logging.error("AWS credentials not found")
+            self.worker_exit_code = 1
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            error_msg = e.response.get("Error", {}).get("Message", str(e))
+
+            if error_code in ["ExpiredToken", "RequestExpired", "ExpiredTokenException"]:
+                error_message = (
+                    "AWS credentials have expired\n\n"
+                    "This usually means:\n"
+                    "  - Your temporary credentials (STS) have expired\n"
+                    "  - Your session token needs to be refreshed\n\n"
+                    "Fix it:\n"
+                    "  aws sso login           # If using AWS SSO\n"
+                    "  aws configure           # Re-configure credentials\n"
+                    "  # Or refresh your temporary credentials"
+                )
+                logging.error("AWS credentials have expired")
+            elif error_code == "UnauthorizedOperation":
+                error_message = (
+                    "Insufficient IAM permissions\n\n"
+                    "Your AWS credentials don't have the required permissions.\n"
+                    "Contact your AWS administrator to grant:\n"
+                    "  - EC2 permissions (DescribeInstances, RunInstances, TerminateInstances)\n"
+                    "  - VPC permissions (DescribeVpcs, CreateDefaultVpc)\n"
+                    "  - Key Pair permissions (CreateKeyPair, DeleteKeyPair, DescribeKeyPairs)\n"
+                    "  - Security Group permissions"
+                )
+                logging.error("Insufficient IAM permissions")
+            else:
+                error_message = f"AWS API error: {error_msg}"
+                logging.error("AWS API error: %s", error_msg)
+            self.worker_exit_code = 1
         except ValueError as e:
-            logging.error("Configuration error: %s", e)
+            error_message = f"Configuration error: {e}"
+            logging.error(error_message)
             self.worker_exit_code = 2
         except RuntimeError as e:
-            logging.error("Runtime error: %s", e)
+            error_message = f"Runtime error: {e}"
+            logging.error(error_message)
             self.worker_exit_code = 3
-        except Exception:
+        except Exception as e:
+            error_message = f"Unexpected error: {e}"
             logging.exception("Unexpected error during command execution")
             self.worker_exit_code = 1
         finally:
+            if error_message:
+                print(f"\n{error_message}", file=sys.stderr)
             self.call_from_thread(self.exit, self.worker_exit_code)
 
     def on_key(self, event: events.Key) -> None:
