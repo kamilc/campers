@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -179,46 +180,76 @@ class MutagenManager:
         if not re.match(r"^[\w.-]+$", host):
             raise ValueError(f"Invalid host: {host}")
 
-        local = str(Path(local_path).expanduser())
+        local = str(Path(local_path).expanduser().resolve())
         remote = f"{username}@{host}:{remote_path}"
 
         cmd.append(local)
         cmd.append(remote)
 
-        env = os.environ.copy()
-
         key_path = str(Path(key_file).expanduser())
+
+        ssh_add_path = shutil.which("ssh-add")
+        if not ssh_add_path:
+            raise RuntimeError(
+                "ssh-add not found. Please install OpenSSH or add it to your PATH."
+            )
+
+        with open(key_path, "r") as f:
+            key_content = f.read()
 
         if ssh_wrapper_dir is None:
             ssh_wrapper_dir = tempfile.gettempdir()
 
-        ssh_wrapper_path = os.path.join(ssh_wrapper_dir, f"mutagen-ssh-{session_name}")
-        ssh_wrapper_content = f"""#!/bin/sh
-exec ssh -i {shlex.quote(key_path)} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$@"
-"""
+        temp_key_path = os.path.join(ssh_wrapper_dir, f"moondock-key-{session_name}.pem")
+        with open(temp_key_path, "w") as f:
+            f.write(key_content)
+        os.chmod(temp_key_path, 0o600)
 
-        with open(ssh_wrapper_path, 'w') as f:
-            f.write(ssh_wrapper_content)
-        os.chmod(ssh_wrapper_path, 0o755)
+        logger.debug("Adding SSH key to ssh-agent: %s", temp_key_path)
+        result = subprocess.run(
+            [ssh_add_path, temp_key_path],
+            capture_output=True,
+            text=True,
+        )
 
-        env["MUTAGEN_SSH_PATH"] = os.path.dirname(ssh_wrapper_path)
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout
+            raise RuntimeError(
+                f"Failed to add SSH key to ssh-agent: {error_msg}\n"
+                "You may need to start ssh-agent first with: eval $(ssh-agent)"
+            )
 
-        ssh_link = os.path.join(os.path.dirname(ssh_wrapper_path), "ssh")
-        if os.path.exists(ssh_link):
-            os.unlink(ssh_link)
-        os.symlink(ssh_wrapper_path, ssh_link)
+        logger.debug("SSH key added to agent successfully")
 
-        logger.debug("Created SSH wrapper: %s", ssh_wrapper_path)
+        logger.debug("Testing SSH connection...")
+        test_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+                    f"{username}@{host}", "echo", "SSH_OK"]
+        try:
+            test_result = subprocess.run(
+                test_cmd, capture_output=True, text=True, timeout=30
+            )
+            if test_result.returncode == 0 and "SSH_OK" in test_result.stdout:
+                logger.debug("SSH test successful")
+            else:
+                logger.warning("SSH test failed: %s", test_result.stderr)
+        except subprocess.TimeoutExpired:
+            logger.warning("SSH test timed out")
+
         logger.debug("Mutagen create command: %s", " ".join(cmd))
 
         try:
             result = subprocess.run(
-                cmd, capture_output=True, text=True, env=env, timeout=30
+                cmd, capture_output=True, text=True, timeout=120
             )
-        except subprocess.TimeoutExpired:
-            logger.error("Mutagen sync create timed out after 30 seconds")
+        except subprocess.TimeoutExpired as e:
+            logger.error("Mutagen sync create timed out after 120 seconds")
+            if hasattr(e, 'stdout') and e.stdout:
+                logger.error("Partial stdout: %s", e.stdout)
+            if hasattr(e, 'stderr') and e.stderr:
+                logger.error("Partial stderr: %s", e.stderr)
             raise RuntimeError(
-                "Mutagen sync create timed out. The remote instance may not be ready yet."
+                "Mutagen sync create timed out after 120 seconds. "
+                "The remote instance may not be ready or there may be network issues."
             )
 
         logger.debug("Mutagen create exit code: %d", result.returncode)
@@ -271,7 +302,7 @@ exec ssh -i {shlex.quote(key_path)} -o StrictHostKeyChecking=no -o UserKnownHost
         )
 
     def terminate_session(
-        self, session_name: str, ssh_wrapper_dir: str | None = None
+        self, session_name: str, ssh_wrapper_dir: str | None = None, host: str | None = None
     ) -> None:
         """Terminate Mutagen sync session.
 
@@ -280,7 +311,9 @@ exec ssh -i {shlex.quote(key_path)} -o StrictHostKeyChecking=no -o UserKnownHost
         session_name : str
             Name of session to terminate
         ssh_wrapper_dir : str | None
-            Directory where SSH wrapper was created
+            Directory where SSH key was stored
+        host : str | None
+            Not used (kept for backwards compatibility)
         """
         import tempfile
         try:
@@ -295,13 +328,28 @@ exec ssh -i {shlex.quote(key_path)} -o StrictHostKeyChecking=no -o UserKnownHost
         if ssh_wrapper_dir is None:
             ssh_wrapper_dir = tempfile.gettempdir()
 
-        ssh_wrapper_path = os.path.join(ssh_wrapper_dir, f"mutagen-ssh-{session_name}")
-        ssh_link = os.path.join(ssh_wrapper_dir, "ssh")
+        temp_key_path = os.path.join(ssh_wrapper_dir, f"moondock-key-{session_name}.pem")
+
+        ssh_add_path = shutil.which("ssh-add")
+        if ssh_add_path and os.path.exists(temp_key_path):
+            try:
+                logger.debug("Removing SSH key from ssh-agent: %s", temp_key_path)
+                result = subprocess.run(
+                    [ssh_add_path, "-d", temp_key_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    logger.debug("SSH key removed from agent successfully")
+                else:
+                    logger.warning(f"Failed to remove SSH key from agent: {result.stderr}")
+            except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+                logger.warning(f"Error removing SSH key from agent: {e}")
 
         try:
-            if os.path.exists(ssh_wrapper_path):
-                os.unlink(ssh_wrapper_path)
-            if os.path.islink(ssh_link):
-                os.unlink(ssh_link)
+            if os.path.exists(temp_key_path):
+                os.unlink(temp_key_path)
+                logger.debug("Removed temporary key file: %s", temp_key_path)
         except OSError as e:
-            logger.warning(f"Failed to cleanup SSH wrapper: {e}")
+            logger.warning(f"Failed to remove temporary key file: {e}")

@@ -811,9 +811,11 @@ class Moondock:
                         moondock_dir = os.environ.get(
                             "MOONDOCK_DIR", str(Path.home() / ".moondock")
                         )
+                        host = resources_to_clean.get("instance_details", {}).get("public_ip")
                         resources_to_clean["mutagen_mgr"].terminate_session(
                             resources_to_clean["mutagen_session_name"],
                             ssh_wrapper_dir=moondock_dir,
+                            host=host,
                         )
 
                         if self._update_queue is not None:
@@ -1332,8 +1334,8 @@ class Moondock:
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
 
-            logging.debug("Waiting 5 seconds for instance to fully initialize...")
-            time.sleep(5)
+            logging.debug("Waiting 10 seconds for instance to fully initialize...")
+            time.sleep(10)
 
             if update_queue is not None:
                 update_queue.put(
