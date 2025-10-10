@@ -538,7 +538,6 @@ class MoondockTUI(App):
             except Exception as e:
                 logging.error("Failed to update command widget: %s", e)
 
-
     def update_from_instance_details(self, details: dict[str, Any]) -> None:
         """Update widgets from instance details data.
 
@@ -607,7 +606,11 @@ class MoondockTUI(App):
             error_code = e.response.get("Error", {}).get("Code", "")
             error_msg = e.response.get("Error", {}).get("Message", str(e))
 
-            if error_code in ["ExpiredToken", "RequestExpired", "ExpiredTokenException"]:
+            if error_code in [
+                "ExpiredToken",
+                "RequestExpired",
+                "ExpiredTokenException",
+            ]:
                 error_message = (
                     "AWS credentials have expired\n\n"
                     "This usually means:\n"
@@ -674,6 +677,7 @@ class MoondockTUI(App):
                 except Exception:
                     pass
                 import os
+
                 os._exit(130)
             else:
                 self.last_ctrl_c_time = current_time
@@ -685,12 +689,15 @@ class MoondockTUI(App):
             log_widget = self.query_one(Log)
             log_widget.write_line("Shutting down - cleaning up resources...")
             log_widget.write_line("Press Ctrl+C again to force exit")
+            log_widget.refresh()
         except Exception:
             pass
 
         if not self.moondock._cleanup_in_progress:
             root_logger = logging.getLogger()
-            tui_handlers = [h for h in root_logger.handlers if isinstance(h, TuiLogHandler)]
+            tui_handlers = [
+                h for h in root_logger.handlers if isinstance(h, TuiLogHandler)
+            ]
             for handler in tui_handlers:
                 root_logger.removeHandler(handler)
 
@@ -700,6 +707,7 @@ class MoondockTUI(App):
                 try:
                     log_widget = self.query_one(Log)
                     log_widget.write_line(f"Cleanup error: {e}")
+                    log_widget.refresh()
                 except Exception:
                     pass
 
@@ -709,10 +717,11 @@ class MoondockTUI(App):
         try:
             log_widget = self.query_one(Log)
             log_widget.write_line("Cleanup complete, exiting...")
+            log_widget.refresh()
         except Exception:
             pass
 
-        self.exit(130)
+        self.set_timer(0.1, lambda: self.exit(130))
 
 
 class Moondock:
@@ -874,7 +883,9 @@ class Moondock:
                         moondock_dir = os.environ.get(
                             "MOONDOCK_DIR", str(Path.home() / ".moondock")
                         )
-                        host = resources_to_clean.get("instance_details", {}).get("public_ip")
+                        host = resources_to_clean.get("instance_details", {}).get(
+                            "public_ip"
+                        )
                         resources_to_clean["mutagen_mgr"].terminate_session(
                             resources_to_clean["mutagen_session_name"],
                             ssh_wrapper_dir=moondock_dir,
@@ -2510,7 +2521,9 @@ def main() -> None:
             sys.exit(1)
         elif "startup_script" in error_msg and "sync_paths" in error_msg:
             print("Configuration error\n", file=sys.stderr)
-            print("startup_script requires sync_paths to be configured\n", file=sys.stderr)
+            print(
+                "startup_script requires sync_paths to be configured\n", file=sys.stderr
+            )
             print("Add sync_paths to your configuration:", file=sys.stderr)
             print("  sync_paths:", file=sys.stderr)
             print("    - local: ./src", file=sys.stderr)
@@ -2527,14 +2540,21 @@ def main() -> None:
 
         if error_code == "UnauthorizedOperation":
             print("Insufficient IAM permissions\n", file=sys.stderr)
-            print("Your AWS credentials don't have the required permissions.", file=sys.stderr)
+            print(
+                "Your AWS credentials don't have the required permissions.",
+                file=sys.stderr,
+            )
             print("Contact your AWS administrator to grant:", file=sys.stderr)
             print(
-                "  - EC2 permissions (DescribeInstances, RunInstances, TerminateInstances)", file=sys.stderr
+                "  - EC2 permissions (DescribeInstances, RunInstances, TerminateInstances)",
+                file=sys.stderr,
             )
-            print("  - VPC permissions (DescribeVpcs, CreateDefaultVpc)", file=sys.stderr)
             print(
-                "  - Key Pair permissions (CreateKeyPair, DeleteKeyPair, DescribeKeyPairs)", file=sys.stderr
+                "  - VPC permissions (DescribeVpcs, CreateDefaultVpc)", file=sys.stderr
+            )
+            print(
+                "  - Key Pair permissions (CreateKeyPair, DeleteKeyPair, DescribeKeyPairs)",
+                file=sys.stderr,
             )
             print("  - Security Group permissions", file=sys.stderr)
         elif (
@@ -2563,7 +2583,9 @@ def main() -> None:
             print("  - Your session token needs to be refreshed\n", file=sys.stderr)
             print("Fix it:", file=sys.stderr)
             print("  aws sso login           # If using AWS SSO", file=sys.stderr)
-            print("  aws configure           # Re-configure credentials", file=sys.stderr)
+            print(
+                "  aws configure           # Re-configure credentials", file=sys.stderr
+            )
             print("  # Or refresh your temporary credentials", file=sys.stderr)
         else:
             print(f"AWS API error: {error_msg}", file=sys.stderr)
