@@ -186,11 +186,23 @@ class MutagenManager:
 
         key_path = str(Path(key_file).expanduser())
         ssh_command = (
-            f"ssh -i {shlex.quote(key_path)} -o StrictHostKeyChecking=accept-new"
+            f"ssh -i {shlex.quote(key_path)} "
+            f"-o StrictHostKeyChecking=no "
+            f"-o UserKnownHostsFile=/dev/null "
+            f"-o LogLevel=ERROR"
         )
         env["MUTAGEN_SSH_COMMAND"] = ssh_command
 
+        logger.debug("Mutagen SSH command: %s", ssh_command)
+        logger.debug("Mutagen create command: %s", " ".join(cmd))
+
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+        logger.debug("Mutagen create exit code: %d", result.returncode)
+        if result.stdout:
+            logger.debug("Mutagen stdout: %s", result.stdout)
+        if result.stderr:
+            logger.debug("Mutagen stderr: %s", result.stderr)
 
         if result.returncode != 0:
             raise RuntimeError(

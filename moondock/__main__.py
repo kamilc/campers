@@ -1084,6 +1084,7 @@ class Moondock:
         ignore: str | None = None,
         json_output: bool = False,
         plain: bool = False,
+        verbose: bool = False,
     ) -> dict[str, Any] | str:
         """Launch EC2 instance with file sync and command execution.
 
@@ -1170,6 +1171,7 @@ class Moondock:
             include_vcs=include_vcs,
             ignore=ignore,
             json_output=json_output,
+            verbose=verbose,
         )
 
     def _execute_run(
@@ -1185,6 +1187,7 @@ class Moondock:
         json_output: bool = False,
         tui_mode: bool = False,
         update_queue: queue.Queue | None = None,
+        verbose: bool = False,
     ) -> dict[str, Any] | str:
         """Execute moondock run logic.
 
@@ -1225,6 +1228,10 @@ class Moondock:
         ValueError
             If include_vcs is not "true" or "false", or if machine name is invalid
         """
+        if verbose:
+            logging.getLogger().setLevel(logging.DEBUG)
+            logging.debug("Verbose mode enabled")
+
         config = self._config_loader.load_config()
 
         merged_config = self._config_loader.get_machine_config(config, machine_name)
@@ -1321,6 +1328,8 @@ class Moondock:
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
 
+            time.sleep(2)
+
             if update_queue is not None:
                 update_queue.put(
                     {"type": "status_update", "payload": {"status": "running"}}
@@ -1353,6 +1362,12 @@ class Moondock:
                 sync_config = merged_config["sync_paths"][0]
 
                 logging.info("Starting Mutagen file sync...")
+                logging.debug(
+                    "Mutagen sync details - local: %s, remote: %s, host: %s",
+                    sync_config["local"],
+                    sync_config["remote"],
+                    instance_details["public_ip"],
+                )
 
                 if update_queue is not None:
                     update_queue.put(
@@ -1362,6 +1377,7 @@ class Moondock:
                         }
                     )
 
+                logging.debug("Creating Mutagen sync session: %s", mutagen_session_name)
                 mutagen_mgr.create_sync_session(
                     session_name=mutagen_session_name,
                     local_path=sync_config["local"],
@@ -2273,6 +2289,7 @@ class MoondockCLI(Moondock):
         ignore: str | None = None,
         json_output: bool = False,
         plain: bool = False,
+        verbose: bool = False,
     ) -> dict[str, Any] | str:
         """Run Moondock and handle TUI exit codes for CLI context.
 
@@ -2315,6 +2332,7 @@ class MoondockCLI(Moondock):
             ignore=ignore,
             json_output=json_output,
             plain=plain,
+            verbose=verbose,
         )
 
         if isinstance(result, dict) and result.get("tui_mode"):
