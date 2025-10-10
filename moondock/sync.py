@@ -116,6 +116,7 @@ class MutagenManager:
         username: str,
         ignore_patterns: list[str] | None = None,
         include_vcs: bool = False,
+        ssh_wrapper_dir: str | None = None,
     ) -> None:
         """Create Mutagen sync session.
 
@@ -137,12 +138,15 @@ class MutagenManager:
             File patterns to ignore (e.g., *.pyc, __pycache__)
         include_vcs : bool
             Whether to include version control files (.git, etc.)
+        ssh_wrapper_dir : str | None
+            Directory to create SSH wrapper script in
 
         Raises
         ------
         RuntimeError
             If session creation fails
         """
+        import tempfile
         cmd = [
             "mutagen",
             "sync",
@@ -182,21 +186,40 @@ class MutagenManager:
         cmd.append(remote)
 
         env = os.environ.copy()
-        env["SSH_AUTH_SOCK"] = os.environ.get("SSH_AUTH_SOCK", "")
 
         key_path = str(Path(key_file).expanduser())
-        ssh_command = (
-            f"ssh -i {shlex.quote(key_path)} "
-            f"-o StrictHostKeyChecking=no "
-            f"-o UserKnownHostsFile=/dev/null "
-            f"-o LogLevel=ERROR"
-        )
-        env["MUTAGEN_SSH_COMMAND"] = ssh_command
 
-        logger.debug("Mutagen SSH command: %s", ssh_command)
+        if ssh_wrapper_dir is None:
+            ssh_wrapper_dir = tempfile.gettempdir()
+
+        ssh_wrapper_path = os.path.join(ssh_wrapper_dir, f"mutagen-ssh-{session_name}")
+        ssh_wrapper_content = f"""#!/bin/sh
+exec ssh -i {shlex.quote(key_path)} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$@"
+"""
+
+        with open(ssh_wrapper_path, 'w') as f:
+            f.write(ssh_wrapper_content)
+        os.chmod(ssh_wrapper_path, 0o755)
+
+        env["MUTAGEN_SSH_PATH"] = os.path.dirname(ssh_wrapper_path)
+
+        ssh_link = os.path.join(os.path.dirname(ssh_wrapper_path), "ssh")
+        if os.path.exists(ssh_link):
+            os.unlink(ssh_link)
+        os.symlink(ssh_wrapper_path, ssh_link)
+
+        logger.debug("Created SSH wrapper: %s", ssh_wrapper_path)
         logger.debug("Mutagen create command: %s", " ".join(cmd))
 
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, env=env, timeout=30
+            )
+        except subprocess.TimeoutExpired:
+            logger.error("Mutagen sync create timed out after 30 seconds")
+            raise RuntimeError(
+                "Mutagen sync create timed out. The remote instance may not be ready yet."
+            )
 
         logger.debug("Mutagen create exit code: %d", result.returncode)
         if result.stdout:
@@ -247,14 +270,19 @@ class MutagenManager:
             "Initial sync did not complete."
         )
 
-    def terminate_session(self, session_name: str) -> None:
+    def terminate_session(
+        self, session_name: str, ssh_wrapper_dir: str | None = None
+    ) -> None:
         """Terminate Mutagen sync session.
 
         Parameters
         ----------
         session_name : str
             Name of session to terminate
+        ssh_wrapper_dir : str | None
+            Directory where SSH wrapper was created
         """
+        import tempfile
         try:
             subprocess.run(
                 ["mutagen", "sync", "terminate", session_name],
@@ -263,3 +291,17 @@ class MutagenManager:
             )
         except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError) as e:
             logger.warning(f"Failed to terminate Mutagen session {session_name}: {e}")
+
+        if ssh_wrapper_dir is None:
+            ssh_wrapper_dir = tempfile.gettempdir()
+
+        ssh_wrapper_path = os.path.join(ssh_wrapper_dir, f"mutagen-ssh-{session_name}")
+        ssh_link = os.path.join(ssh_wrapper_dir, "ssh")
+
+        try:
+            if os.path.exists(ssh_wrapper_path):
+                os.unlink(ssh_wrapper_path)
+            if os.path.islink(ssh_link):
+                os.unlink(ssh_link)
+        except OSError as e:
+            logger.warning(f"Failed to cleanup SSH wrapper: {e}")

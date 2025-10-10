@@ -808,8 +808,12 @@ class Moondock:
                         )
 
                     try:
+                        moondock_dir = os.environ.get(
+                            "MOONDOCK_DIR", str(Path.home() / ".moondock")
+                        )
                         resources_to_clean["mutagen_mgr"].terminate_session(
-                            resources_to_clean["mutagen_session_name"]
+                            resources_to_clean["mutagen_session_name"],
+                            ssh_wrapper_dir=moondock_dir,
                         )
 
                         if self._update_queue is not None:
@@ -1328,7 +1332,8 @@ class Moondock:
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
 
-            time.sleep(2)
+            logging.debug("Waiting 5 seconds for instance to fully initialize...")
+            time.sleep(5)
 
             if update_queue is not None:
                 update_queue.put(
@@ -1377,6 +1382,10 @@ class Moondock:
                         }
                     )
 
+                moondock_dir = os.environ.get(
+                    "MOONDOCK_DIR", str(Path.home() / ".moondock")
+                )
+
                 logging.debug("Creating Mutagen sync session: %s", mutagen_session_name)
                 mutagen_mgr.create_sync_session(
                     session_name=mutagen_session_name,
@@ -1387,6 +1396,7 @@ class Moondock:
                     username="ubuntu",
                     ignore_patterns=merged_config.get("ignore"),
                     include_vcs=merged_config.get("include_vcs", False),
+                    ssh_wrapper_dir=moondock_dir,
                 )
 
             if merged_config.get("setup_script", "").strip():
