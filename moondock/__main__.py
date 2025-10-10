@@ -369,15 +369,14 @@ class MoondockTUI(App):
         """
         yield Header()
         with Container(id="status-panel"):
-            yield Static("Instance ID: loading...", id="instance-id-widget")
-            yield Static("Instance Type: loading...", id="instance-type-widget")
-            yield Static("Region: loading...", id="region-widget")
+            yield Static("SSH: loading...", id="ssh-widget")
             yield Static("Status: launching...", id="status-widget")
             yield Static("Uptime: 0s", id="uptime-widget")
-            yield Static("Mutagen: Not syncing", id="mutagen-widget")
+            yield Static("Instance Type: loading...", id="instance-type-widget")
+            yield Static("Region: loading...", id="region-widget")
             yield Static("Machine Name: loading...", id="machine-name-widget")
             yield Static("Command: loading...", id="command-widget")
-            yield Static("SSH: loading...", id="ssh-widget")
+            yield Static("Mutagen: Not syncing", id="mutagen-widget")
         with Container(id="log-panel"):
             yield Log()
         yield Footer()
@@ -1358,7 +1357,15 @@ class Moondock:
             logging.info("SSH connection established")
 
             logging.debug("Waiting 10 seconds for instance to fully initialize...")
-            time.sleep(10)
+            for _ in range(10):
+                if self._cleanup_in_progress:
+                    logging.debug("Cleanup in progress during initialization wait")
+                    return {}
+                time.sleep(1)
+
+            if self._cleanup_in_progress:
+                logging.debug("Cleanup in progress, aborting further operations")
+                return {}
 
             if update_queue is not None:
                 update_queue.put(
@@ -1389,6 +1396,10 @@ class Moondock:
                     )
 
             if merged_config.get("sync_paths"):
+                if self._cleanup_in_progress:
+                    logging.debug("Cleanup in progress, aborting Mutagen sync")
+                    return {}
+
                 sync_config = merged_config["sync_paths"][0]
 
                 logging.info("Starting Mutagen file sync...")
@@ -1425,6 +1436,10 @@ class Moondock:
                 )
 
             if merged_config.get("setup_script", "").strip():
+                if self._cleanup_in_progress:
+                    logging.debug("Cleanup in progress, aborting setup_script")
+                    return {}
+
                 logging.info("Running setup_script...")
 
                 setup_with_env = ssh_manager.build_command_with_env(
@@ -1440,6 +1455,10 @@ class Moondock:
                 logging.info("Setup script completed successfully")
 
             if merged_config.get("sync_paths"):
+                if self._cleanup_in_progress:
+                    logging.debug("Cleanup in progress, aborting sync wait")
+                    return {}
+
                 logging.info("Waiting for initial file sync to complete...")
 
                 if update_queue is not None:
@@ -1464,6 +1483,10 @@ class Moondock:
                     )
 
             if merged_config.get("ports"):
+                if self._cleanup_in_progress:
+                    logging.debug("Cleanup in progress, aborting port forwarding")
+                    return {}
+
                 portforward_mgr = PortForwardManager()
 
                 with self._resources_lock:
@@ -1481,6 +1504,10 @@ class Moondock:
                     raise
 
             if merged_config.get("startup_script"):
+                if self._cleanup_in_progress:
+                    logging.debug("Cleanup in progress, aborting startup_script")
+                    return {}
+
                 working_dir = merged_config["sync_paths"][0]["remote"]
 
                 logging.info("Running startup_script...")
@@ -1501,6 +1528,10 @@ class Moondock:
                 logging.info("Startup script completed successfully")
 
             if merged_config.get("command"):
+                if self._cleanup_in_progress:
+                    logging.debug("Cleanup in progress, aborting command execution")
+                    return {}
+
                 cmd = merged_config["command"]
                 logging.info("Executing command: %s", cmd)
 

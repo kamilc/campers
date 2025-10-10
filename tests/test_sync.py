@@ -20,6 +20,35 @@ def mutagen_manager():
     return MutagenManager()
 
 
+@pytest.fixture
+def temp_ssh_setup(tmp_path):
+    """Fixture to create temporary SSH key and directory for testing.
+
+    Parameters
+    ----------
+    tmp_path : pathlib.Path
+        Pytest temporary directory fixture
+
+    Yields
+    ------
+    dict
+        Dictionary with 'key_file' and 'ssh_dir' paths
+    """
+    from pathlib import Path
+
+    temp_key = tmp_path / "test.pem"
+    temp_key.write_text("-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n")
+    temp_key.chmod(0o600)
+
+    temp_ssh_dir = tmp_path / "ssh"
+    temp_ssh_dir.mkdir()
+
+    return {
+        "key_file": str(temp_key),
+        "ssh_dir": str(temp_ssh_dir),
+    }
+
+
 def test_check_mutagen_installed_success(mutagen_manager) -> None:
     """Test successful mutagen installation check."""
     with patch("subprocess.run") as mock_run:
@@ -97,7 +126,7 @@ def test_cleanup_orphaned_session_error_ignored(mutagen_manager) -> None:
         mutagen_manager.cleanup_orphaned_session("moondock-123")
 
 
-def test_create_sync_session_minimal(mutagen_manager) -> None:
+def test_create_sync_session_minimal(mutagen_manager, temp_ssh_setup) -> None:
     """Test creating sync session with minimal configuration."""
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
@@ -107,27 +136,28 @@ def test_create_sync_session_minimal(mutagen_manager) -> None:
             local_path="~/myproject",
             remote_path="~/myproject",
             host="203.0.113.1",
-            key_file="/tmp/test.pem",
+            key_file=temp_ssh_setup["key_file"],
             username="ubuntu",
+            ssh_wrapper_dir=temp_ssh_setup["ssh_dir"],
         )
 
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        cmd = call_args[0][0]
+        assert mock_run.called
+        call_args_list = [call[0][0] for call in mock_run.call_args_list]
 
-        assert cmd[0] == "mutagen"
-        assert cmd[1] == "sync"
-        assert cmd[2] == "create"
-        assert "--name" in cmd
-        assert "moondock-123" in cmd
-        assert "--sync-mode" in cmd
-        assert "two-way-resolved" in cmd
-        assert "--ignore" in cmd
-        assert ".git" in cmd
-        assert ".gitignore" in cmd
+        mutagen_cmd = next((cmd for cmd in call_args_list if cmd[0] == "mutagen"), None)
+        assert mutagen_cmd is not None
+        assert mutagen_cmd[1] == "sync"
+        assert mutagen_cmd[2] == "create"
+        assert "--name" in mutagen_cmd
+        assert "moondock-123" in mutagen_cmd
+        assert "--sync-mode" in mutagen_cmd
+        assert "two-way-resolved" in mutagen_cmd
+        assert "--ignore" in mutagen_cmd
+        assert ".git" in mutagen_cmd
+        assert ".gitignore" in mutagen_cmd
 
 
-def test_create_sync_session_with_ignore_patterns(mutagen_manager) -> None:
+def test_create_sync_session_with_ignore_patterns(mutagen_manager, temp_ssh_setup) -> None:
     """Test creating sync session with ignore patterns."""
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
@@ -137,19 +167,20 @@ def test_create_sync_session_with_ignore_patterns(mutagen_manager) -> None:
             local_path="~/myproject",
             remote_path="~/myproject",
             host="203.0.113.1",
-            key_file="/tmp/test.pem",
+            key_file=temp_ssh_setup["key_file"],
             username="ubuntu",
+            ssh_wrapper_dir=temp_ssh_setup["ssh_dir"],
             ignore_patterns=["*.pyc", "__pycache__"],
         )
 
-        call_args = mock_run.call_args
-        cmd = call_args[0][0]
+        call_args_list = [call[0][0] for call in mock_run.call_args_list]
+        mutagen_cmd = next((cmd for cmd in call_args_list if cmd[0] == "mutagen"), None)
 
-        assert "*.pyc" in cmd
-        assert "__pycache__" in cmd
+        assert "*.pyc" in mutagen_cmd
+        assert "__pycache__" in mutagen_cmd
 
 
-def test_create_sync_session_with_include_vcs(mutagen_manager) -> None:
+def test_create_sync_session_with_include_vcs(mutagen_manager, temp_ssh_setup) -> None:
     """Test creating sync session with VCS included."""
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
@@ -159,19 +190,20 @@ def test_create_sync_session_with_include_vcs(mutagen_manager) -> None:
             local_path="~/myproject",
             remote_path="~/myproject",
             host="203.0.113.1",
-            key_file="/tmp/test.pem",
+            key_file=temp_ssh_setup["key_file"],
             username="ubuntu",
+            ssh_wrapper_dir=temp_ssh_setup["ssh_dir"],
             include_vcs=True,
         )
 
-        call_args = mock_run.call_args
-        cmd = call_args[0][0]
+        call_args_list = [call[0][0] for call in mock_run.call_args_list]
+        mutagen_cmd = next((cmd for cmd in call_args_list if cmd[0] == "mutagen"), None)
 
-        assert ".git" not in cmd
-        assert ".gitignore" not in cmd
+        assert ".git" not in mutagen_cmd
+        assert ".gitignore" not in mutagen_cmd
 
 
-def test_create_sync_session_failure(mutagen_manager) -> None:
+def test_create_sync_session_failure(mutagen_manager, temp_ssh_setup) -> None:
     """Test creating sync session failure."""
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(
@@ -184,8 +216,9 @@ def test_create_sync_session_failure(mutagen_manager) -> None:
                 local_path="~/myproject",
                 remote_path="~/myproject",
                 host="203.0.113.1",
-                key_file="/tmp/test.pem",
+                key_file=temp_ssh_setup["key_file"],
                 username="ubuntu",
+                ssh_wrapper_dir=temp_ssh_setup["ssh_dir"],
             )
 
 
