@@ -378,7 +378,7 @@ class MoondockTUI(App):
             yield Static("Machine Name: loading...", id="machine-name-widget")
             yield Static("Command: loading...", id="command-widget")
             yield Static("Forwarded Ports: loading...", id="ports-widget")
-            yield Static("SSH Connection: loading...", id="ssh-widget")
+            yield Static("SSH: loading...", id="ssh-widget")
         with Container(id="log-panel"):
             yield Log()
         yield Footer()
@@ -575,8 +575,8 @@ class MoondockTUI(App):
 
         if "public_ip" in details and details["public_ip"]:
             try:
-                ssh_string = f"ssh -i {details.get('key_file', 'key.pem')} ubuntu@{details['public_ip']}"
-                self.query_one("#ssh-widget").update(f"SSH Connection: {ssh_string}")
+                ssh_string = f"ssh -o IdentitiesOnly=yes -i {details.get('key_file', 'key.pem')} ubuntu@{details['public_ip']}"
+                self.query_one("#ssh-widget").update(f"SSH: {ssh_string}")
             except Exception as e:
                 logging.error("Failed to update SSH widget: %s", e)
 
@@ -1675,7 +1675,7 @@ class Moondock:
         str
             Full command with directory change and proper escaping
         """
-        return f"cd {shlex.quote(working_dir)} && bash -c {repr(command)}"
+        return f"mkdir -p {shlex.quote(working_dir)} && cd {shlex.quote(working_dir)} && bash -c {repr(command)}"
 
     def _truncate_name(self, name: str) -> str:
         """Truncate machine config name to fit in column width.

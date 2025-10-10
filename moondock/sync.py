@@ -188,64 +188,84 @@ class MutagenManager:
 
         key_path = str(Path(key_file).expanduser())
 
-        ssh_add_path = shutil.which("ssh-add")
-        if not ssh_add_path:
-            raise RuntimeError(
-                "ssh-add not found. Please install OpenSSH or add it to your PATH."
-            )
-
         with open(key_path, "r") as f:
             key_content = f.read()
 
         if ssh_wrapper_dir is None:
             ssh_wrapper_dir = tempfile.gettempdir()
 
-        temp_key_path = os.path.join(ssh_wrapper_dir, f"moondock-key-{session_name}.pem")
+        moondock_ssh_dir = Path(ssh_wrapper_dir)
+        moondock_ssh_dir.mkdir(parents=True, exist_ok=True)
+
+        temp_key_path = moondock_ssh_dir / f"moondock-key-{session_name}.pem"
         with open(temp_key_path, "w") as f:
             f.write(key_content)
         os.chmod(temp_key_path, 0o600)
 
-        logger.debug("Adding SSH key to ssh-agent: %s", temp_key_path)
-        result = subprocess.run(
-            [ssh_add_path, temp_key_path],
-            capture_output=True,
-            text=True,
-        )
+        moondock_config_path = moondock_ssh_dir / "moondock-ssh-config"
 
-        if result.returncode != 0:
-            error_msg = result.stderr or result.stdout
-            raise RuntimeError(
-                f"Failed to add SSH key to ssh-agent: {error_msg}\n"
-                "You may need to start ssh-agent first with: eval $(ssh-agent)"
-            )
+        host_config = f"""
+Host {host}
+    HostName {host}
+    User {username}
+    IdentityFile {temp_key_path}
+    IdentitiesOnly yes
+    StrictHostKeyChecking accept-new
+    ConnectTimeout 30
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+"""
 
-        logger.debug("SSH key added to agent successfully")
+        if moondock_config_path.exists():
+            with open(moondock_config_path, "r") as f:
+                existing_config = f.read()
+            if f"Host {host}" not in existing_config:
+                with open(moondock_config_path, "a") as f:
+                    f.write(host_config)
+                logger.debug("Appended host config to %s", moondock_config_path)
+            else:
+                logger.debug("Host %s already in config", host)
+        else:
+            with open(moondock_config_path, "w") as f:
+                f.write(host_config)
+            logger.debug("Created SSH config at %s", moondock_config_path)
 
-        logger.debug("Adding host to known_hosts...")
+        user_ssh_config = Path.home() / ".ssh" / "config"
+        user_ssh_config.parent.mkdir(parents=True, exist_ok=True)
+        include_line = f"Include {moondock_config_path}"
+
+        if user_ssh_config.exists():
+            with open(user_ssh_config, "r") as f:
+                user_config_content = f.read()
+        else:
+            user_config_content = ""
+
+        if include_line not in user_config_content:
+            with open(user_ssh_config, "w") as f:
+                f.write(f"{include_line}\n\n{user_config_content}")
+            logger.debug("Added Include to %s", user_ssh_config)
+
+        logger.debug("SSH config for host %s:\n%s", host, host_config.strip())
+
         ssh_path = shutil.which("ssh")
         if not ssh_path:
             raise RuntimeError("ssh not found. Please install OpenSSH or add it to your PATH.")
 
-        add_host_cmd = [
-            ssh_path,
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=30",
-            "-o", "StrictHostKeyChecking=accept-new",
-            f"{username}@{host}",
-            "echo", "SSH_OK"
-        ]
+        add_host_cmd = [ssh_path, f"{username}@{host}", "echo", "SSH_OK"]
+        logger.debug("Testing SSH connection: %s", " ".join(add_host_cmd))
+
         try:
             host_result = subprocess.run(
-                add_host_cmd, capture_output=True, text=True, timeout=30
+                add_host_cmd, capture_output=True, text=True, timeout=35
             )
-            if host_result.returncode == 0 and "SSH_OK" in host_result.stdout:
-                logger.debug("Host added to known_hosts successfully")
+            logger.debug("SSH test exit code: %d", host_result.returncode)
+
+            if host_result.returncode == 0:
+                logger.debug("SSH connection verified successfully")
             else:
-                logger.warning("Failed to add host to known_hosts: %s", host_result.stderr)
-                raise RuntimeError(f"SSH connection test failed: {host_result.stderr}")
+                logger.warning("SSH test failed (exit %d): %s", host_result.returncode, host_result.stderr)
         except subprocess.TimeoutExpired:
-            logger.error("SSH connection timed out")
-            raise RuntimeError("SSH connection timed out. The instance may not be ready yet.")
+            logger.warning("SSH connection test timed out")
 
         logger.debug("Mutagen create command: %s", " ".join(cmd))
 
@@ -323,10 +343,11 @@ class MutagenManager:
         session_name : str
             Name of session to terminate
         ssh_wrapper_dir : str | None
-            Directory where SSH key was stored
+            Directory where SSH config was created
         host : str | None
-            Not used (kept for backwards compatibility)
+            Remote host to remove from SSH config
         """
+        import re
         import tempfile
         try:
             subprocess.run(
@@ -340,28 +361,30 @@ class MutagenManager:
         if ssh_wrapper_dir is None:
             ssh_wrapper_dir = tempfile.gettempdir()
 
-        temp_key_path = os.path.join(ssh_wrapper_dir, f"moondock-key-{session_name}.pem")
-
-        ssh_add_path = shutil.which("ssh-add")
-        if ssh_add_path and os.path.exists(temp_key_path):
-            try:
-                logger.debug("Removing SSH key from ssh-agent: %s", temp_key_path)
-                result = subprocess.run(
-                    [ssh_add_path, "-d", temp_key_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if result.returncode == 0:
-                    logger.debug("SSH key removed from agent successfully")
-                else:
-                    logger.warning(f"Failed to remove SSH key from agent: {result.stderr}")
-            except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
-                logger.warning(f"Error removing SSH key from agent: {e}")
+        moondock_ssh_dir = Path(ssh_wrapper_dir)
+        temp_key_path = moondock_ssh_dir / f"moondock-key-{session_name}.pem"
+        moondock_config_path = moondock_ssh_dir / "moondock-ssh-config"
 
         try:
-            if os.path.exists(temp_key_path):
-                os.unlink(temp_key_path)
-                logger.debug("Removed temporary key file: %s", temp_key_path)
+            if temp_key_path.exists():
+                temp_key_path.unlink()
+                logger.debug("Removed SSH key file: %s", temp_key_path)
         except OSError as e:
-            logger.warning(f"Failed to remove temporary key file: {e}")
+            logger.warning(f"Failed to remove SSH key file: {e}")
+
+        if host and moondock_config_path.exists():
+            try:
+                with open(moondock_config_path, "r") as f:
+                    config_content = f.read()
+
+                if f"Host {host}" in config_content:
+                    updated_config = re.sub(
+                        rf"\nHost {re.escape(host)}\n(    [^\n]+\n)*",
+                        "",
+                        config_content
+                    )
+                    with open(moondock_config_path, "w") as f:
+                        f.write(updated_config)
+                    logger.debug("Removed host %s from SSH config", host)
+            except OSError as e:
+                logger.warning(f"Failed to cleanup SSH config: {e}")
