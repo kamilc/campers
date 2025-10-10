@@ -1980,7 +1980,7 @@ class Moondock:
         read_checks = [
             ("DescribeInstances", lambda: ec2_client.describe_instances(MaxResults=5)),
             ("DescribeVpcs", lambda: ec2_client.describe_vpcs(MaxResults=5)),
-            ("DescribeKeyPairs", lambda: ec2_client.describe_key_pairs(MaxResults=5)),
+            ("DescribeKeyPairs", lambda: ec2_client.describe_key_pairs()),
             (
                 "DescribeSecurityGroups",
                 lambda: ec2_client.describe_security_groups(MaxResults=5),
