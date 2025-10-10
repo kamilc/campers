@@ -2383,6 +2383,14 @@ def main() -> None:
             print("Or use different region:", file=sys.stderr)
             print("  moondock run --region us-west-2", file=sys.stderr)
             sys.exit(1)
+        elif "startup_script" in error_msg and "sync_paths" in error_msg:
+            print("Configuration error\n", file=sys.stderr)
+            print("startup_script requires sync_paths to be configured\n", file=sys.stderr)
+            print("Add sync_paths to your configuration:", file=sys.stderr)
+            print("  sync_paths:", file=sys.stderr)
+            print("    - local: ./src", file=sys.stderr)
+            print("      remote: /home/ubuntu/src", file=sys.stderr)
+            sys.exit(1)
         else:
             raise
     except ClientError as e:
