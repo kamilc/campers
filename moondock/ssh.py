@@ -15,6 +15,52 @@ logger = logging.getLogger(__name__)
 MAX_COMMAND_LENGTH = 10000
 
 
+def get_ssh_connection_info(
+    instance_id: str, public_ip: str, key_file: str
+) -> tuple[str, int, str]:
+    """Determine SSH connection host, port, and key file.
+
+    For LocalStack scenarios, redirects to Docker container.
+    For real AWS, uses actual instance public IP.
+
+    Parameters
+    ----------
+    instance_id : str
+        EC2 instance ID
+    public_ip : str
+        Instance public IP address
+    key_file : str
+        Original key file path from instance details
+
+    Returns
+    -------
+    tuple[str, int, str]
+        (host, port, key_file) tuple for SSH connection
+    """
+    if os.environ.get("AWS_ENDPOINT_URL"):
+        port_env_var = f"SSH_PORT_{instance_id}"
+        key_file_env_var = f"SSH_KEY_FILE_{instance_id}"
+
+        max_wait = 30
+        start = time.time()
+
+        while time.time() - start < max_wait:
+            if port_env_var in os.environ and key_file_env_var in os.environ:
+                port = int(os.environ[port_env_var])
+                actual_key_file = os.environ[key_file_env_var]
+                logger.info(
+                    f"LocalStack mode: connecting to localhost:{port} with key {actual_key_file}"
+                )
+                return "localhost", port, actual_key_file
+            time.sleep(0.5)
+
+        logger.warning(
+            f"SSH container not ready for {instance_id} after {max_wait}s, using fallback"
+        )
+
+    return public_ip, 22, key_file
+
+
 class SSHManager:
     """Manages SSH connections and command execution on EC2 instances.
 
@@ -26,6 +72,8 @@ class SSHManager:
         Path to SSH private key file
     username : str
         SSH username (default: ubuntu)
+    port : int
+        SSH port (default: 22)
 
     Attributes
     ----------
@@ -35,11 +83,15 @@ class SSHManager:
         Path to SSH private key file
     username : str
         SSH username
+    port : int
+        SSH port
     client : paramiko.SSHClient | None
         SSH client instance (None when not connected)
     """
 
-    def __init__(self, host: str, key_file: str, username: str = "ubuntu") -> None:
+    def __init__(
+        self, host: str, key_file: str, username: str = "ubuntu", port: int = 22
+    ) -> None:
         """Initialize SSHManager with connection parameters.
 
         Parameters
@@ -50,10 +102,13 @@ class SSHManager:
             Path to SSH private key file
         username : str
             SSH username (default: ubuntu)
+        port : int
+            SSH port (default: 22)
         """
         self.host = host
         self.key_file = key_file
         self.username = username
+        self.port = port
         self.client: paramiko.SSHClient | None = None
 
     def connect(self, max_retries: int = 10) -> None:
@@ -94,7 +149,7 @@ class SSHManager:
 
                 self.client.connect(
                     hostname=self.host,
-                    port=22,
+                    port=self.port,
                     username=self.username,
                     pkey=key,
                     timeout=30,

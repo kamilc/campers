@@ -3,7 +3,6 @@
 import logging
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import time
@@ -148,6 +147,7 @@ class MutagenManager:
             If session creation fails
         """
         import tempfile
+
         cmd = [
             "mutagen",
             "sync",
@@ -249,7 +249,9 @@ Host {host}
 
         ssh_path = shutil.which("ssh")
         if not ssh_path:
-            raise RuntimeError("ssh not found. Please install OpenSSH or add it to your PATH.")
+            raise RuntimeError(
+                "ssh not found. Please install OpenSSH or add it to your PATH."
+            )
 
         add_host_cmd = [ssh_path, f"{username}@{host}", "echo", "SSH_OK"]
         logger.debug("Testing SSH connection: %s", " ".join(add_host_cmd))
@@ -263,21 +265,23 @@ Host {host}
             if host_result.returncode == 0:
                 logger.debug("SSH connection verified successfully")
             else:
-                logger.warning("SSH test failed (exit %d): %s", host_result.returncode, host_result.stderr)
+                logger.warning(
+                    "SSH test failed (exit %d): %s",
+                    host_result.returncode,
+                    host_result.stderr,
+                )
         except subprocess.TimeoutExpired:
             logger.warning("SSH connection test timed out")
 
         logger.debug("Mutagen create command: %s", " ".join(cmd))
 
         try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=120
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         except subprocess.TimeoutExpired as e:
             logger.error("Mutagen sync create timed out after 120 seconds")
-            if hasattr(e, 'stdout') and e.stdout:
+            if hasattr(e, "stdout") and e.stdout:
                 logger.error("Partial stdout: %s", e.stdout)
-            if hasattr(e, 'stderr') and e.stderr:
+            if hasattr(e, "stderr") and e.stderr:
                 logger.error("Partial stderr: %s", e.stderr)
             raise RuntimeError(
                 "Mutagen sync create timed out after 120 seconds. "
@@ -334,7 +338,10 @@ Host {host}
         )
 
     def terminate_session(
-        self, session_name: str, ssh_wrapper_dir: str | None = None, host: str | None = None
+        self,
+        session_name: str,
+        ssh_wrapper_dir: str | None = None,
+        host: str | None = None,
     ) -> None:
         """Terminate Mutagen sync session.
 
@@ -349,6 +356,7 @@ Host {host}
         """
         import re
         import tempfile
+
         try:
             subprocess.run(
                 ["mutagen", "sync", "terminate", session_name],
@@ -381,7 +389,7 @@ Host {host}
                     updated_config = re.sub(
                         rf"\nHost {re.escape(host)}\n(    [^\n]+\n)*",
                         "",
-                        config_content
+                        config_content,
                     )
                     with open(moondock_config_path, "w") as f:
                         f.write(updated_config)

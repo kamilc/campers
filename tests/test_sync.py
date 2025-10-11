@@ -34,10 +34,11 @@ def temp_ssh_setup(tmp_path):
     dict
         Dictionary with 'key_file' and 'ssh_dir' paths
     """
-    from pathlib import Path
 
     temp_key = tmp_path / "test.pem"
-    temp_key.write_text("-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n")
+    temp_key.write_text(
+        "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n"
+    )
     temp_key.chmod(0o600)
 
     temp_ssh_dir = tmp_path / "ssh"
@@ -157,7 +158,9 @@ def test_create_sync_session_minimal(mutagen_manager, temp_ssh_setup) -> None:
         assert ".gitignore" in mutagen_cmd
 
 
-def test_create_sync_session_with_ignore_patterns(mutagen_manager, temp_ssh_setup) -> None:
+def test_create_sync_session_with_ignore_patterns(
+    mutagen_manager, temp_ssh_setup
+) -> None:
     """Test creating sync session with ignore patterns."""
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)

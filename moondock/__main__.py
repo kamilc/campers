@@ -41,7 +41,7 @@ from textual.widgets import Header, Footer, Log, Static
 from moondock.config import ConfigLoader
 from moondock.ec2 import EC2Manager
 from moondock.portforward import PortForwardManager
-from moondock.ssh import SSHManager
+from moondock.ssh import SSHManager, get_ssh_connection_info
 from moondock.sync import MutagenManager
 from moondock.utils import format_time_ago
 
@@ -288,7 +288,14 @@ class TuiLogHandler(logging.Handler):
             Log record to emit
         """
         msg = self.format(record)
-        self.app.call_from_thread(self.log_widget.write_line, msg)
+
+        try:
+            self.app.call_from_thread(self.log_widget.write_line, msg)
+        except RuntimeError:
+            try:
+                self.log_widget.write_line(msg)
+            except Exception:
+                pass
 
 
 class MoondockTUI(App):
@@ -652,6 +659,10 @@ class MoondockTUI(App):
         finally:
             if error_message:
                 print(f"\n{error_message}", file=sys.stderr)
+
+            if not self.moondock._cleanup_in_progress:
+                self.moondock._cleanup_resources()
+
             self.call_from_thread(self.exit, self.worker_exit_code)
 
     def on_key(self, event: events.Key) -> None:
@@ -1400,10 +1411,17 @@ class Moondock:
 
             logging.info("Waiting for SSH to be ready...")
 
+            ssh_host, ssh_port, ssh_key_file = get_ssh_connection_info(
+                instance_details["instance_id"],
+                instance_details["public_ip"],
+                instance_details["key_file"],
+            )
+
             ssh_manager = SSHManager(
-                host=instance_details["public_ip"],
-                key_file=instance_details["key_file"],
+                host=ssh_host,
+                key_file=ssh_key_file,
                 username="ubuntu",
+                port=ssh_port,
             )
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
@@ -1545,11 +1563,18 @@ class Moondock:
                     self._resources["portforward_mgr"] = portforward_mgr
 
                 try:
+                    pf_host, pf_port, pf_key_file = get_ssh_connection_info(
+                        instance_details["instance_id"],
+                        instance_details["public_ip"],
+                        instance_details["key_file"],
+                    )
+
                     portforward_mgr.create_tunnels(
                         ports=merged_config["ports"],
-                        host=instance_details["public_ip"],
-                        key_file=instance_details["key_file"],
+                        host=pf_host,
+                        key_file=pf_key_file,
                         username="ubuntu",
+                        ssh_port=pf_port,
                     )
                 except RuntimeError as e:
                     logging.error("Port forwarding failed: %s", e)

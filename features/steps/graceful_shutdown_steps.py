@@ -90,7 +90,9 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
         lambda: context.cleanup_order.append("portforward")
     )
     context.mock_moondock._resources["mutagen_mgr"].terminate_session.side_effect = (
-        lambda name, ssh_wrapper_dir=None, host=None: context.cleanup_order.append("mutagen")
+        lambda name, ssh_wrapper_dir=None, host=None: context.cleanup_order.append(
+            "mutagen"
+        )
     )
     context.mock_moondock._resources["ssh_manager"].close.side_effect = (
         lambda: context.cleanup_order.append("ssh")
@@ -161,7 +163,9 @@ def step_mutagen_will_fail(context: Context) -> None:
         lambda: context.cleanup_order.append("portforward")
     )
 
-    def mutagen_fail(name: str, ssh_wrapper_dir: str | None = None, host: str | None = None) -> None:
+    def mutagen_fail(
+        name: str, ssh_wrapper_dir: str | None = None, host: str | None = None
+    ) -> None:
         context.cleanup_order.append("mutagen_fail")
         raise RuntimeError("Mutagen error")
 

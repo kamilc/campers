@@ -113,7 +113,30 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         except (RuntimeError, Exception):
             pass
 
-    if "no_credentials" not in scenario.tags:
+    is_localstack_scenario = "localstack" in scenario.tags
+    is_pilot_scenario = "pilot" in scenario.tags
+
+    if is_localstack_scenario or is_pilot_scenario:
+        try:
+            import docker
+
+            docker_client = docker.from_env()
+            orphaned_containers = docker_client.containers.list(
+                all=True, filters={"name": "ssh-"}
+            )
+
+            for container in orphaned_containers:
+                try:
+                    logger.info(
+                        f"Cleaning up orphaned container before scenario: {container.name}"
+                    )
+                    container.remove(force=True)
+                except Exception as e:
+                    logger.debug(f"Error removing container {container.name}: {e}")
+        except Exception as e:
+            logger.debug(f"Error during pre-scenario Docker cleanup: {e}")
+
+    if "no_credentials" not in scenario.tags and not is_localstack_scenario:
         context.mock_aws_env = mock_aws()
         context.mock_aws_env.start()
         os.environ["AWS_ACCESS_KEY_ID"] = "testing"
@@ -121,6 +144,15 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     else:
         context.mock_aws_env = None
+
+    if is_localstack_scenario:
+        os.environ["AWS_ENDPOINT_URL"] = "http://localhost:4566"
+        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+
+    if is_localstack_scenario or is_pilot_scenario:
+        os.environ["MOONDOCK_TEST_MODE"] = "0"
 
     log_handler = LogCapture()
     log_handler.setLevel(logging.DEBUG)
@@ -206,7 +238,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.mock_moondock = context.moondock_module.Moondock()
     context.cleanup_order = []
 
-    if "no_credentials" not in scenario.tags:
+    if "no_credentials" not in scenario.tags and not is_localstack_scenario:
         ec2_client = boto3.client("ec2", region_name="us-east-1")
 
         try:
@@ -239,7 +271,11 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         except Exception as e:
             logger.debug(f"Error during key pair cleanup: {e}")
 
-    if "no_ami" not in scenario.tags and "no_credentials" not in scenario.tags:
+    if (
+        "no_ami" not in scenario.tags
+        and "no_credentials" not in scenario.tags
+        and not is_localstack_scenario
+    ):
         ec2_client.register_image(
             Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
             Description="Ubuntu 22.04 LTS",
@@ -404,6 +440,32 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     cleanup_env_var("MOONDOCK_TUNNEL_FAIL_PORT", logger)
     cleanup_env_var("MOONDOCK_PORT_IN_USE", logger)
     cleanup_env_var("MOONDOCK_SIMULATE_INTERRUPT", logger)
+    cleanup_env_var("AWS_ENDPOINT_URL", logger)
+
+    try:
+        if hasattr(context, "monitor_stop_event") and context.monitor_stop_event:
+            context.monitor_stop_event.set()
+            logger.debug("Signaled LocalStack monitor thread to stop")
+        if hasattr(context, "monitor_thread") and context.monitor_thread:
+            context.monitor_thread.join(timeout=5)
+            logger.debug("LocalStack monitor thread stopped")
+    except Exception as e:
+        logger.debug(f"Error stopping monitor thread: {e}")
+
+    try:
+        if hasattr(context, "container_manager") and context.container_manager:
+            context.container_manager.cleanup_all()
+            logger.debug("Cleaned up all Docker SSH containers")
+    except Exception as e:
+        logger.debug(f"Error cleaning up Docker containers: {e}")
+
+    ssh_port_vars = [k for k in os.environ.keys() if k.startswith("SSH_PORT_")]
+    for var in ssh_port_vars:
+        cleanup_env_var(var, logger)
+
+    ssh_key_file_vars = [k for k in os.environ.keys() if k.startswith("SSH_KEY_FILE_")]
+    for var in ssh_key_file_vars:
+        cleanup_env_var(var, logger)
 
     try:
         if hasattr(context, "saved_env") and context.saved_env:

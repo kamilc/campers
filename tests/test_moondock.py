@@ -501,7 +501,10 @@ def test_build_command_in_directory(moondock_module) -> None:
         "~/myproject", "python app.py"
     )
 
-    assert result == "mkdir -p '~/myproject' && cd '~/myproject' && bash -c 'python app.py'"
+    assert (
+        result
+        == "mkdir -p '~/myproject' && cd '~/myproject' && bash -c 'python app.py'"
+    )
 
 
 def test_build_command_in_directory_with_special_chars(moondock_module) -> None:
@@ -527,7 +530,9 @@ python app.py"""
 
     result = moondock_instance._build_command_in_directory("~/app", multiline_script)
 
-    assert result == f"mkdir -p '~/app' && cd '~/app' && bash -c {repr(multiline_script)}"
+    assert (
+        result == f"mkdir -p '~/app' && cd '~/app' && bash -c {repr(multiline_script)}"
+    )
     assert "source .venv/bin/activate" in result
 
 
@@ -733,6 +738,7 @@ def test_run_with_port_forwarding_creates_tunnels(moondock_module) -> None:
             host="203.0.113.1",
             key_file="/tmp/test.pem",
             username="ubuntu",
+            ssh_port=22,
         )
         mock_portforward_instance.stop_all_tunnels.assert_called_once()
         assert result["instance_id"] == "i-test123"
@@ -1318,8 +1324,8 @@ def test_cleanup_resources_executes_in_correct_order(moondock_module) -> None:
     mock_portforward.stop_all_tunnels.side_effect = lambda: cleanup_order.append(
         "portforward"
     )
-    mock_mutagen.terminate_session.side_effect = lambda name, ssh_wrapper_dir=None, host=None: cleanup_order.append(
-        "mutagen"
+    mock_mutagen.terminate_session.side_effect = (
+        lambda name, ssh_wrapper_dir=None, host=None: cleanup_order.append("mutagen")
     )
     mock_ssh.close.side_effect = lambda: cleanup_order.append("ssh")
     mock_ec2.terminate_instance.side_effect = lambda id: cleanup_order.append("ec2")

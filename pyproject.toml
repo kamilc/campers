@@ -20,6 +20,7 @@ moondock = "moondock.__main__:main"
 
 [dependency-groups]
 dev = [
+    "docker>=7.1.0",
     "moto[ec2]>=5.1.13",
     "ruff>=0.13.2",
 ]

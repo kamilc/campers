@@ -33,3 +33,21 @@ Scenario: Ad-hoc instance tagged without machine name
   Given config file with defaults section
   When I launch instance with options "--instance-type t3.medium"
   Then instance has tag "MachineConfig" with value "ad-hoc"
+
+@poc @localstack @pilot
+Scenario: Launch and terminate instance via TUI with LocalStack
+  Given a config file with machine "test-machine" defined
+  And machine "test-machine" has instance_type "t3.micro"
+  And machine "test-machine" has region "us-east-1"
+  And machine "test-machine" has command "echo 'test'"
+  And LocalStack is healthy and responding
+
+  When I launch the Moondock TUI with the config file
+  And I simulate running the "test-machine" in the TUI
+
+  Then the TUI status widget shows "Status: terminating" within 60 seconds
+  And the TUI log panel contains "Command completed successfully"
+  And the TUI log panel contains "Cleanup completed successfully"
+  And an EC2 instance was created in LocalStack with tag "MachineConfig" equal to "test-machine"
+  And that instance has tag "ManagedBy" equal to "moondock"
+  And that instance is in "terminated" state
