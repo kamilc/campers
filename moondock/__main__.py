@@ -70,6 +70,15 @@ MAX_UPDATES_PER_TICK = 10
 Prevents queue flooding from blocking the UI thread by limiting updates per interval.
 """
 
+TUI_STATUS_UPDATE_PROCESSING_DELAY = 1.0
+"""Delay in seconds to ensure TUI processes status updates before cleanup events.
+
+This prevents a race condition where the TUI exits before rendering the final
+'terminating' status. The delay is 10x the TUI_UPDATE_INTERVAL to ensure at
+least ten update cycles complete before cleanup proceeds. Extended for LocalStack
+compatibility where container operations and event processing take longer.
+"""
+
 CONFIG_TEMPLATE = """# Moondock Configuration File
 # This file defines default settings and named machine configurations.
 # Location: moondock.yaml (or set MOONDOCK_CONFIG environment variable)
@@ -981,6 +990,7 @@ class Moondock:
                                 "payload": {"status": "terminating"},
                             }
                         )
+                        time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
                         self._update_queue.put(
                             {
                                 "type": "cleanup_event",
@@ -1324,7 +1334,6 @@ class Moondock:
             logging.debug("Verbose mode enabled")
 
         config = self._config_loader.load_config()
-
         merged_config = self._config_loader.get_machine_config(config, machine_name)
 
         self._apply_cli_overrides(
@@ -1403,7 +1412,9 @@ class Moondock:
 
                 return instance_details
 
-            if instance_details["public_ip"] is None:
+            if os.environ.get("AWS_ENDPOINT_URL"):
+                pass
+            elif instance_details["public_ip"] is None:
                 raise ValueError(
                     "Instance does not have a public IP address. "
                     "SSH connection requires public networking configuration."
@@ -1425,13 +1436,6 @@ class Moondock:
             )
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
-
-            logging.debug("Waiting 10 seconds for instance to fully initialize...")
-            for _ in range(10):
-                if self._cleanup_in_progress:
-                    logging.debug("Cleanup in progress during initialization wait")
-                    return {}
-                time.sleep(1)
 
             if self._cleanup_in_progress:
                 logging.debug("Cleanup in progress, aborting further operations")
@@ -2464,24 +2468,35 @@ class MoondockCLI(Moondock):
         dict[str, Any] | str
             Instance metadata dict or JSON string (never returns in TUI mode, exits instead)
         """
-        result = super().run(
-            machine_name=machine_name,
-            command=command,
-            instance_type=instance_type,
-            disk_size=disk_size,
-            region=region,
-            port=port,
-            include_vcs=include_vcs,
-            ignore=ignore,
-            json_output=json_output,
-            plain=plain,
-            verbose=verbose,
-        )
+        debug_mode = os.environ.get("MOONDOCK_DEBUG") == "1"
 
-        if isinstance(result, dict) and result.get("tui_mode"):
-            sys.exit(result.get("exit_code", 0))
+        try:
+            result = super().run(
+                machine_name=machine_name,
+                command=command,
+                instance_type=instance_type,
+                disk_size=disk_size,
+                region=region,
+                port=port,
+                include_vcs=include_vcs,
+                ignore=ignore,
+                json_output=json_output,
+                plain=plain,
+                verbose=verbose,
+            )
 
-        return result
+            if isinstance(result, dict) and result.get("tui_mode"):
+                sys.exit(result.get("exit_code", 0))
+
+            return result
+
+        except ValueError as e:
+            if debug_mode:
+                raise
+
+            error_msg = str(e)
+            print(f"Configuration error: {error_msg}", file=sys.stderr)
+            sys.exit(2)
 
 
 def main() -> None:
@@ -2555,7 +2570,8 @@ def main() -> None:
             print("      remote: /home/ubuntu/src", file=sys.stderr)
             sys.exit(1)
         else:
-            raise
+            print(f"Configuration error: {error_msg}", file=sys.stderr)
+            sys.exit(2)
     except ClientError as e:
         if debug_mode:
             raise

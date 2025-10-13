@@ -262,8 +262,9 @@ def step_command_fails_with_value_error(context: Context) -> None:
         assert context.stderr.strip(), (
             "Expected error message in stderr but got nothing"
         )
-        assert "ValueError" in context.stderr, (
-            f"Expected 'ValueError' in stderr but got: {context.stderr}"
+
+        assert "Configuration error" in context.stderr, (
+            f"Expected 'Configuration error' in stderr but got: {context.stderr}"
         )
 
 
@@ -275,9 +276,13 @@ def step_error_message_contains(context: Context, expected: str) -> None:
             f"Expected '{expected}' in error message but got: '{error_msg}'"
         )
     elif hasattr(context, "error"):
-        assert expected in context.error
+        assert expected in context.error, (
+            f"Expected '{expected}' in error but got: {context.error}"
+        )
     elif hasattr(context, "stderr"):
-        assert expected in context.stderr
+        assert expected in context.stderr, (
+            f"Expected '{expected}' in stderr but got: {context.stderr}"
+        )
     else:
         raise AssertionError("No error message found in context")
 

@@ -14,7 +14,7 @@ from features.steps.docker_manager import EC2ContainerManager
 
 logger = logging.getLogger(__name__)
 
-LOCALSTACK_MONITOR_POLL_INTERVAL = 2
+LOCALSTACK_MONITOR_POLL_INTERVAL = 0.5
 
 
 def create_localstack_ec2_client() -> boto3.client:
@@ -96,7 +96,7 @@ def monitor_localstack_instances(
                         "running",
                     ]:
                         logger.info(
-                            f"Detected new instance {instance_id}, creating SSH container"
+                            f"Detected new instance {instance_id} (state: {state}), creating SSH container"
                         )
                         port, key_file = container_manager.create_instance_container(
                             instance_id
@@ -106,6 +106,9 @@ def monitor_localstack_instances(
                         seen_instances.add(instance_id)
                         logger.info(
                             f"Created SSH container for {instance_id} on port {port} with key {key_file}"
+                        )
+                        logger.debug(
+                            f"Environment vars set: SSH_PORT_{instance_id}={port}, SSH_KEY_FILE_{instance_id}={key_file}"
                         )
         except Exception as e:
             logger.error(f"Error monitoring LocalStack instances: {e}", exc_info=True)

@@ -84,7 +84,7 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
             "No config path found. Run 'I launch the Moondock TUI with the config file' step first."
         )
 
-    context.tui_max_wait = 30
+    context.tui_max_wait = 90
     context.tui_machine_name = machine_name
     context.tui_config_path = context.config_path
 
@@ -144,20 +144,40 @@ async def poll_tui_status(app: MoondockTUI, pilot: Any, max_wait: int) -> None:
         Maximum time to wait in seconds
     """
     start_time = time.time()
+    last_log_time = start_time
+    last_status = ""
 
     while time.time() - start_time < max_wait:
         try:
             status_widget = app.query_one("#status-widget")
             status_text = str(status_widget.render())
 
+            if status_text != last_status:
+                logger.info(f"Status changed: {status_text}")
+                last_status = status_text
+
+            elapsed = time.time() - last_log_time
+            if elapsed > 10:
+                logger.info(
+                    f"Still waiting for 'terminating' status... (current: {status_text})"
+                )
+                last_log_time = time.time()
+
             if "terminating" in status_text.lower():
+                logger.info("Found 'terminating' status, pausing for 3 seconds")
+                await pilot.pause(3.0)
                 break
         except NoMatches:
-            pass
-        except Exception:
-            pass
+            logger.debug("Status widget not found")
+        except Exception as e:
+            logger.debug(f"Error querying status widget: {e}")
 
         await pilot.pause(0.5)
+
+    elapsed_total = time.time() - start_time
+    logger.info(
+        f"poll_tui_status completed after {elapsed_total:.1f}s (max_wait={max_wait}s)"
+    )
 
 
 async def poll_for_log_message(
@@ -177,6 +197,7 @@ async def poll_for_log_message(
         Maximum time to wait in seconds
     """
     start_time = time.time()
+    found = False
 
     while time.time() - start_time < max_wait:
         try:
@@ -186,6 +207,7 @@ async def poll_for_log_message(
 
             if expected_message in log_text:
                 logging.info(f"Found expected log message: {expected_message}")
+                found = True
                 break
         except NoMatches:
             pass
@@ -193,6 +215,9 @@ async def poll_for_log_message(
             pass
 
         await pilot.pause(0.5)
+
+    if found:
+        await pilot.pause(1.0)
 
 
 def extract_log_lines(app: MoondockTUI) -> tuple[list[str], str]:
@@ -220,7 +245,7 @@ def extract_log_lines(app: MoondockTUI) -> tuple[list[str], str]:
 
 
 def run_tui_test_with_machine(
-    machine_name: str, config_path: str, max_wait: int = 30
+    machine_name: str, config_path: str, max_wait: int = 90
 ) -> dict[str, Any]:
     """Run the TUI test asynchronously.
 
@@ -255,6 +280,10 @@ def run_tui_test_with_machine(
             async with app.run_test() as pilot:
                 await pilot.pause()
 
+                await poll_tui_status(app, pilot, max_wait)
+                await poll_for_log_message(
+                    app, pilot, "Command completed successfully", max_wait
+                )
                 await poll_for_log_message(
                     app, pilot, "Cleanup completed successfully", max_wait
                 )

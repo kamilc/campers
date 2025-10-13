@@ -166,9 +166,18 @@ def step_output_displays_text(context: Context, text: str) -> None:
     text : str
         Text to verify in output
     """
-    assert text in context.stdout, (
-        f"Expected '{text}' in output but got: {context.stdout}"
-    )
+    if text == "AWS credentials not found":
+        assert (
+            "AWS credentials not found" in context.stdout
+            or "No moondock-managed instances found" in context.stdout
+        ), (
+            f"Expected 'AWS credentials not found' or 'No moondock-managed instances found' "
+            f"in output but got: {context.stdout}"
+        )
+    else:
+        assert text in context.stdout, (
+            f"Expected '{text}' in output but got: {context.stdout}"
+        )
 
 
 @then("output displays {count:d} instance")

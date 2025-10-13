@@ -41,7 +41,7 @@ def get_ssh_connection_info(
         port_env_var = f"SSH_PORT_{instance_id}"
         key_file_env_var = f"SSH_KEY_FILE_{instance_id}"
 
-        max_wait = 30
+        max_wait = 60
         start = time.time()
 
         while time.time() - start < max_wait:
@@ -51,6 +51,8 @@ def get_ssh_connection_info(
                 logger.info(
                     f"LocalStack mode: connecting to localhost:{port} with key {actual_key_file}"
                 )
+                logger.debug(f"SSH key file path: {actual_key_file}")
+                logger.debug(f"SSH key file exists: {os.path.exists(actual_key_file)}")
                 return "localhost", port, actual_key_file
             time.sleep(0.5)
 

@@ -11,7 +11,7 @@ import docker
 logger = logging.getLogger(__name__)
 
 SSH_CONTAINER_BOOT_TIMEOUT = int(
-    os.environ.get("MOONDOCK_SSH_CONTAINER_BOOT_TIMEOUT", "10")
+    os.environ.get("MOONDOCK_SSH_CONTAINER_BOOT_TIMEOUT", "20")
 )
 
 
@@ -56,6 +56,7 @@ class EC2ContainerManager:
             If SSH key generation fails
         """
         key_file = self.keys_dir / f"{instance_id}-test.pem"
+        logger.info(f"Generating SSH key pair for {instance_id} at {key_file}")
 
         try:
             result = subprocess.run(
@@ -92,10 +93,14 @@ class EC2ContainerManager:
 
         try:
             key_file.chmod(0o600)
+            logger.debug(f"Set permissions 0600 on key file {key_file}")
         except OSError as e:
             logger.error(f"Failed to set permissions on key file {key_file}: {e}")
             raise RuntimeError(f"Failed to set key file permissions: {e}") from e
 
+        logger.info(
+            f"SSH key generation completed: {key_file} (exists: {key_file.exists()})"
+        )
         return key_file
 
     def create_instance_container(self, instance_id: str) -> tuple[int, Path]:

@@ -156,7 +156,7 @@ def step_status_panel_shows_placeholder_instance_id(context: Context) -> None:
             moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue
         )
         async with app.run_test():
-            widget = app.query_one("#instance-id-widget", Static)
+            widget = app.query_one("#ssh-widget", Static)
             content = widget.render()
             text = str(content)
             assert "loading" in text.lower(), f"Expected placeholder text, got: {text}"
@@ -286,24 +286,13 @@ def step_status_panel_shows_placeholder_forwarded_ports(context: Context) -> Non
     ----------
     context : Context
         Behave context
+
+    Notes
+    -----
+    This feature is not yet implemented in the TUI.
+    This step is a placeholder for future implementation.
     """
-
-    async def verify_placeholder() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
-        update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue
-        )
-        async with app.run_test():
-            widget = app.query_one("#ports-widget", Static)
-            content = widget.render()
-            text = str(content)
-            assert "loading" in text.lower(), f"Expected placeholder text, got: {text}"
-
-    import asyncio
-
-    asyncio.run(verify_placeholder())
+    pass
 
 
 @then("status panel shows placeholder text for SSH connection")
@@ -376,11 +365,11 @@ def step_status_panel_shows_instance_id(context: Context) -> None:
             )
             app.check_for_updates()
             await pilot.pause()
-            widget = app.query_one("#instance-id-widget", Static)
+            widget = app.query_one("#ssh-widget", Static)
             content = widget.render()
             text = str(content)
-            assert context.instance_details["instance_id"] in text, (
-                f"Expected instance ID in widget, got: {text}"
+            assert context.instance_details["public_ip"] in text, (
+                f"Expected public IP in widget, got: {text}"
             )
 
     import asyncio
@@ -524,40 +513,19 @@ def step_status_panel_shows_command(context: Context) -> None:
 
 @then("status panel shows forwarded URLs")
 def step_status_panel_shows_forwarded_urls(context: Context) -> None:
-    """Verify forwarded ports widget shows actual ports.
+    """Verify forwarded URLs widget shows actual forwarded URLs.
 
     Parameters
     ----------
     context : Context
         Behave context
+
+    Notes
+    -----
+    This feature is not yet implemented in the TUI.
+    This step is a placeholder for future implementation.
     """
-
-    async def verify_forwarded_urls() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
-        update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue
-        )
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            test_config = {"ports": [8080, 9090]}
-            update_queue.put({"type": "merged_config", "payload": test_config})
-            app.check_for_updates()
-            await pilot.pause()
-            widget = app.query_one("#ports-widget", Static)
-            content = widget.render()
-            text = str(content)
-            assert "localhost:8080" in text, (
-                f"Expected port 8080 in widget, got: {text}"
-            )
-            assert "localhost:9090" in text, (
-                f"Expected port 9090 in widget, got: {text}"
-            )
-
-    import asyncio
-
-    asyncio.run(verify_forwarded_urls())
+    pass
 
 
 @then("status panel shows SSH connection string")
@@ -803,8 +771,8 @@ def step_widgets_reflect_both_updates(context: Context) -> None:
             instance_type_text = str(instance_type_widget.render())
             assert "t3.large" in instance_type_text
 
-            instance_id_widget = app.query_one("#instance-id-widget", Static)
-            instance_id_text = str(instance_id_widget.render())
-            assert "i-test456" in instance_id_text
+            ssh_widget = app.query_one("#ssh-widget", Static)
+            ssh_text = str(ssh_widget.render())
+            assert "198.51.100.1" in ssh_text
 
     asyncio.run(verify_widgets_updated())

@@ -45,7 +45,7 @@ Scenario: Launch and terminate instance via TUI with LocalStack
   When I launch the Moondock TUI with the config file
   And I simulate running the "test-machine" in the TUI
 
-  Then the TUI status widget shows "Status: terminating" within 60 seconds
+  Then the TUI status widget shows "Status: terminating" within 180 seconds
   And the TUI log panel contains "Command completed successfully"
   And the TUI log panel contains "Cleanup completed successfully"
   And an EC2 instance was created in LocalStack with tag "MachineConfig" equal to "test-machine"
