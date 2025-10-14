@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shlex
 import subprocess
@@ -9,7 +10,11 @@ import yaml
 from behave import given, then, when
 from behave.runner import Context
 
+from moondock.__main__ import MoondockCLI
+
 JSON_OUTPUT_TRUNCATE_LENGTH = 200
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_machine_exists(context: Context, machine_name: str) -> None:
@@ -153,8 +158,47 @@ def step_defaults_have_instance_type(context: Context, instance_type: str) -> No
     context.config_data["defaults"]["instance_type"] = instance_type
 
 
+def parse_cli_args(args: list[str]) -> tuple[str | None, str | None]:
+    """Parse CLI arguments to extract machine name and command.
+
+    Parameters
+    ----------
+    args : list[str]
+        Parsed command-line arguments (e.g., ["run", "test-box"] or ["run", "-c", "uptime"])
+
+    Returns
+    -------
+    tuple[str | None, str | None]
+        (machine_name, command) tuple, either or both may be None
+    """
+    machine_name = None
+    command = None
+
+    if not args or args[0] != "run":
+        return machine_name, command
+
+    if len(args) > 1 and not args[1].startswith("-"):
+        machine_name = args[1]
+
+    if "-c" in args:
+        c_index = args.index("-c")
+        if c_index + 1 < len(args):
+            command = args[c_index + 1]
+
+    return machine_name, command
+
+
 @when('I run moondock command "{moondock_args}"')
 def step_run_moondock_command(context: Context, moondock_args: str) -> None:
+    """Execute moondock command (subprocess or in-process based on scenario tags).
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    moondock_args : str
+        Command-line arguments for moondock
+    """
     temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
     temp_file.write(yaml.dump(context.config_data))
     temp_file.close()
@@ -164,35 +208,97 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
 
     args = shlex.split(moondock_args)
 
-    if args and args[0] == "run":
-        args.append("--json-output")
-        args.append("True")
-
-    result = subprocess.run(
-        [sys.executable, "-m", "moondock"] + args,
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
+    is_localstack = (
+        hasattr(context, "scenario") and "localstack" in context.scenario.tags
     )
 
-    context.exit_code = result.returncode
-    context.stdout = result.stdout
-    context.stderr = result.stderr
+    if is_localstack:
+        logger.info("LocalStack scenario detected, using in-process execution")
 
-    if result.returncode == 0:
-        if result.stdout.strip():
-            try:
-                context.final_config = json.loads(result.stdout)
-            except json.JSONDecodeError:
-                truncated_output = (
-                    result.stdout[:JSON_OUTPUT_TRUNCATE_LENGTH] + "..."
-                    if len(result.stdout) > JSON_OUTPUT_TRUNCATE_LENGTH
-                    else result.stdout
+        machine_name, command = parse_cli_args(args)
+        logger.debug(f"Parsed args: machine_name={machine_name}, command={command}")
+
+        try:
+            cli = MoondockCLI()
+
+            if args[0] == "run":
+                result = cli.run(
+                    machine_name=machine_name,
+                    command=command,
+                    json_output=True,
+                    plain=True,
                 )
-                context.error = f"Invalid JSON output: {truncated_output}"
-                context.final_config = None
+
+                context.exit_code = 0
+                context.stdout = (
+                    result if isinstance(result, str) else json.dumps(result)
+                )
+                context.stderr = ""
+
+                if isinstance(result, str):
+                    try:
+                        context.final_config = json.loads(result)
+                    except json.JSONDecodeError:
+                        context.final_config = {"raw_output": result}
+                elif isinstance(result, dict):
+                    context.final_config = result
+
+                if context.final_config and "instance_id" in context.final_config:
+                    context.instance_id = context.final_config["instance_id"]
+
+                logger.info(
+                    f"In-process execution succeeded, instance: {context.final_config.get('instance_id', 'unknown')}"
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported command for in-process execution: {args[0]}"
+                )
+
+        except SystemExit as e:
+            logger.warning(f"CLI raised SystemExit with code {e.code}")
+            context.exit_code = e.code if e.code is not None else 1
+            context.stderr = f"Command exited with code {e.code}"
+            context.stdout = ""
+            context.error = f"SystemExit: {e.code}"
+        except Exception as e:
+            logger.error(f"In-process execution failed: {e}", exc_info=True)
+            context.exit_code = 1
+            context.stderr = str(e)
+            context.stdout = ""
+            context.error = str(e)
+
     else:
-        context.error = result.stderr
+        logger.info("Non-LocalStack scenario, using subprocess execution")
+
+        if args and args[0] == "run":
+            args.append("--json-output")
+            args.append("True")
+
+        result = subprocess.run(
+            [sys.executable, "-m", "moondock"] + args,
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+        )
+
+        context.exit_code = result.returncode
+        context.stdout = result.stdout
+        context.stderr = result.stderr
+
+        if result.returncode == 0:
+            if result.stdout.strip():
+                try:
+                    context.final_config = json.loads(result.stdout)
+                except json.JSONDecodeError:
+                    truncated_output = (
+                        result.stdout[:JSON_OUTPUT_TRUNCATE_LENGTH] + "..."
+                        if len(result.stdout) > JSON_OUTPUT_TRUNCATE_LENGTH
+                        else result.stdout
+                    )
+                    context.error = f"Invalid JSON output: {truncated_output}"
+                    context.final_config = None
+        else:
+            context.error = result.stderr
 
 
 @then('final config contains instance_type "{expected}"')

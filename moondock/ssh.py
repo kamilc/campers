@@ -41,23 +41,27 @@ def get_ssh_connection_info(
         port_env_var = f"SSH_PORT_{instance_id}"
         key_file_env_var = f"SSH_KEY_FILE_{instance_id}"
 
-        max_wait = 60
+        max_wait = 120
         start = time.time()
+        logger.info(
+            f"LocalStack mode: waiting for SSH container for {instance_id} (max {max_wait}s)..."
+        )
 
         while time.time() - start < max_wait:
             if port_env_var in os.environ and key_file_env_var in os.environ:
                 port = int(os.environ[port_env_var])
                 actual_key_file = os.environ[key_file_env_var]
+                elapsed = time.time() - start
                 logger.info(
-                    f"LocalStack mode: connecting to localhost:{port} with key {actual_key_file}"
+                    f"LocalStack mode: SSH container ready after {elapsed:.1f}s - connecting to localhost:{port} with key {actual_key_file}"
                 )
                 logger.debug(f"SSH key file path: {actual_key_file}")
                 logger.debug(f"SSH key file exists: {os.path.exists(actual_key_file)}")
                 return "localhost", port, actual_key_file
             time.sleep(0.5)
 
-        logger.warning(
-            f"SSH container not ready for {instance_id} after {max_wait}s, using fallback"
+        logger.error(
+            f"SSH container not ready for {instance_id} after {max_wait}s, using fallback (this will likely fail)"
         )
 
     return public_ip, 22, key_file

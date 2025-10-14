@@ -407,6 +407,7 @@ class MoondockTUI(App):
         tui_handler.setFormatter(StreamFormatter("%(message)s"))
 
         root_logger.handlers = [tui_handler]
+        root_logger.setLevel(logging.INFO)
 
         self.instance_start_time = datetime.now()
         self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
@@ -1387,6 +1388,17 @@ class Moondock:
                 self._resources["ec2_manager"] = ec2_manager
 
             instance_details = ec2_manager.launch_instance(merged_config)
+
+            if os.environ.get("AWS_ENDPOINT_URL"):
+                target_ids_env = os.environ.get("MOONDOCK_TARGET_INSTANCE_IDS", "")
+                existing_ids = [
+                    id.strip() for id in target_ids_env.split(",") if id.strip()
+                ]
+                existing_ids.append(instance_details["instance_id"])
+                os.environ["MOONDOCK_TARGET_INSTANCE_IDS"] = ",".join(existing_ids)
+                logging.info(
+                    f"Added instance {instance_details['instance_id']} to LocalStack target set"
+                )
 
             with self._resources_lock:
                 self._resources["instance_details"] = instance_details

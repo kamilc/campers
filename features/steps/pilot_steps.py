@@ -84,9 +84,13 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
             "No config path found. Run 'I launch the Moondock TUI with the config file' step first."
         )
 
-    context.tui_max_wait = 90
-    context.tui_machine_name = machine_name
-    context.tui_config_path = context.config_path
+    max_wait = 90
+    logger.info(f"=== STARTING TUI TEST FOR MACHINE: {machine_name} ===")
+    result = run_tui_test_with_machine(machine_name, context.config_path, max_wait)
+    context.tui_result = result
+    logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {machine_name} ===")
+    logger.info(f"TUI result status: {result.get('status', 'UNKNOWN')}")
+    logger.info(f"TUI log length: {len(result.get('log_text', ''))} characters")
 
 
 def setup_test_environment(config_path: str) -> dict[str, str | None]:
@@ -131,8 +135,14 @@ def restore_environment(original_values: dict[str, str | None]) -> None:
             os.environ.pop(key, None)
 
 
-async def poll_tui_status(app: MoondockTUI, pilot: Any, max_wait: int) -> None:
-    """Poll TUI until status shows 'terminating'.
+async def poll_tui_with_unified_timeout(
+    app: MoondockTUI, pilot: Any, max_wait: int
+) -> None:
+    """Poll TUI with unified timeout budget for all conditions.
+
+    All conditions share a single timeout budget instead of independent timeouts.
+    This prevents timeout accumulation where sequential polling operations could
+    exceed the scenario timeout limit.
 
     Parameters
     ----------
@@ -141,11 +151,15 @@ async def poll_tui_status(app: MoondockTUI, pilot: Any, max_wait: int) -> None:
     pilot : Any
         Textual Pilot instance for controlling the app
     max_wait : int
-        Maximum time to wait in seconds
+        Maximum time to wait for all conditions in seconds
     """
     start_time = time.time()
     last_log_time = start_time
     last_status = ""
+
+    terminating_found = False
+    command_completed_found = False
+    cleanup_completed_found = False
 
     while time.time() - start_time < max_wait:
         try:
@@ -159,65 +173,54 @@ async def poll_tui_status(app: MoondockTUI, pilot: Any, max_wait: int) -> None:
             elapsed = time.time() - last_log_time
             if elapsed > 10:
                 logger.info(
-                    f"Still waiting for 'terminating' status... (current: {status_text})"
+                    f"Still polling (terminating: {terminating_found}, "
+                    f"command: {command_completed_found}, "
+                    f"cleanup: {cleanup_completed_found})"
                 )
                 last_log_time = time.time()
 
             if "terminating" in status_text.lower():
-                logger.info("Found 'terminating' status, pausing for 3 seconds")
-                await pilot.pause(3.0)
-                break
+                if not terminating_found:
+                    logger.info("Found 'terminating' status")
+                terminating_found = True
         except NoMatches:
             logger.debug("Status widget not found")
         except Exception as e:
             logger.debug(f"Error querying status widget: {e}")
 
-        await pilot.pause(0.5)
-
-    elapsed_total = time.time() - start_time
-    logger.info(
-        f"poll_tui_status completed after {elapsed_total:.1f}s (max_wait={max_wait}s)"
-    )
-
-
-async def poll_for_log_message(
-    app: MoondockTUI, pilot: Any, expected_message: str, max_wait: int
-) -> None:
-    """Poll TUI logs until expected message appears.
-
-    Parameters
-    ----------
-    app : MoondockTUI
-        The Moondock TUI application instance
-    pilot : Any
-        Textual Pilot instance for controlling the app
-    expected_message : str
-        Log message to wait for
-    max_wait : int
-        Maximum time to wait in seconds
-    """
-    start_time = time.time()
-    found = False
-
-    while time.time() - start_time < max_wait:
         try:
             log_widget = app.query_one(Log)
             log_lines = [str(line) for line in log_widget.lines]
             log_text = "\n".join(log_lines)
 
-            if expected_message in log_text:
-                logging.info(f"Found expected log message: {expected_message}")
-                found = True
-                break
+            if "Command completed" in log_text:
+                if not command_completed_found:
+                    logger.info("Found command completion message in logs")
+                command_completed_found = True
+
+            if "Cleanup completed successfully" in log_text:
+                if not cleanup_completed_found:
+                    logger.info("Found 'Cleanup completed successfully' in logs")
+                cleanup_completed_found = True
         except NoMatches:
             pass
         except Exception:
             pass
 
+        if terminating_found and command_completed_found and cleanup_completed_found:
+            logger.info("All TUI conditions met")
+            await pilot.pause(3.0)
+            break
+
         await pilot.pause(0.5)
 
-    if found:
-        await pilot.pause(1.0)
+    elapsed = time.time() - start_time
+    logger.info(
+        f"TUI polling completed after {elapsed:.1f}s "
+        f"(terminating: {terminating_found}, "
+        f"command: {command_completed_found}, "
+        f"cleanup: {cleanup_completed_found})"
+    )
 
 
 def extract_log_lines(app: MoondockTUI) -> tuple[list[str], str]:
@@ -247,7 +250,10 @@ def extract_log_lines(app: MoondockTUI) -> tuple[list[str], str]:
 def run_tui_test_with_machine(
     machine_name: str, config_path: str, max_wait: int = 90
 ) -> dict[str, Any]:
-    """Run the TUI test asynchronously.
+    """Run the TUI test asynchronously with unified timeout budget.
+
+    Uses a single unified timeout budget for all polling operations to prevent
+    timeout accumulation that could exceed scenario limits.
 
     Parameters
     ----------
@@ -256,7 +262,7 @@ def run_tui_test_with_machine(
     config_path : str
         Path to the config file
     max_wait : int
-        Maximum time to wait for status change in seconds
+        Maximum time to wait for all conditions in seconds
 
     Returns
     -------
@@ -265,6 +271,8 @@ def run_tui_test_with_machine(
     """
 
     async def run_tui_test() -> dict[str, Any]:
+        logger.info("=== TUI TEST START === (machine: %s)", machine_name)
+
         original_values = setup_test_environment(config_path)
 
         try:
@@ -280,19 +288,21 @@ def run_tui_test_with_machine(
             async with app.run_test() as pilot:
                 await pilot.pause()
 
-                await poll_tui_status(app, pilot, max_wait)
-                await poll_for_log_message(
-                    app, pilot, "Command completed successfully", max_wait
-                )
-                await poll_for_log_message(
-                    app, pilot, "Cleanup completed successfully", max_wait
-                )
+                await poll_tui_with_unified_timeout(app, pilot, max_wait)
 
                 log_lines, log_text = extract_log_lines(app)
                 status_widget = app.query_one("#status-widget")
+                final_status = str(status_widget.render())
+
+                logger.info(
+                    "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
+                    machine_name,
+                    final_status,
+                    len(log_text),
+                )
 
                 return {
-                    "status": str(status_widget.render()),
+                    "status": final_status,
                     "log_lines": log_lines,
                     "log_text": log_text,
                 }
@@ -315,22 +325,12 @@ def step_tui_status_shows(context: Context, expected_status: str, timeout: int) 
     timeout : int
         Timeout in seconds for waiting
     """
-    if not hasattr(context, "tui_machine_name"):
+    if not hasattr(context, "tui_result"):
         raise AssertionError(
-            "No TUI machine name found. Run the TUI simulation step first."
+            "No TUI result found. The TUI simulation step must run first and complete successfully."
         )
 
-    if not hasattr(context, "tui_config_path"):
-        raise AssertionError(
-            "No TUI config path found. Run the TUI simulation step first."
-        )
-
-    result = run_tui_test_with_machine(
-        context.tui_machine_name, context.tui_config_path, timeout
-    )
-    context.tui_result = result
-    logger.info(f"TUI result: {result}")
-
+    result = context.tui_result
     status = result.get("status", "")
     log_text = result.get("log_text", "")
 
@@ -354,7 +354,9 @@ def step_tui_log_contains(context: Context, expected_text: str) -> None:
         Expected text in log panel
     """
     if not hasattr(context, "tui_result"):
-        raise AssertionError("No TUI result found. Run the TUI simulation step first.")
+        raise AssertionError(
+            "No TUI result found. The TUI simulation step must run first and complete successfully."
+        )
 
     log_text = context.tui_result.get("log_text", "")
 
@@ -364,3 +366,29 @@ def step_tui_log_contains(context: Context, expected_text: str) -> None:
         )
 
     logger.info(f"Log contains: {expected_text}")
+
+
+@then('the TUI log panel does not contain "{text}"')
+def step_tui_log_does_not_contain(context: Context, text: str) -> None:
+    """Verify text is NOT in TUI log panel.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    text : str
+        Text that should NOT be in log panel
+    """
+    if not hasattr(context, "tui_result"):
+        raise AssertionError(
+            "No TUI result found. The TUI simulation step must run first and complete successfully."
+        )
+
+    log_text = context.tui_result.get("log_text", "")
+
+    if text in log_text:
+        raise AssertionError(
+            f"Found '{text}' in log (should not be present):\n{log_text}"
+        )
+
+    logger.info(f"Verified log does not contain: {text}")

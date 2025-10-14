@@ -59,31 +59,35 @@ class EC2ContainerManager:
         logger.info(f"Generating SSH key pair for {instance_id} at {key_file}")
 
         try:
+            cmd = [
+                "ssh-keygen",
+                "-t",
+                "rsa",
+                "-b",
+                "2048",
+                "-f",
+                str(key_file),
+                "-N",
+                "",
+                "-C",
+                f"test-key-{instance_id}",
+            ]
+            logger.debug(f"Running SSH key generation command: {' '.join(cmd)}")
             result = subprocess.run(
-                [
-                    "ssh-keygen",
-                    "-t",
-                    "rsa",
-                    "-b",
-                    "2048",
-                    "-f",
-                    str(key_file),
-                    "-N",
-                    "",
-                    "-C",
-                    f"test-key-{instance_id}",
-                ],
+                cmd,
                 check=True,
                 capture_output=True,
                 text=True,
             )
-            logger.debug(f"SSH key generation output: {result.stdout}")
+            logger.debug(f"SSH key generation stdout: {result.stdout}")
+            logger.debug(f"SSH key generation stderr: {result.stderr}")
         except subprocess.CalledProcessError as e:
-            logger.error(
-                f"SSH key generation failed with exit code {e.returncode}: {e.stderr}"
-            )
+            logger.error(f"SSH key generation failed with exit code {e.returncode}")
+            logger.error(f"stdout: {e.stdout}")
+            logger.error(f"stderr: {e.stderr}")
+            logger.error(f"command: {e.cmd}")
             raise RuntimeError(
-                f"Failed to generate SSH key for {instance_id}: {e.stderr}"
+                f"Failed to generate SSH key for {instance_id}: stdout={e.stdout}, stderr={e.stderr}"
             ) from e
         except FileNotFoundError as e:
             logger.error("ssh-keygen command not found in PATH")
@@ -142,14 +146,24 @@ class EC2ContainerManager:
         self.instance_map[instance_id] = (container, port, key_file)
 
         logger.info(
-            f"Waiting {SSH_CONTAINER_BOOT_TIMEOUT}s for SSH container to boot..."
+            f"Polling container status for up to {SSH_CONTAINER_BOOT_TIMEOUT}s..."
         )
-        time.sleep(SSH_CONTAINER_BOOT_TIMEOUT)
+        start_time = time.time()
 
-        container.reload()
-        if container.status != "running":
-            raise RuntimeError(
-                f"SSH container {container.name} failed to reach running state (status: {container.status})"
+        while time.time() - start_time < SSH_CONTAINER_BOOT_TIMEOUT:
+            container.reload()
+
+            if container.status == "running":
+                elapsed = time.time() - start_time
+                logger.info(
+                    f"Container {container.short_id} ready after {elapsed:.1f}s"
+                )
+                break
+            time.sleep(0.5)
+        else:
+            container.reload()
+            raise TimeoutError(
+                f"Container {container.short_id} not ready after {SSH_CONTAINER_BOOT_TIMEOUT}s (status: {container.status})"
             )
 
         logger.info(
