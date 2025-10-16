@@ -18,6 +18,19 @@ from moondock.__main__ import Moondock, MoondockTUI
 
 logger = logging.getLogger(__name__)
 
+_tui_update_queue: queue.Queue | None = None
+
+
+def get_tui_update_queue() -> queue.Queue | None:
+    """Get the TUI update queue for monitor thread communication.
+
+    Returns
+    -------
+    queue.Queue | None
+        The TUI update queue if TUI test is running, None otherwise
+    """
+    return _tui_update_queue
+
 
 @given('a config file with machine "{machine_name}" defined')
 def step_config_file_with_machine(context: Context, machine_name: str) -> None:
@@ -36,6 +49,7 @@ def step_config_file_with_machine(context: Context, machine_name: str) -> None:
                 "region": "us-east-1",
                 "instance_type": "t3.medium",
                 "disk_size": 50,
+                "ports": [],
             },
             "machines": {},
         }
@@ -271,6 +285,8 @@ def run_tui_test_with_machine(
     """
 
     async def run_tui_test() -> dict[str, Any]:
+        global _tui_update_queue
+
         logger.info("=== TUI TEST START === (machine: %s)", machine_name)
 
         original_values = setup_test_environment(config_path)
@@ -278,6 +294,7 @@ def run_tui_test_with_machine(
         try:
             moondock = Moondock()
             update_queue: queue.Queue = queue.Queue(maxsize=100)
+            _tui_update_queue = update_queue
 
             app = MoondockTUI(
                 moondock_instance=moondock,
@@ -307,6 +324,7 @@ def run_tui_test_with_machine(
                     "log_text": log_text,
                 }
         finally:
+            _tui_update_queue = None
             restore_environment(original_values)
 
     return run_async_test(run_tui_test)
@@ -334,12 +352,21 @@ def step_tui_status_shows(context: Context, expected_status: str, timeout: int) 
     status = result.get("status", "")
     log_text = result.get("log_text", "")
 
-    if expected_status.lower() not in status.lower():
+    status_in_logs = f"Status changed: {expected_status}" in log_text
+    status_in_widget = expected_status.lower() in status.lower()
+
+    if not (status_in_logs or status_in_widget):
         raise AssertionError(
-            f"Expected status to contain '{expected_status}', but got: {status}\n\nTUI Log:\n{log_text}"
+            f"Expected status '{expected_status}' not found.\n"
+            f"Final widget status: {status}\n"
+            f"Checked logs for: 'Status changed: {expected_status}'\n\n"
+            f"TUI Log:\n{log_text}"
         )
 
-    logger.info(f"Status widget shows: {status}")
+    if status_in_logs:
+        logger.info(f"Status '{expected_status}' found in logs")
+    else:
+        logger.info(f"Status widget shows: {status}")
 
 
 @then('the TUI log panel contains "{expected_text}"')

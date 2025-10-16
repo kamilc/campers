@@ -2,6 +2,7 @@
 
 import logging
 import os
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -10,9 +11,27 @@ import docker
 
 logger = logging.getLogger(__name__)
 
-SSH_CONTAINER_BOOT_TIMEOUT = int(
+SSH_CONTAINER_BOOT_BASE_TIMEOUT = int(
     os.environ.get("MOONDOCK_SSH_CONTAINER_BOOT_TIMEOUT", "20")
 )
+
+
+def get_ssh_container_boot_timeout() -> int:
+    """Calculate SSH container boot timeout including delay and initialization.
+
+    Returns
+    -------
+    int
+        Total timeout in seconds
+    """
+    base = SSH_CONTAINER_BOOT_BASE_TIMEOUT
+    delay = int(os.environ.get("MOONDOCK_SSH_DELAY_SECONDS", "0"))
+    buffer_for_init = 5
+    total = base + delay + buffer_for_init
+    logger.debug(
+        f"SSH boot timeout: {total}s (base={base}s, delay={delay}s, buffer={buffer_for_init}s)"
+    )
+    return total
 
 
 class EC2ContainerManager:
@@ -37,6 +56,39 @@ class EC2ContainerManager:
         self.keys_dir = Path(moondock_dir) / "keys"
         self.keys_dir.mkdir(parents=True, exist_ok=True)
 
+    def is_ssh_server_ready(self, port: int, max_attempts: int = 5) -> bool:
+        """Check if SSH server is accepting connections on the container port.
+
+        Parameters
+        ----------
+        port : int
+            SSH port to check
+        max_attempts : int
+            Number of connection attempts (default: 5)
+
+        Returns
+        -------
+        bool
+            True if SSH server is responding, False otherwise
+        """
+
+        for attempt in range(max_attempts):
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1)
+                result = sock.connect_ex(("localhost", port))
+                sock.close()
+
+                if result == 0:
+                    logger.debug(
+                        f"SSH server ready on port {port} (attempt {attempt + 1})"
+                    )
+                    return True
+            except Exception as e:
+                logger.debug(f"SSH health check failed (attempt {attempt + 1}): {e}")
+
+        return False
+
     def generate_ssh_key(self, instance_id: str) -> Path:
         """Generate SSH key pair for container.
 
@@ -56,6 +108,19 @@ class EC2ContainerManager:
             If SSH key generation fails
         """
         key_file = self.keys_dir / f"{instance_id}-test.pem"
+        pub_key_file = Path(str(key_file) + ".pub")
+
+        if key_file.exists() or pub_key_file.exists():
+            logger.warning(
+                f"Key files already exist for {instance_id}, cleaning up before regeneration"
+            )
+            if key_file.exists():
+                key_file.unlink()
+                logger.debug(f"Removed old private key: {key_file}")
+            if pub_key_file.exists():
+                pub_key_file.unlink()
+                logger.debug(f"Removed old public key: {pub_key_file}")
+
         logger.info(f"Generating SSH key pair for {instance_id} at {key_file}")
 
         try:
@@ -107,7 +172,7 @@ class EC2ContainerManager:
         )
         return key_file
 
-    def create_instance_container(self, instance_id: str) -> tuple[int, Path]:
+    def create_instance_container(self, instance_id: str) -> tuple[int | None, Path]:
         """Spin up SSH container for EC2 instance.
 
         Parameters
@@ -117,60 +182,151 @@ class EC2ContainerManager:
 
         Returns
         -------
-        tuple[int, Path]
-            (port, key_file_path) where port is SSH port and key_file_path is the private key
+        tuple[int | None, Path]
+            (port, key_file_path) where port is SSH port (or None if blocked) and key_file_path is the private key
         """
-        port = self.next_port
-        self.next_port += 1
+        logger.debug(f"Starting create_instance_container for {instance_id}")
+        logger.debug(
+            f"Checking SSH delay env var: MOONDOCK_SSH_DELAY_SECONDS={os.environ.get('MOONDOCK_SSH_DELAY_SECONDS', 'not set')}"
+        )
+        logger.debug(
+            f"Checking SSH block env var: MOONDOCK_SSH_BLOCK_CONNECTIONS={os.environ.get('MOONDOCK_SSH_BLOCK_CONNECTIONS', 'not set')}"
+        )
 
-        logger.info(f"Creating SSH container for instance {instance_id} on port {port}")
+        ssh_delay = int(os.environ.get("MOONDOCK_SSH_DELAY_SECONDS", "0"))
+        block_ssh = os.environ.get("MOONDOCK_SSH_BLOCK_CONNECTIONS") == "1"
+
+        if block_ssh:
+            ports = {}
+            logger.info(
+                f"Creating SSH container for {instance_id} WITHOUT port mapping (blocked)"
+            )
+        else:
+            port = self.next_port
+            self.next_port += 1
+            ports = {"2222/tcp": port}
+            logger.info(f"Creating SSH container for {instance_id} on port {port}")
 
         key_file = self.generate_ssh_key(instance_id)
         pub_key_file = Path(str(key_file) + ".pub")
 
         pub_key_content = pub_key_file.read_text().strip()
 
-        container = self.client.containers.run(
-            "linuxserver/openssh-server",
-            name=f"ssh-{instance_id}",
-            detach=True,
-            remove=True,
-            environment={
-                "PUBLIC_KEY": pub_key_content,
-                "USER_NAME": "ubuntu",
-                "SUDO_ACCESS": "true",
-            },
-            ports={"2222/tcp": port},
-        )
+        environment = {
+            "PUBLIC_KEY": pub_key_content,
+            "USER_NAME": "ubuntu",
+            "SUDO_ACCESS": "true",
+        }
 
-        self.instance_map[instance_id] = (container, port, key_file)
+        if ssh_delay > 0:
+            delay_script = f"""#!/bin/bash
+echo "Delaying SSH startup by {ssh_delay} seconds..."
+sleep {ssh_delay}
+exec /init
+"""
+            logger.info(f"SSH container will delay startup by {ssh_delay} seconds")
+            try:
+                logger.debug(
+                    f"About to call containers.run() for {instance_id} with delay"
+                )
+                container = self.client.containers.run(
+                    "linuxserver/openssh-server",
+                    name=f"ssh-{instance_id}",
+                    detach=True,
+                    remove=True,
+                    environment=environment,
+                    ports=ports,
+                    entrypoint="/bin/bash",
+                    command=["-c", delay_script],
+                )
+                logger.debug(
+                    f"Successfully created container {container.id} for {instance_id}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Docker API call failed for {instance_id}: {e}", exc_info=True
+                )
+                raise
+        else:
+            try:
+                logger.debug(f"About to call containers.run() for {instance_id}")
+                container = self.client.containers.run(
+                    "linuxserver/openssh-server",
+                    name=f"ssh-{instance_id}",
+                    detach=True,
+                    remove=True,
+                    environment=environment,
+                    ports=ports,
+                )
+                logger.debug(
+                    f"Successfully created container {container.id} for {instance_id}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Docker API call failed for {instance_id}: {e}", exc_info=True
+                )
+                raise
 
+        if not block_ssh:
+            self.instance_map[instance_id] = (container, port, key_file)
+        else:
+            self.instance_map[instance_id] = (container, None, key_file)
+
+        timeout = get_ssh_container_boot_timeout()
+        ssh_delay = int(os.environ.get("MOONDOCK_SSH_DELAY_SECONDS", "0"))
         logger.info(
-            f"Polling container status for up to {SSH_CONTAINER_BOOT_TIMEOUT}s..."
+            f"Polling container status for up to {timeout}s (delay={ssh_delay}s)..."
         )
         start_time = time.time()
 
-        while time.time() - start_time < SSH_CONTAINER_BOOT_TIMEOUT:
+        container_ready = False
+
+        while time.time() - start_time < timeout:
             container.reload()
 
             if container.status == "running":
-                elapsed = time.time() - start_time
-                logger.info(
-                    f"Container {container.short_id} ready after {elapsed:.1f}s"
+                container_ready = True
+                elapsed_container = time.time() - start_time
+                logger.debug(
+                    f"Container {container.short_id} running after {elapsed_container:.1f}s"
                 )
                 break
             time.sleep(0.5)
-        else:
+
+        if not container_ready:
             container.reload()
             raise TimeoutError(
-                f"Container {container.short_id} not ready after {SSH_CONTAINER_BOOT_TIMEOUT}s (status: {container.status})"
+                f"Container {container.short_id} not ready after {timeout}s (status: {container.status})"
             )
 
-        logger.info(
-            f"SSH container {container.name} ready at localhost:{port} with key {key_file}"
-        )
+        if not block_ssh:
+            ssh_health_start = time.time()
+            logger.info(f"Waiting for SSH server to be ready on localhost:{port}...")
 
-        return port, key_file
+            while time.time() - start_time < timeout:
+                if self.is_ssh_server_ready(port):
+                    ssh_ready_elapsed = time.time() - ssh_health_start
+                    total_elapsed = time.time() - start_time
+                    logger.info(
+                        f"SSH server ready on port {port} after {ssh_ready_elapsed:.1f}s (total: {total_elapsed:.1f}s)"
+                    )
+                    break
+                time.sleep(0.5)
+            else:
+                raise TimeoutError(
+                    f"SSH server not responding on port {port} after {timeout}s"
+                )
+
+        if not block_ssh:
+            logger.info(
+                f"SSH container {container.name} ready at localhost:{port} with key {key_file}"
+            )
+            return port, key_file
+        else:
+            logger.info(
+                f"SSH container {container.name} ready (blocked - no port mapping) with key {key_file}"
+            )
+            return None, key_file
 
     def get_instance_ssh_config(
         self, instance_id: str

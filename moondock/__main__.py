@@ -476,8 +476,10 @@ class MoondockTUI(App):
             Status update payload containing 'status' field
         """
         if "status" in payload:
+            status = payload["status"]
+
             try:
-                self.query_one("#status-widget").update(f"Status: {payload['status']}")
+                self.query_one("#status-widget").update(f"Status: {status}")
             except Exception as e:
                 logging.error("Failed to update status widget: %s", e)
 
@@ -668,7 +670,13 @@ class MoondockTUI(App):
             self.worker_exit_code = 1
         finally:
             if error_message:
-                print(f"\n{error_message}", file=sys.stderr)
+                logging.error(error_message)
+
+                if self._update_queue is not None:
+                    self._update_queue.put(
+                        {"type": "status_update", "payload": {"status": "error"}}
+                    )
+                    time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
 
             if not self.moondock._cleanup_in_progress:
                 self.moondock._cleanup_resources()
@@ -1389,17 +1397,6 @@ class Moondock:
 
             instance_details = ec2_manager.launch_instance(merged_config)
 
-            if os.environ.get("AWS_ENDPOINT_URL"):
-                target_ids_env = os.environ.get("MOONDOCK_TARGET_INSTANCE_IDS", "")
-                existing_ids = [
-                    id.strip() for id in target_ids_env.split(",") if id.strip()
-                ]
-                existing_ids.append(instance_details["instance_id"])
-                os.environ["MOONDOCK_TARGET_INSTANCE_IDS"] = ",".join(existing_ids)
-                logging.info(
-                    f"Added instance {instance_details['instance_id']} to LocalStack target set"
-                )
-
             with self._resources_lock:
                 self._resources["instance_details"] = instance_details
 
@@ -1425,7 +1422,27 @@ class Moondock:
                 return instance_details
 
             if os.environ.get("AWS_ENDPOINT_URL"):
-                pass
+                target_ids_env = os.environ.get("MOONDOCK_TARGET_INSTANCE_IDS", "")
+                existing_ids = [
+                    id.strip() for id in target_ids_env.split(",") if id.strip()
+                ]
+                if instance_details["instance_id"] not in existing_ids:
+                    existing_ids.append(instance_details["instance_id"])
+                    new_target_ids = ",".join(existing_ids)
+                    os.environ["MOONDOCK_TARGET_INSTANCE_IDS"] = new_target_ids
+                    logging.info(
+                        f"Registered instance {instance_details['instance_id']} with monitor thread"
+                    )
+
+                    if update_queue is not None:
+                        update_queue.put(
+                            {
+                                "type": "instance_registered",
+                                "payload": {
+                                    "instance_id": instance_details["instance_id"]
+                                },
+                            }
+                        )
             elif instance_details["public_ip"] is None:
                 raise ValueError(
                     "Instance does not have a public IP address. "
@@ -1446,8 +1463,21 @@ class Moondock:
                 username="ubuntu",
                 port=ssh_port,
             )
-            ssh_manager.connect(max_retries=10)
-            logging.info("SSH connection established")
+
+            try:
+                ssh_manager.connect(max_retries=10)
+                logging.info("SSH connection established")
+            except ConnectionError as e:
+                error_msg = (
+                    f"Failed to establish SSH connection after 10 attempts: {str(e)}"
+                )
+                logging.error(error_msg)
+
+                if update_queue is not None and os.environ.get("AWS_ENDPOINT_URL"):
+                    update_queue.put(
+                        {"type": "status_update", "payload": {"status": "error"}}
+                    )
+                raise
 
             if self._cleanup_in_progress:
                 logging.debug("Cleanup in progress, aborting further operations")

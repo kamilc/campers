@@ -312,7 +312,7 @@ class TestConfigLoader:
         assert merged["instance_type"] == "t3.medium"
         assert merged["disk_size"] == 50
         assert merged["os_flavor"] == "ubuntu-22.04"
-        assert merged["ports"] == [8888]
+        assert merged["ports"] == []
         assert merged["include_vcs"] is False
 
     def test_get_machine_config_env_filter_list_replacement(self) -> None:

@@ -2,6 +2,7 @@
 
 import logging
 import os
+import queue
 import threading
 import time
 
@@ -11,6 +12,7 @@ from behave import given, then
 from behave.runner import Context
 
 from features.steps.docker_manager import EC2ContainerManager
+from features.steps.pilot_steps import get_tui_update_queue
 
 logger = logging.getLogger(__name__)
 
@@ -105,30 +107,75 @@ def monitor_localstack_instances(
     container_manager: EC2ContainerManager,
     stop_event: threading.Event,
     context: Context,
+    update_queue: queue.Queue | None = None,
 ) -> None:
     """Monitor LocalStack for new EC2 instances and create SSH containers.
+
+    This monitor continuously polls LocalStack EC2 API for instances matching
+    the MOONDOCK_TARGET_INSTANCE_IDS environment variable. When a target instance
+    reaches 'pending' or 'running' state, it provisions a corresponding SSH container.
 
     Parameters
     ----------
     container_manager : EC2ContainerManager
-        Container manager instance
+        Container manager instance for creating Docker containers
     stop_event : threading.Event
         Event to signal thread should stop
     context : Context
-        Behave context object (for error reporting)
+        Behave context object for error reporting
+    update_queue : queue.Queue | None
+        Optional queue for receiving instance registrations from TUI (default: None)
     """
     logger.info("Monitor thread started and beginning to poll")
     ec2_client = create_localstack_ec2_client()
     seen_instances = set()
+    target_instance_ids_from_queue = set()
 
     while not stop_event.is_set():
         try:
+            if update_queue is not None:
+                try:
+                    while True:
+                        msg = update_queue.get_nowait()
+                        if msg.get("type") == "instance_registered":
+                            instance_id = msg["payload"]["instance_id"]
+                            target_instance_ids_from_queue.add(instance_id)
+                            logger.info(
+                                f"Monitor: Received instance {instance_id} from queue"
+                            )
+                except queue.Empty:
+                    pass
+
             target_ids_env = os.environ.get("MOONDOCK_TARGET_INSTANCE_IDS", "")
             target_instance_ids = {
                 id.strip() for id in target_ids_env.split(",") if id.strip()
             }
+            target_instance_ids.update(target_instance_ids_from_queue)
 
-            response = ec2_client.describe_instances()
+            if target_instance_ids:
+                logger.debug(
+                    f"Monitor thread: Target IDs from env: '{target_ids_env}' -> parsed: {target_instance_ids}"
+                )
+
+            if target_instance_ids:
+                try:
+                    response = ec2_client.describe_instances(
+                        InstanceIds=list(target_instance_ids)
+                    )
+                except Exception as e:
+                    if "InvalidInstanceID.NotFound" in str(e):
+                        time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
+                        continue
+                    else:
+                        logger.error(
+                            f"Error querying instances: {e}",
+                            exc_info=True,
+                        )
+                        time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
+                        continue
+            else:
+                time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
+                continue
 
             for reservation in response.get("Reservations", []):
                 for instance in reservation.get("Instances", []):
@@ -136,9 +183,6 @@ def monitor_localstack_instances(
                     state = instance["State"]["Name"]
 
                     if instance_id not in target_instance_ids:
-                        logger.debug(
-                            f"Monitor thread: Skipping instance {instance_id} (not in target set)"
-                        )
                         continue
 
                     if instance_id not in seen_instances and state in [
@@ -146,39 +190,51 @@ def monitor_localstack_instances(
                         "running",
                     ]:
                         logger.info(
-                            f"Monitor thread: Detected new instance {instance_id} (state: {state}), creating SSH container"
+                            f"Detected new instance {instance_id} (state: {state}), creating SSH container"
                         )
-                        start_container_create = time.time()
 
                         try:
                             port, key_file = (
                                 container_manager.create_instance_container(instance_id)
                             )
-                            container_create_time = time.time() - start_container_create
-                            logger.info(
-                                f"Monitor thread: Container creation took {container_create_time:.1f}s"
-                            )
 
-                            os.environ[f"SSH_PORT_{instance_id}"] = str(port)
-                            os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(key_file)
-                            seen_instances.add(instance_id)
+                            if port is not None:
+                                os.environ[f"SSH_PORT_{instance_id}"] = str(port)
+                                os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
+                                    key_file
+                                )
+                                os.environ[f"SSH_READY_{instance_id}"] = "1"
+                                seen_instances.add(instance_id)
 
-                            logger.info(
-                                f"Monitor thread: Environment variables SET for {instance_id}: SSH_PORT={port}, SSH_KEY_FILE={key_file}"
-                            )
-                            logger.debug(
-                                f"Monitor thread: Verifying env vars in os.environ: SSH_PORT_{instance_id} in os.environ = {f'SSH_PORT_{instance_id}' in os.environ}"
-                            )
+                                logger.info(
+                                    f"SSH container ready for {instance_id} (port={port})"
+                                )
+                            else:
+                                os.environ[f"SSH_PORT_{instance_id}"] = "65535"
+                                os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
+                                    key_file
+                                )
+                                os.environ[f"SSH_READY_{instance_id}"] = "1"
+                                seen_instances.add(instance_id)
+                                logger.info(
+                                    f"Monitor thread: Container for {instance_id} created WITHOUT port mapping (blocked), setting SSH_PORT to 65535 (unreachable)"
+                                )
                         except Exception as e:
                             logger.error(
                                 f"Monitor thread: Failed to create container for {instance_id}: {e}",
                                 exc_info=True,
                             )
+                            logger.error(f"Instance state was: {state}")
+                            logger.error(f"Instance details: {instance}")
 
+                            os.environ[f"MONITOR_ERROR_{instance_id}"] = str(e)
                             if hasattr(context, "monitor_error"):
                                 context.monitor_error = str(e)
         except Exception as e:
-            logger.error(f"Error monitoring LocalStack instances: {e}", exc_info=True)
+            logger.error(f"Exception in monitor loop: {e}", exc_info=True)
+            import traceback
+
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
 
             if hasattr(context, "monitor_error"):
                 context.monitor_error = str(e)
@@ -202,14 +258,7 @@ def step_localstack_is_healthy(context: Context) -> None:
     ec2_client = create_localstack_ec2_client()
 
     try:
-        response = ec2_client.describe_instances(
-            Filters=[
-                {
-                    "Name": "instance-state-name",
-                    "Values": ["running", "pending", "stopping", "stopped"],
-                }
-            ]
-        )
+        response = ec2_client.describe_instances()
 
         instance_ids = []
         for reservation in response.get("Reservations", []):
@@ -218,10 +267,19 @@ def step_localstack_is_healthy(context: Context) -> None:
 
         if instance_ids:
             logger.info(
-                f"Cleaning {len(instance_ids)} old instances from LocalStack: {instance_ids}"
+                f"Cleaning {len(instance_ids)} old instances from LocalStack (all states): {instance_ids}"
             )
-            ec2_client.terminate_instances(InstanceIds=instance_ids)
-            logger.info("LocalStack cleaned successfully")
+            non_terminated = []
+            for reservation in response.get("Reservations", []):
+                for instance in reservation["Instances"]:
+                    if instance["State"]["Name"] != "terminated":
+                        non_terminated.append(instance["InstanceId"])
+
+            if non_terminated:
+                ec2_client.terminate_instances(InstanceIds=non_terminated)
+                logger.info(f"Terminated {len(non_terminated)} running instances")
+
+            logger.info("LocalStack cleanup completed")
         else:
             logger.info("LocalStack already clean, no instances to terminate")
     except Exception as e:
@@ -229,6 +287,7 @@ def step_localstack_is_healthy(context: Context) -> None:
 
     os.environ["MOONDOCK_TARGET_INSTANCE_IDS"] = ""
     context.target_instance_ids = set()
+    context.monitor_error = None
 
     ec2_client.register_image(
         Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
@@ -240,9 +299,14 @@ def step_localstack_is_healthy(context: Context) -> None:
     logger.info("Registered test Ubuntu AMI in LocalStack")
 
     stop_event = threading.Event()
+
+    tui_queue = get_tui_update_queue()
+    if tui_queue is not None:
+        logger.info("Found TUI update queue, will use for instance registration")
+
     monitor_thread = threading.Thread(
         target=monitor_localstack_instances,
-        args=(context.container_manager, stop_event, context),
+        args=(context.container_manager, stop_event, context, tui_queue),
         daemon=True,
     )
     monitor_thread.start()

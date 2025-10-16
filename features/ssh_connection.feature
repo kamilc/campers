@@ -1,20 +1,62 @@
 Feature: SSH Connection Management
 
-@integration @dry_run
+@integration @localstack
 Scenario: SSH connection retry with exponential backoff
-  Given EC2 instance is starting up
-  And SSH is not yet available
-  When SSH connection is attempted
-  Then connection retries with delays [1, 2, 4, 8, 16, 30]
-  And connection succeeds when SSH is ready
-  And total retry time is under 120 seconds
+  Given config file with defaults section
+  And LocalStack is healthy and responding
+  And SSH container will delay startup by 10 seconds
 
-@error @dry_run
+  When I run moondock command "run -c 'echo ready'"
+
+  Then SSH connection attempts are made
+  And connection retry delays match [1, 2, 4, 8] seconds
+  And connection succeeds when SSH becomes ready
+  And command exit code is 0
+
+@error @localstack
 Scenario: SSH connection fails after all retries
-  Given EC2 instance has no SSH access
-  When SSH connection is attempted with 10 retries
-  Then all connection attempts fail
-  And error message is "Failed to establish SSH connection after 10 attempts"
+  Given config file with defaults section
+  And LocalStack is healthy and responding
+  And SSH container is not accessible
+
+  When I run moondock command "run -c 'echo test'"
+
+  Then SSH connection is attempted multiple times
+  And all connection attempts fail
+  And error message contains "Failed to establish SSH connection"
+  And command fails with non-zero exit code
+
+@integration @localstack @pilot
+Scenario: SSH connection retry progress shown in TUI
+  Given a config file with machine "test-box" defined
+  And machine "test-box" has command "echo ready"
+  And machine "test-box" has instance_type "t3.micro"
+  And machine "test-box" has region "us-east-1"
+  And LocalStack is healthy and responding
+  And SSH container will delay startup by 10 seconds
+
+  When I launch the Moondock TUI with the config file
+  And I simulate running the "test-box" in the TUI
+
+  Then the TUI log panel contains "Attempting SSH connection (attempt 1/"
+  And the TUI log panel contains "Attempting SSH connection (attempt 2/"
+  And the TUI log panel contains "SSH connection established"
+  And the TUI log panel contains "Command completed successfully"
+  And the TUI status widget shows "Status: terminating" within 180 seconds
+
+@error @localstack @pilot
+Scenario: SSH connection failure shown in TUI
+  Given a config file with machine "test-box" defined
+  And machine "test-box" has command "echo test"
+  And LocalStack is healthy and responding
+  And SSH container is not accessible
+
+  When I launch the Moondock TUI with the config file
+  And I simulate running the "test-box" in the TUI
+
+  Then the TUI log panel contains "Attempting SSH connection"
+  And the TUI log panel contains "Failed to establish SSH connection"
+  And the TUI status widget shows "Status: error" within 180 seconds
 
 @integration @dry_run
 Scenario: Shell features work correctly

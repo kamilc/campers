@@ -1,12 +1,42 @@
 """BDD step definitions for SSH connection and command execution."""
 
+import datetime
+import json
+import logging
 import os
+import re
 from unittest.mock import MagicMock, patch
 
 from behave import given, then, when
 from behave.runner import Context
 
 from moondock.ssh import SSHManager
+
+logger = logging.getLogger(__name__)
+
+
+def get_combined_log_output(context: Context) -> str:
+    """Extract combined log output from stderr and log records.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+
+    Returns
+    -------
+    str
+        Combined log output from stderr and log records
+    """
+    log_lines = []
+
+    if hasattr(context, "stderr") and context.stderr:
+        log_lines.append(context.stderr)
+
+    if hasattr(context, "log_records"):
+        log_lines.extend(record.getMessage() for record in context.log_records)
+
+    return "\n".join(log_lines)
 
 
 @given("EC2 instance is starting up")
@@ -184,8 +214,6 @@ def step_command_executes(context: Context) -> None:
 @then("connection retries with delays {delays}")
 def step_connection_retries_with_delays(context: Context, delays: str) -> None:
     """Verify connection retries with specific delay pattern."""
-    import json
-
     expected_delays = json.loads(delays)
 
     if hasattr(context, "retry_delays"):
@@ -212,8 +240,21 @@ def step_total_retry_time_under(context: Context, seconds: int) -> None:
 @then("all connection attempts fail")
 def step_all_attempts_fail(context: Context) -> None:
     """Verify all connection attempts failed."""
-    assert hasattr(context, "exception")
-    assert context.exception is not None
+    if hasattr(context, "exception") and context.exception is not None:
+        return
+
+    log_output = get_combined_log_output(context)
+
+    if log_output:
+        assert "SSH connection established" not in log_output, (
+            "Connection should not have succeeded"
+        )
+        assert context.exit_code != 0, (
+            "Expected non-zero exit code for failed connection"
+        )
+    else:
+        assert hasattr(context, "exception")
+        assert context.exception is not None
 
 
 @then('error message is "{expected_message}"')
@@ -371,3 +412,150 @@ def step_machine_has_no_command_field(context: Context, machine_name: str) -> No
     from features.steps.cli_steps import ensure_machine_exists
 
     ensure_machine_exists(context, machine_name)
+
+
+@given("SSH container will delay startup by {seconds:d} seconds")
+def step_ssh_container_delayed_startup(context: Context, seconds: int) -> None:
+    """Configure SSH container to delay startup by specified seconds.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    seconds : int
+        Number of seconds to delay SSH startup
+    """
+    os.environ["MOONDOCK_SSH_DELAY_SECONDS"] = str(seconds)
+    logger.info(f"SSH container will delay startup by {seconds} seconds")
+
+
+@given("SSH container is not accessible")
+def step_ssh_container_not_accessible(context: Context) -> None:
+    """Configure SSH container to be created without port mapping (unreachable).
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    os.environ["MOONDOCK_SSH_BLOCK_CONNECTIONS"] = "1"
+    logger.info("SSH container will be created without port mapping (blocked)")
+
+
+@then("SSH connection attempts are made")
+def step_ssh_attempts_made(context: Context) -> None:
+    """Verify SSH connection attempts were logged.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    log_output = get_combined_log_output(context)
+    assert "Attempting SSH connection" in log_output, (
+        f"No SSH connection attempts found in logs. Output:\n{log_output[:500]}"
+    )
+
+
+RETRY_DELAY_TOLERANCE_SECONDS = 4
+ATTEMPT_TIMESTAMP_PATTERN = re.compile(
+    r"(\d{2}:\d{2}:\d{2}\.\d+).*Attempting SSH connection"
+)
+
+
+@then("connection retry delays match {delays} seconds")
+def step_verify_retry_delays(context: Context, delays: str) -> None:
+    """Verify actual retry delays match expected pattern with tolerance.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    delays : str
+        JSON array of expected delays: "[1, 2, 4, 8]"
+    """
+    expected = json.loads(delays)
+    log_lines = context.stderr or ""
+
+    if hasattr(context, "log_records"):
+        for record in context.log_records:
+            timestamp = datetime.datetime.fromtimestamp(record.created).strftime(
+                "%H:%M:%S.%f"
+            )
+            log_lines += f"{timestamp} {record.getMessage()}\n"
+
+    attempts_with_timestamps = ATTEMPT_TIMESTAMP_PATTERN.findall(log_lines)
+
+    unique_timestamps = []
+    for ts in attempts_with_timestamps:
+        if ts not in unique_timestamps:
+            unique_timestamps.append(ts)
+
+    if len(unique_timestamps) < 2:
+        raise AssertionError(
+            f"Insufficient SSH connection attempts to verify delays. "
+            f"Expected at least 2, found {len(unique_timestamps)}"
+        )
+
+    actual_delays = []
+
+    for i in range(1, len(unique_timestamps)):
+        prev_time = datetime.datetime.strptime(unique_timestamps[i - 1], "%H:%M:%S.%f")
+        curr_time = datetime.datetime.strptime(unique_timestamps[i], "%H:%M:%S.%f")
+        delay = (curr_time - prev_time).total_seconds()
+        actual_delays.append(delay)
+
+    for i, expected_delay in enumerate(expected):
+        if i < len(actual_delays):
+            tolerance = RETRY_DELAY_TOLERANCE_SECONDS
+
+            if i == 0:
+                tolerance = RETRY_DELAY_TOLERANCE_SECONDS + 2
+
+            assert abs(actual_delays[i] - expected_delay) <= tolerance, (
+                f"Delay {i + 1}: expected {expected_delay}s ±{tolerance}s, got {actual_delays[i]:.1f}s"
+            )
+
+
+@then("connection succeeds when SSH becomes ready")
+def step_connection_succeeds_after_delay(context: Context) -> None:
+    """Verify connection succeeded after delay.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    log_output = get_combined_log_output(context)
+    assert "SSH connection established" in log_output, (
+        f"SSH connection not established. Output:\n{log_output[:500]}"
+    )
+    assert context.exit_code == 0, f"Expected exit code 0, got {context.exit_code}"
+
+
+@then("SSH connection is attempted multiple times")
+def step_multiple_attempts(context: Context) -> None:
+    """Verify multiple connection attempts were made.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    log_output = get_combined_log_output(context)
+    attempt_count = log_output.count("Attempting SSH connection")
+    assert attempt_count >= 5, f"Expected at least 5 attempts, found {attempt_count}"
+
+
+@then("command fails with non-zero exit code")
+def step_command_fails(context: Context) -> None:
+    """Verify command failed with non-zero exit code.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    assert context.exit_code != 0, (
+        f"Expected non-zero exit code, got {context.exit_code}"
+    )

@@ -40,14 +40,48 @@ def get_ssh_connection_info(
     if os.environ.get("AWS_ENDPOINT_URL"):
         port_env_var = f"SSH_PORT_{instance_id}"
         key_file_env_var = f"SSH_KEY_FILE_{instance_id}"
+        ready_env_var = f"SSH_READY_{instance_id}"
 
-        max_wait = 120
-        start = time.time()
-        logger.info(
-            f"LocalStack mode: waiting for SSH container for {instance_id} (max {max_wait}s)..."
+        base_timeout = 120
+        container_boot = int(
+            os.environ.get("MOONDOCK_SSH_CONTAINER_BOOT_TIMEOUT", "20")
+        )
+        ssh_delay = int(os.environ.get("MOONDOCK_SSH_DELAY_SECONDS", "0"))
+        buffer_for_init = 5
+        first_run_pull = 180
+
+        total_timeout = (
+            base_timeout + container_boot + ssh_delay + buffer_for_init + first_run_pull
         )
 
-        while time.time() - start < max_wait:
+        start = time.time()
+        last_logged = 0
+
+        logger.info(
+            f"SSH wait timeout: {total_timeout}s "
+            f"(base={base_timeout}s, boot={container_boot}s, delay={ssh_delay}s, buffer={buffer_for_init}s, pull={first_run_pull}s)"
+        )
+        logger.debug(
+            f"Looking for env vars: {port_env_var}, {key_file_env_var}, {ready_env_var}"
+        )
+        logger.debug(
+            f"Current MOONDOCK_TARGET_INSTANCE_IDS: '{os.environ.get('MOONDOCK_TARGET_INSTANCE_IDS', '')}'"
+        )
+
+        while time.time() - start < total_timeout:
+            elapsed = time.time() - start
+
+            if int(elapsed) % 5 == 0 and int(elapsed) > last_logged:
+                logger.info(
+                    f"Waiting for SSH env vars... ({int(elapsed)}/{total_timeout}s)"
+                )
+                logger.debug(
+                    f"SSH env var check: {port_env_var}={port_env_var in os.environ}, "
+                    f"{key_file_env_var}={key_file_env_var in os.environ}, "
+                    f"{ready_env_var}={os.environ.get(ready_env_var)}"
+                )
+                last_logged = int(elapsed)
+
             if port_env_var in os.environ and key_file_env_var in os.environ:
                 port = int(os.environ[port_env_var])
                 actual_key_file = os.environ[key_file_env_var]
@@ -58,10 +92,29 @@ def get_ssh_connection_info(
                 logger.debug(f"SSH key file path: {actual_key_file}")
                 logger.debug(f"SSH key file exists: {os.path.exists(actual_key_file)}")
                 return "localhost", port, actual_key_file
+
             time.sleep(0.5)
 
+        monitor_error = os.environ.get(f"MONITOR_ERROR_{instance_id}")
+        if monitor_error:
+            raise ConnectionError(
+                f"Monitor thread failed to provision SSH container for {instance_id}: {monitor_error}"
+            )
+
         logger.error(
-            f"SSH container not ready for {instance_id} after {max_wait}s, using fallback (this will likely fail)"
+            f"SSH container not ready for {instance_id} after {total_timeout}s, using fallback (this will likely fail)"
+        )
+        logger.error(
+            f"Environment check failed - {port_env_var} present: {port_env_var in os.environ}, "
+            f"{key_file_env_var} present: {key_file_env_var in os.environ}, "
+            f"{ready_env_var} = '{os.environ.get(ready_env_var)}'"
+        )
+        all_ssh_vars = {k: v for k, v in os.environ.items() if k.startswith("SSH_")}
+        logger.error(f"All SSH_* environment variables: {all_ssh_vars}")
+
+        raise ConnectionError(
+            f"SSH container environment variables not set after {total_timeout}s for {instance_id}. "
+            f"Monitor thread may be stalled or Docker provisioning taking longer than expected."
         )
 
     return public_ip, 22, key_file
@@ -139,13 +192,17 @@ class SSHManager:
             If SSH key file has incorrect permissions or cannot be accessed
         """
         delays = [1, 2, 4, 8, 16, 30, 30, 30, 30, 30]
+        timeout_seconds = int(os.environ.get("MOONDOCK_SSH_TIMEOUT", "30"))
+        effective_max_retries = int(
+            os.environ.get("MOONDOCK_SSH_MAX_RETRIES", str(max_retries))
+        )
 
-        for attempt in range(max_retries):
+        for attempt in range(effective_max_retries):
             try:
                 logger.info(
                     "Attempting SSH connection (attempt %s/%s)...",
                     attempt + 1,
-                    max_retries,
+                    effective_max_retries,
                 )
 
                 self.client = paramiko.SSHClient()
@@ -158,8 +215,8 @@ class SSHManager:
                     port=self.port,
                     username=self.username,
                     pkey=key,
-                    timeout=30,
-                    banner_timeout=30,
+                    timeout=timeout_seconds,
+                    banner_timeout=timeout_seconds,
                 )
                 return
 
@@ -171,13 +228,13 @@ class SSHManager:
                 ConnectionResetError,
                 socket.timeout,
             ) as e:
-                if attempt < max_retries - 1:
+                if attempt < effective_max_retries - 1:
                     delay = delays[attempt]
                     time.sleep(delay)
                     continue
                 else:
                     raise ConnectionError(
-                        f"Failed to establish SSH connection after {max_retries} attempts"
+                        f"Failed to establish SSH connection after {effective_max_retries} attempts"
                     ) from e
 
     def stream_remaining_output(self, stream: ChannelFile, stream_type: str) -> None:

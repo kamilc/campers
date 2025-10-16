@@ -15,7 +15,7 @@ class ConfigLoader:
         "instance_type": "t3.medium",
         "disk_size": 50,
         "os_flavor": "ubuntu-22.04",
-        "ports": [8888],
+        "ports": [],
         "include_vcs": False,
         "ignore": ["*.pyc", "__pycache__", "*.log", ".DS_Store"],
         "env_filter": ["AWS_.*"],

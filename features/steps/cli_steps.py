@@ -35,7 +35,7 @@ def ensure_machine_exists(context: Context, machine_name: str) -> None:
         context.config_data["machines"] = {}
 
     if machine_name not in context.config_data["machines"]:
-        context.config_data["machines"][machine_name] = {}
+        context.config_data["machines"][machine_name] = {"ports": []}
 
 
 @given("config file with defaults section only")
@@ -249,6 +249,11 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
                 logger.info(
                     f"In-process execution succeeded, instance: {context.final_config.get('instance_id', 'unknown')}"
                 )
+
+                if hasattr(context, "monitor_error") and context.monitor_error:
+                    logger.error(
+                        f"Monitor thread reported error: {context.monitor_error}"
+                    )
             else:
                 raise ValueError(
                     f"Unsupported command for in-process execution: {args[0]}"

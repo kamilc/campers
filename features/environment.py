@@ -13,6 +13,10 @@ from moto import mock_aws
 
 logger = logging.getLogger(__name__)
 
+# Test-specific configuration constants
+TEST_SSH_TIMEOUT_SECONDS = 3
+TEST_SSH_MAX_RETRIES = 6
+
 
 class LogCapture(logging.Handler):
     """Custom logging handler for capturing log records in tests.
@@ -150,6 +154,8 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         os.environ["AWS_ACCESS_KEY_ID"] = "testing"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+        os.environ["MOONDOCK_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
+        os.environ["MOONDOCK_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
 
     if is_localstack_scenario or is_pilot_scenario:
         os.environ["MOONDOCK_TEST_MODE"] = "0"
@@ -159,9 +165,17 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.log_handler = log_handler
     context.log_records = log_handler.records
 
-    moondock_logger = logging.getLogger("moondock.ec2")
-    moondock_logger.addHandler(log_handler)
-    moondock_logger.setLevel(logging.DEBUG)
+    moondock_ec2_logger = logging.getLogger("moondock.ec2")
+    moondock_ec2_logger.addHandler(log_handler)
+    moondock_ec2_logger.setLevel(logging.DEBUG)
+
+    moondock_ssh_logger = logging.getLogger("moondock.ssh")
+    moondock_ssh_logger.addHandler(log_handler)
+    moondock_ssh_logger.setLevel(logging.DEBUG)
+
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_handler)
+    root_logger.setLevel(logging.DEBUG)
 
     context.ec2_config = None
     context._config = None
@@ -310,8 +324,14 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     """
     try:
         if hasattr(context, "log_handler") and context.log_handler:
-            moondock_logger = logging.getLogger("moondock.ec2")
-            moondock_logger.removeHandler(context.log_handler)
+            moondock_ec2_logger = logging.getLogger("moondock.ec2")
+            moondock_ec2_logger.removeHandler(context.log_handler)
+
+            moondock_ssh_logger = logging.getLogger("moondock.ssh")
+            moondock_ssh_logger.removeHandler(context.log_handler)
+
+            root_logger = logging.getLogger()
+            root_logger.removeHandler(context.log_handler)
     except Exception as e:
         logger.debug(f"Error removing log handler: {e}")
 
@@ -441,6 +461,10 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     cleanup_env_var("MOONDOCK_PORT_IN_USE", logger)
     cleanup_env_var("MOONDOCK_SIMULATE_INTERRUPT", logger)
     cleanup_env_var("AWS_ENDPOINT_URL", logger)
+    cleanup_env_var("MOONDOCK_SSH_DELAY_SECONDS", logger)
+    cleanup_env_var("MOONDOCK_SSH_BLOCK_CONNECTIONS", logger)
+    cleanup_env_var("MOONDOCK_SSH_TIMEOUT", logger)
+    cleanup_env_var("MOONDOCK_SSH_MAX_RETRIES", logger)
 
     try:
         if hasattr(context, "monitor_stop_event") and context.monitor_stop_event:
@@ -465,6 +489,16 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
     ssh_key_file_vars = [k for k in os.environ.keys() if k.startswith("SSH_KEY_FILE_")]
     for var in ssh_key_file_vars:
+        cleanup_env_var(var, logger)
+
+    ssh_ready_vars = [k for k in os.environ.keys() if k.startswith("SSH_READY_")]
+    for var in ssh_ready_vars:
+        cleanup_env_var(var, logger)
+
+    monitor_error_vars = [
+        k for k in os.environ.keys() if k.startswith("MONITOR_ERROR_")
+    ]
+    for var in monitor_error_vars:
         cleanup_env_var(var, logger)
 
     try:

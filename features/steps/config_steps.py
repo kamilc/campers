@@ -27,6 +27,7 @@ def step_config_file_with_defaults_no_path(context) -> None:
             "region": "us-east-1",
             "instance_type": "t3.medium",
             "disk_size": 50,
+            "ports": [],
         }
     }
 
