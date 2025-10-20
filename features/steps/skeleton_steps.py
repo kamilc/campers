@@ -108,13 +108,20 @@ def step_exit_code(context, code: int) -> None:
 
 @then('output contains "{expected_text}"')
 def step_output_contains(context, expected_text: str) -> None:
-    """Verify command output contains expected text."""
-    combined_output = context.stdout + context.stderr
+    """Verify command output contains expected text.
+
+    Works for both subprocess mode and in-process mode (LocalStack/TUI).
+    """
+    from features.steps.ssh_steps import get_combined_log_output
+
+    log_output = get_combined_log_output(context)
+    combined_output = context.stdout + context.stderr + log_output
 
     assert expected_text in combined_output, (
         f"Expected output to contain '{expected_text}'\n"
         f"stdout: {context.stdout}\n"
-        f"stderr: {context.stderr}"
+        f"stderr: {context.stderr}\n"
+        f"logs: {log_output}"
     )
 
 

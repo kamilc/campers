@@ -32,6 +32,27 @@ def get_tui_update_queue() -> queue.Queue | None:
     return _tui_update_queue
 
 
+@given("a config file with defaults section")
+def step_config_file_with_defaults_section(context: Context) -> None:
+    """Create a config file with a defaults section.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    if not hasattr(context, "config_data") or context.config_data is None:
+        context.config_data = {
+            "defaults": {
+                "region": "us-east-1",
+                "instance_type": "t3.medium",
+                "disk_size": 50,
+                "ports": [],
+            },
+            "machines": {},
+        }
+
+
 @given('a config file with machine "{machine_name}" defined')
 def step_config_file_with_machine(context: Context, machine_name: str) -> None:
     """Create a config file with a machine definition.

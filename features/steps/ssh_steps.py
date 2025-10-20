@@ -399,10 +399,14 @@ def step_ssh_not_attempted_for_setup_script(context: Context) -> None:
 
 @then('status message "{message}" is logged')
 def step_status_message_logged(context: Context, message: str) -> None:
-    """Verify status message was logged."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
-    assert message in context.stderr, (
-        f"Expected message '{message}' not found in stderr: {context.stderr}"
+    """Verify status message was logged.
+
+    Works for both subprocess mode (checking stderr) and in-process mode
+    (checking log records).
+    """
+    log_output = get_combined_log_output(context)
+    assert message in log_output, (
+        f"Expected message '{message}' not found in output: {log_output}"
     )
 
 
