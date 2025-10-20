@@ -14,7 +14,6 @@ from textual.css.query import NoMatches
 from textual.widgets import Log
 
 from features.steps.utils import run_async_test
-from features.steps.port_forwarding_steps import start_http_servers_for_machine_ports
 from moondock.__main__ import Moondock, MoondockTUI
 
 logger = logging.getLogger(__name__)
@@ -107,7 +106,11 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
     logger.info(f"TUI result status: {result.get('status', 'UNKNOWN')}")
     logger.info(f"TUI log length: {len(result.get('log_text', ''))} characters")
 
-    start_http_servers_for_machine_ports(context)
+    logger.info(
+        "NOTE: HTTP servers are now started in monitor_localstack_instances() via "
+        "start_http_servers_for_all_configured_ports() BEFORE TUI launches. "
+        "DO NOT start HTTP servers here - TUI has already terminated and tunnels are closed."
+    )
 
 
 def setup_test_environment(config_path: str) -> dict[str, str | None]:

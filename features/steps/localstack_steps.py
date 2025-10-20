@@ -208,8 +208,17 @@ def monitor_localstack_instances(
 
                                 context.instance_id = instance_id
 
-                                from features.steps.port_forwarding_steps import start_http_servers_for_configured_ports
-                                start_http_servers_for_configured_ports(context)
+                                from features.steps.port_forwarding_steps import (
+                                    start_http_servers_for_all_configured_ports,
+                                )
+
+                                logger.info(
+                                    f"Monitor thread: Starting HTTP servers for all configured ports for {instance_id}"
+                                )
+                                start_http_servers_for_all_configured_ports(context)
+                                logger.info(
+                                    f"Monitor thread: HTTP servers started successfully for {instance_id}"
+                                )
 
                                 os.environ[f"HTTP_SERVERS_READY_{instance_id}"] = "1"
                                 logger.info(

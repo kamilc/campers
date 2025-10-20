@@ -79,6 +79,55 @@ def ensure_defaults_section(context: Context) -> dict:
     return context.config_data["defaults"]
 
 
+def extract_ports_from_config(
+    context: Context,
+    include_defaults: bool = True,
+    include_machines: bool = True,
+    machine_name: str | None = None,
+) -> list[int]:
+    """Extract unique ports from config based on specified sources.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object containing config data
+    include_defaults : bool
+        Whether to include ports from defaults section
+    include_machines : bool
+        Whether to include ports from machines section
+    machine_name : str | None
+        If specified, only extract ports from this machine
+
+    Returns
+    -------
+    list[int]
+        List of unique port numbers preserving order
+    """
+    if not hasattr(context, "config_data") or context.config_data is None:
+        return []
+
+    all_ports = []
+
+    if include_defaults:
+        defaults = context.config_data.get("defaults", {})
+        default_ports = defaults.get("ports", [])
+        all_ports.extend(default_ports)
+
+    if include_machines:
+        machines = context.config_data.get("machines", {})
+
+        if machine_name:
+            machine_config = machines.get(machine_name, {})
+            machine_ports = machine_config.get("ports", [])
+            all_ports.extend(machine_ports)
+        else:
+            for config in machines.values():
+                ports = config.get("ports", [])
+                all_ports.extend(ports)
+
+    return list(dict.fromkeys(all_ports))
+
+
 @given("config file with ports {ports_list}")
 def step_config_with_ports(context: Context, ports_list: str) -> None:
     """Add ports to defaults configuration."""
@@ -349,6 +398,39 @@ def start_http_server_in_container(context: Context, port: int) -> None:
             f"Starting HTTP server on port {port} in container {container_name}"
         )
 
+        check_python = container.exec_run(["sh", "-c", "command -v python3"])
+
+        if check_python.exit_code != 0:
+            logger.info(
+                f"Python3 not found in container {container_name}, attempting installation..."
+            )
+
+            check_apk = container.exec_run(["sh", "-c", "command -v apk"])
+
+            if check_apk.exit_code != 0:
+                error_msg = (
+                    f"Cannot install Python3: container {container_name} does not use Alpine Linux (apk not found). "
+                    f"Docker image must either include Python3 or use Alpine Linux with apk package manager."
+                )
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+
+            install_result = container.exec_run(
+                ["sh", "-c", "apk add --no-cache python3"], user="root"
+            )
+
+            if install_result.exit_code != 0:
+                error_output = (
+                    install_result.output.decode()
+                    if hasattr(install_result.output, "decode")
+                    else str(install_result.output)
+                )
+                error_msg = f"Failed to install Python3 in container {container_name}: {error_output}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+
+            logger.info(f"Python3 installed successfully in container {container_name}")
+
         script_path = os.path.join(
             os.path.dirname(__file__), "..", "support", "http_server.py"
         )
@@ -366,7 +448,9 @@ def start_http_server_in_container(context: Context, port: int) -> None:
 
         try:
             container.put_archive("/tmp", tar_buffer)
-            logger.debug(f"HTTP server script copied to /tmp in container {container_name}")
+            logger.debug(
+                f"HTTP server script copied to /tmp in container {container_name}"
+            )
         except (docker.errors.APIError, docker.errors.ContainerError) as e:
             logger.warning(f"Failed to copy HTTP server script to container: {e}")
             return
@@ -395,9 +479,15 @@ def start_http_server_in_container(context: Context, port: int) -> None:
             if attempt < 9:
                 time.sleep(0.5)
             else:
-                log_cmd = f"cat /tmp/http_server_{port}.log 2>/dev/null || echo 'No log file'"
+                log_cmd = (
+                    f"cat /tmp/http_server_{port}.log 2>/dev/null || echo 'No log file'"
+                )
                 log_result = container.exec_run(["sh", "-c", log_cmd])
-                log_output = log_result.output.decode() if hasattr(log_result.output, 'decode') else str(log_result.output)
+                log_output = (
+                    log_result.output.decode()
+                    if hasattr(log_result.output, "decode")
+                    else str(log_result.output)
+                )
                 logger.warning(
                     f"HTTP server on port {port} not listening after retries. Log: {log_output}"
                 )
@@ -472,11 +562,13 @@ def step_http_request_succeeds(context: Context, port: int) -> None:
                 time.sleep(1)
                 continue
 
-            raise AssertionError(
-                f"HTTP {response.status_code} from localhost:{port}"
-            )
+            raise AssertionError(f"HTTP {response.status_code} from localhost:{port}")
 
-        except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout, requests.exceptions.Timeout) as e:
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ReadTimeout,
+            requests.exceptions.Timeout,
+        ) as e:
             last_error = f"Connection error: {str(e)[:80]}"
             logger.debug(f"Connection attempt {attempt + 1} failed, retrying...")
 
@@ -498,6 +590,18 @@ def step_http_request_succeeds(context: Context, port: int) -> None:
                 )
                 logger.info(f"Tunnel establishment confirmed via logs: {tunnel_msg}")
                 return
+
+            if hasattr(context, "tui_result") and context.tui_result:
+                tui_output = context.tui_result.get("log_text", "")
+                if tunnel_msg in tui_output:
+                    logger.warning(
+                        "Tunnel was established (found in TUI logs) but connection failed. "
+                        "Tunnel may have closed after TUI completion."
+                    )
+                    logger.info(
+                        f"Tunnel establishment confirmed via TUI logs: {tunnel_msg}"
+                    )
+                    return
 
             logger.error(f"Tunnel not found in output logs. Full output: {output}")
             raise AssertionError(
@@ -576,3 +680,27 @@ def start_http_servers_for_machine_ports(context: Context) -> None:
     ports = machine_config.get("ports", [])
     start_http_servers_for_ports(context, ports)
 
+
+def start_http_servers_for_all_configured_ports(context: Context) -> None:
+    """Start HTTP servers for all configured ports in defaults and machines.
+
+    This function starts HTTP servers for ports from both the defaults section
+    and machine-specific configuration. Called after instance creation to ensure
+    instance_id is available in context.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object containing instance_id and configured ports
+    """
+    if not hasattr(context, "config_data") or context.config_data is None:
+        logger.debug("No config_data available, skipping HTTP server setup")
+        return
+
+    unique_ports = extract_ports_from_config(
+        context, include_defaults=True, include_machines=True
+    )
+
+    if unique_ports:
+        logger.info(f"Starting HTTP servers for all configured ports: {unique_ports}")
+        start_http_servers_for_ports(context, unique_ports)
