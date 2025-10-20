@@ -206,8 +206,14 @@ def monitor_localstack_instances(
                                 os.environ[f"SSH_READY_{instance_id}"] = "1"
                                 seen_instances.add(instance_id)
 
+                                context.instance_id = instance_id
+
+                                from features.steps.port_forwarding_steps import start_http_servers_for_configured_ports
+                                start_http_servers_for_configured_ports(context)
+
+                                os.environ[f"HTTP_SERVERS_READY_{instance_id}"] = "1"
                                 logger.info(
-                                    f"SSH container ready for {instance_id} (port={port})"
+                                    f"SSH container ready for {instance_id} (port={port}), HTTP servers started"
                                 )
                             else:
                                 os.environ[f"SSH_PORT_{instance_id}"] = "65535"

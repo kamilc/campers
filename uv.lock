@@ -501,6 +501,7 @@ dependencies = [
     { name = "paramiko" },
     { name = "pytest" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "sshtunnel" },
     { name = "textual" },
 ]
@@ -520,6 +521,7 @@ requires-dist = [
     { name = "paramiko", specifier = ">=3.0.0,<4.0.0" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "requests", specifier = ">=2.32.5" },
     { name = "sshtunnel", specifier = ">=0.4.0" },
     { name = "textual", specifier = ">=6.2.0" },
 ]

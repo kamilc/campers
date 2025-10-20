@@ -444,6 +444,19 @@ def step_machine_has_sync_paths_configured(context: Context, machine_name: str) 
     ]
 
 
+@given('machine "{machine_name}" has ports {ports_list}')
+def step_machine_has_ports(context: Context, machine_name: str, ports_list: str) -> None:
+    ensure_machine_exists(context, machine_name)
+    ports = json.loads(ports_list)
+    context.config_data["machines"][machine_name]["ports"] = ports
+
+
+@given('machine "{machine_name}" has no ports specified')
+def step_machine_has_no_ports(context: Context, machine_name: str) -> None:
+    ensure_machine_exists(context, machine_name)
+    context.config_data["machines"][machine_name]["ports"] = []
+
+
 @then("final config contains sync_paths")
 def step_final_config_contains_sync_paths(context: Context) -> None:
     assert context.exit_code == 0

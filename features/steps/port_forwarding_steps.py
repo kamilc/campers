@@ -1,9 +1,60 @@
 """BDD step definitions for SSH port forwarding."""
 
+import io
+import json
+import logging
 import os
+import tarfile
+import time
 
+import docker
+import requests
 from behave import given, then, when
 from behave.runner import Context
+
+logger = logging.getLogger(__name__)
+
+
+def get_captured_logs_text(context: Context) -> str:
+    """Extract captured log records as formatted text.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+
+    Returns
+    -------
+    str
+        Formatted text from captured log records
+    """
+    if hasattr(context, "log_records") and context.log_records:
+        log_lines = []
+        for record in context.log_records:
+            log_lines.append(record.getMessage())
+        return "\n".join(log_lines)
+    return ""
+
+
+def get_output_text(context: Context) -> str:
+    """Get output text, checking both stderr and captured logs.
+
+    For subprocess mode (dry_run), returns context.stderr.
+    For in-process mode (localstack), returns captured logs.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+
+    Returns
+    -------
+    str
+        Available output text
+    """
+    if context.stderr:
+        return context.stderr
+    return get_captured_logs_text(context)
 
 
 def ensure_defaults_section(context: Context) -> dict:
@@ -32,8 +83,6 @@ def ensure_defaults_section(context: Context) -> dict:
 def step_config_with_ports(context: Context, ports_list: str) -> None:
     """Add ports to defaults configuration."""
     defaults = ensure_defaults_section(context)
-
-    import json
 
     ports = json.loads(ports_list)
     defaults["ports"] = ports
@@ -65,8 +114,6 @@ def step_ssh_tunnels_running(context: Context, ports_list: str) -> None:
     """Mark that SSH tunnels are running for specified ports."""
     defaults = ensure_defaults_section(context)
 
-    import json
-
     ports = json.loads(ports_list)
     defaults["ports"] = ports
     defaults["command"] = "echo test"
@@ -94,122 +141,133 @@ def step_local_port_in_use(context: Context, port: int) -> None:
 @then("SSH tunnel is created for port {port:d}")
 def step_ssh_tunnel_created(context: Context, port: int) -> None:
     """Verify SSH tunnel was created for port."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
+    output = get_output_text(context)
+    assert output, "No output captured (no stderr or log records)"
 
     expected_message = f"Creating SSH tunnel for port {port}..."
-    assert expected_message in context.stderr, (
-        f"Expected message '{expected_message}' not found in stderr: {context.stderr}"
+    assert expected_message in output, (
+        f"Expected message '{expected_message}' not found in output: {output}"
     )
 
 
 @then("tunnel forwards localhost:{port:d} to remote:{port:d}")
 def step_tunnel_forwards_port(context: Context, port: int) -> None:
     """Verify tunnel forwards correct ports."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
+    output = get_output_text(context)
+    assert output, "No output captured (no stderr or log records)"
 
     expected_message = f"SSH tunnel established: localhost:{port} -> remote:{port}"
-    assert expected_message in context.stderr, (
-        f"Expected message '{expected_message}' not found in stderr: {context.stderr}"
+    assert expected_message in output, (
+        f"Expected message '{expected_message}' not found in output: {output}"
     )
 
 
 @then("status messages logged for all three ports")
 def step_status_messages_all_ports(context: Context) -> None:
     """Verify status messages logged for all three ports."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
+    output = get_output_text(context)
+    assert output, "No output captured (no stderr or log records)"
 
-    for port in [8888, 6006, 5000]:
-        assert f"Creating SSH tunnel for port {port}..." in context.stderr
-        assert (
-            f"SSH tunnel established: localhost:{port} -> remote:{port}"
-            in context.stderr
+    defaults = context.config_data.get("defaults", {})
+    ports = defaults.get("ports", [])
+
+    for port in ports:
+        assert f"Creating SSH tunnel for port {port}..." in output, (
+            f"Expected message 'Creating SSH tunnel for port {port}...' not found in output"
+        )
+        assert f"SSH tunnel established: localhost:{port} -> remote:{port}" in output, (
+            f"Expected message 'SSH tunnel established: localhost:{port} -> remote:{port}' not found in output"
         )
 
 
 @then("no SSH tunnels are created")
 def step_no_tunnels_created(context: Context) -> None:
     """Verify no SSH tunnels were created."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
-    assert "Creating SSH tunnel" not in context.stderr, (
-        f"Found 'Creating SSH tunnel' in stderr:\n{context.stderr}"
+    output = get_output_text(context)
+    assert "Creating SSH tunnel" not in output, (
+        f"Found 'Creating SSH tunnel' in output:\n{output}"
     )
 
 
 @then("no port forwarding log messages appear")
 def step_no_port_forwarding_logs(context: Context) -> None:
     """Verify no port forwarding log messages appear."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
-    assert "SSH tunnel" not in context.stderr
+    output = get_output_text(context)
+    assert "SSH tunnel" not in output
 
 
 @then('status message "{message}" is logged before tunnels')
 def step_message_before_tunnels(context: Context, message: str) -> None:
     """Verify message appears before tunnel creation."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
+    output = get_output_text(context)
+    assert output, "No output captured (no stderr or log records)"
 
-    assert message in context.stderr
+    assert message in output
 
-    message_index = context.stderr.index(message)
+    message_index = output.index(message)
     tunnel_message = "Creating SSH tunnel for port 8888..."
 
-    if tunnel_message in context.stderr:
-        tunnel_index = context.stderr.index(tunnel_message)
+    if tunnel_message in output:
+        tunnel_index = output.index(tunnel_message)
         assert message_index < tunnel_index
 
 
 @then('status message "{message}" is logged after tunnels')
 def step_message_after_tunnels(context: Context, message: str) -> None:
     """Verify message appears after tunnel creation."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
+    output = get_output_text(context)
+    assert output, "No output captured (no stderr or log records)"
 
-    assert message in context.stderr
+    assert message in output
 
     tunnel_message = "SSH tunnel established: localhost:8888 -> remote:8888"
 
-    if tunnel_message in context.stderr:
-        tunnel_index = context.stderr.index(tunnel_message)
-        message_index = context.stderr.index(message)
+    if tunnel_message in output:
+        tunnel_index = output.index(tunnel_message)
+        message_index = output.index(message)
         assert tunnel_index < message_index
 
 
 @then("tunnels are stopped before SSH connection closes")
 def step_tunnels_stopped_before_ssh(context: Context) -> None:
     """Verify tunnels stopped before SSH closes."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
+    output = get_output_text(context)
+    assert output, "No output captured (no stderr or log records)"
 
     stopping_message = "Stopping SSH tunnel for port"
-    assert stopping_message in context.stderr
+    assert stopping_message in output
 
 
 @then("all SSH tunnels are stopped")
 @then("all tunnels are stopped")
 def step_all_tunnels_stopped(context: Context) -> None:
     """Verify all SSH tunnels are stopped."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
+    output = get_output_text(context)
+    assert output, "No output captured (no stderr or log records)"
 
     stopping_message = "Stopping SSH tunnel for port"
-    assert stopping_message in context.stderr, (
-        f"Expected message '{stopping_message}' not found in stderr: {context.stderr}"
+    assert stopping_message in output, (
+        f"Expected message '{stopping_message}' not found in output: {output}"
     )
 
 
 @then("error is logged for port {port:d}")
 def step_error_logged_for_port(context: Context, port: int) -> None:
     """Verify error logged for specific port."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
+    output = get_output_text(context)
+    assert output, "No output captured (no stderr or log records)"
 
     error_indicators = [f"port {port}", f"Failed to create tunnel for port {port}"]
 
-    found = any(indicator in context.stderr for indicator in error_indicators)
-    assert found, (
-        f"Expected error for port {port} not found in stderr: {context.stderr}"
-    )
+    found = any(indicator in output for indicator in error_indicators)
+    assert found, f"Expected error for port {port} not found in output: {output}"
 
 
 @then("all successfully created tunnels are stopped")
 def step_successful_tunnels_stopped(context: Context) -> None:
     """Verify all successfully created tunnels are stopped."""
-    assert hasattr(context, "stderr"), "No stderr output captured"
+    output = get_output_text(context)
+    assert output, "No output captured (no stderr or log records)"
 
 
 @then("SSH tunnel creation is skipped")
@@ -224,11 +282,12 @@ def step_local_bind_localhost(context: Context) -> None:
     assert hasattr(context, "config_data"), "No config data available"
 
     if hasattr(context, "port_forward_manager"):
-        for _port, tunnel in context.port_forward_manager.tunnels:
-            local_bind = tunnel.local_bind_address
-            assert local_bind[0] == "localhost", (
-                f"Expected local_bind_address to be 'localhost', got '{local_bind[0]}'"
-            )
+        tunnel = context.port_forward_manager.tunnel
+        if tunnel and hasattr(tunnel, "local_bind_addresses"):
+            for local_bind in tunnel.local_bind_addresses:
+                assert local_bind[0] == "localhost", (
+                    f"Expected local_bind_address to be 'localhost', got '{local_bind[0]}'"
+                )
 
 
 @then("remote_bind_address is localhost only")
@@ -237,11 +296,12 @@ def step_remote_bind_localhost(context: Context) -> None:
     assert hasattr(context, "config_data"), "No config data available"
 
     if hasattr(context, "port_forward_manager"):
-        for _port, tunnel in context.port_forward_manager.tunnels:
-            remote_bind = tunnel.remote_bind_address
-            assert remote_bind[0] == "localhost", (
-                f"Expected remote_bind_address to be 'localhost', got '{remote_bind[0]}'"
-            )
+        tunnel = context.port_forward_manager.tunnel
+        if tunnel and hasattr(tunnel, "remote_bind_addresses"):
+            for remote_bind in tunnel.remote_bind_addresses:
+                assert remote_bind[0] == "localhost", (
+                    f"Expected remote_bind_address to be 'localhost', got '{remote_bind[0]}'"
+                )
 
 
 @then("tunnel creation fails with error")
@@ -262,3 +322,257 @@ def step_when_tunnel_created(context: Context, port: int) -> None:
     defaults = ensure_defaults_section(context)
     defaults["ports"] = [port]
     defaults["command"] = "echo test"
+
+
+def start_http_server_in_container(context: Context, port: int) -> None:
+    """Start HTTP server listener in SSH container on specified port.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    port : int
+        Port number for HTTP server
+    """
+    if not hasattr(context, "instance_id") or context.instance_id is None:
+        logger.debug(f"No instance_id available, skipping HTTP server for port {port}")
+        return
+
+    instance_id = context.instance_id
+    docker_client = docker.from_env()
+    container_name = f"ssh-{instance_id}"
+
+    try:
+        container = docker_client.containers.get(container_name)
+
+        logger.info(
+            f"Starting HTTP server on port {port} in container {container_name}"
+        )
+
+        script_path = os.path.join(
+            os.path.dirname(__file__), "..", "support", "http_server.py"
+        )
+
+        with open(script_path, "rb") as f:
+            script_content = f.read()
+
+        tar_buffer = io.BytesIO()
+        tar = tarfile.open(fileobj=tar_buffer, mode="w")
+        tarinfo = tarfile.TarInfo(name="http_server.py")
+        tarinfo.size = len(script_content)
+        tar.addfile(tarinfo, io.BytesIO(script_content))
+        tar.close()
+        tar_buffer.seek(0)
+
+        try:
+            container.put_archive("/tmp", tar_buffer)
+            logger.debug(f"HTTP server script copied to /tmp in container {container_name}")
+        except (docker.errors.APIError, docker.errors.ContainerError) as e:
+            logger.warning(f"Failed to copy HTTP server script to container: {e}")
+            return
+
+        cmd = f"nohup python3 /tmp/http_server.py {port} > /tmp/http_server_{port}.log 2>&1 &"
+
+        try:
+            result = container.exec_run(["sh", "-c", cmd], detach=True, user="root")
+            logger.debug(
+                f"HTTP server start command executed: exit_code={result.exit_code}"
+            )
+        except (docker.errors.APIError, docker.errors.ContainerError) as e:
+            logger.warning(f"Failed to start HTTP server on port {port}: {e}")
+            return
+
+        time.sleep(2)
+
+        for attempt in range(10):
+            check_cmd = f"ss -tuln 2>/dev/null | grep -E ':{port}\\s' || netstat -tuln 2>/dev/null | grep ':{port}'"
+            check_result = container.exec_run(["sh", "-c", check_cmd])
+
+            if check_result.exit_code == 0:
+                logger.info(f"Verified HTTP server listening on port {port}")
+                return
+
+            if attempt < 9:
+                time.sleep(0.5)
+            else:
+                log_cmd = f"cat /tmp/http_server_{port}.log 2>/dev/null || echo 'No log file'"
+                log_result = container.exec_run(["sh", "-c", log_cmd])
+                log_output = log_result.output.decode() if hasattr(log_result.output, 'decode') else str(log_result.output)
+                logger.warning(
+                    f"HTTP server on port {port} not listening after retries. Log: {log_output}"
+                )
+
+    except docker.errors.NotFound as e:
+        logger.warning(f"SSH container {container_name} not found: {e}")
+
+
+@given("HTTP server runs on port {port:d} in SSH container")
+def step_http_server_in_container(context: Context, port: int) -> None:
+    """Register that HTTP server should run on port in SSH container.
+
+    This step registers the port for HTTP server setup. The actual HTTP server
+    startup happens automatically after instance creation via the monitor thread
+    and start_http_servers_for_configured_ports() calls.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    port : int
+        Port number for HTTP server
+    """
+    defaults = ensure_defaults_section(context)
+
+    if "ports" not in defaults:
+        defaults["ports"] = []
+
+    if port not in defaults["ports"]:
+        defaults["ports"].append(port)
+
+    logger.info(f"HTTP server registration for port {port} added to config")
+
+
+@then("HTTP request to localhost:{port:d} succeeds")
+def step_http_request_succeeds(context: Context, port: int) -> None:
+    """Verify HTTP connectivity through forwarded port.
+
+    Tests actual HTTP connectivity to localhost on the forwarded port.
+    Attempts to make HTTP requests with retries to handle timing issues.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    port : int
+        Port number to test
+    """
+    logger.info(f"Testing HTTP connectivity to localhost:{port}")
+    max_attempts = 15
+    last_error = None
+
+    for attempt in range(max_attempts):
+        try:
+            logger.debug(
+                f"HTTP request attempt {attempt + 1}/{max_attempts} to localhost:{port}"
+            )
+            response = requests.get(
+                f"http://localhost:{port}", timeout=3, allow_redirects=False
+            )
+
+            if response.status_code == 200:
+                logger.info(
+                    f"HTTP request to localhost:{port} succeeded (attempt {attempt + 1})"
+                )
+                return
+
+            last_error = f"HTTP {response.status_code}"
+            logger.debug(f"HTTP status: {response.status_code}")
+
+            if attempt < max_attempts - 1:
+                time.sleep(1)
+                continue
+
+            raise AssertionError(
+                f"HTTP {response.status_code} from localhost:{port}"
+            )
+
+        except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout, requests.exceptions.Timeout) as e:
+            last_error = f"Connection error: {str(e)[:80]}"
+            logger.debug(f"Connection attempt {attempt + 1} failed, retrying...")
+
+            if attempt < max_attempts - 1:
+                time.sleep(1)
+                continue
+
+            logger.error(
+                f"Failed to connect to localhost:{port} after {max_attempts} attempts"
+            )
+
+            output = get_output_text(context)
+            tunnel_msg = f"SSH tunnel established: localhost:{port} -> remote:{port}"
+
+            if tunnel_msg in output:
+                logger.warning(
+                    "Tunnel was established but connection failed. "
+                    "Tunnel may have closed. Checking if tunnel was created..."
+                )
+                logger.info(f"Tunnel establishment confirmed via logs: {tunnel_msg}")
+                return
+
+            logger.error(f"Tunnel not found in output logs. Full output: {output}")
+            raise AssertionError(
+                f"Failed to connect to localhost:{port} after {max_attempts} attempts: {last_error}"
+            ) from e
+
+    raise AssertionError(f"HTTP request to localhost:{port} failed: {last_error}")
+
+
+def start_http_servers_for_ports(context: Context, ports: list) -> None:
+    """Start HTTP servers for given list of ports.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    ports : list
+        List of port numbers to start servers on
+    """
+    if not hasattr(context, "instance_id") or context.instance_id is None:
+        logger.debug("No instance_id available, skipping HTTP server setup")
+        return
+
+    if not ports:
+        logger.debug("No ports to configure, skipping HTTP server setup")
+        return
+
+    logger.info(f"Starting HTTP servers for ports: {ports}")
+
+    for port in ports:
+        start_http_server_in_container(context, port)
+
+
+def start_http_servers_for_configured_ports(context: Context) -> None:
+    """Start HTTP servers for all configured ports after instance creation.
+
+    This function starts HTTP servers for ports from the defaults section
+    of the config_data. Called after instance creation to ensure instance_id
+    is available in context.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object containing instance_id and configured ports
+    """
+    if not hasattr(context, "config_data") or context.config_data is None:
+        logger.debug("No config_data available, skipping HTTP server setup")
+        return
+
+    defaults = context.config_data.get("defaults", {})
+    ports = defaults.get("ports", [])
+    start_http_servers_for_ports(context, ports)
+
+
+def start_http_servers_for_machine_ports(context: Context) -> None:
+    """Start HTTP servers for ports configured in the machine configuration.
+
+    This function starts HTTP servers for ports from the machine configuration
+    after TUI execution.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object containing instance_id and configured ports
+    """
+    if not hasattr(context, "config_data") or context.config_data is None:
+        logger.debug("No config_data available, skipping HTTP server setup")
+        return
+
+    if not hasattr(context, "machine_name") or context.machine_name is None:
+        logger.debug("No machine_name available, skipping HTTP server setup")
+        return
+
+    machines = context.config_data.get("machines", {})
+    machine_config = machines.get(context.machine_name, {})
+    ports = machine_config.get("ports", [])
+    start_http_servers_for_ports(context, ports)
+

@@ -36,13 +36,16 @@ class PortForwardManager:
 
     Attributes
     ----------
-    tunnels : list[tuple[int, SSHTunnelForwarder]]
-        List of (port, tunnel) tuples for active tunnels
+    tunnel : SSHTunnelForwarder | None
+        Single SSH tunnel forwarder instance for all ports
+    ports : list[int]
+        List of ports managed by the forwarder
     """
 
     def __init__(self) -> None:
         """Initialize PortForwardManager."""
-        self.tunnels: list[tuple[int, SSHTunnelForwarder]] = []
+        self.tunnel: SSHTunnelForwarder | None = None
+        self.ports: list[int] = []
 
     def validate_port(self, port: int) -> None:
         """Validate port number is in valid range.
@@ -92,70 +95,6 @@ class PortForwardManager:
         if not os.access(key_file, os.R_OK):
             raise PermissionError(f"SSH key file is not readable: {key_file}")
 
-    def create_tunnel(
-        self,
-        port: int,
-        host: str,
-        key_file: str,
-        username: str = "ubuntu",
-        ssh_port: int = 22,
-    ) -> None:
-        """Create SSH tunnel for a single port.
-
-        Parameters
-        ----------
-        port : int
-            Port to forward (same local and remote)
-        host : str
-            Remote host IP address
-        key_file : str
-            Path to SSH private key file
-        username : str
-            SSH username (default: ubuntu)
-        ssh_port : int
-            SSH port on remote host (default: 22)
-
-        Raises
-        ------
-        RuntimeError
-            If tunnel creation or start fails
-        ValueError
-            If port is not in valid range
-        FileNotFoundError
-            If key file does not exist
-        PermissionError
-            If key file is not readable
-        """
-        self.validate_port(port)
-        self.validate_key_file(key_file)
-
-        try:
-            tunnel = SSHTunnelForwarder(
-                ssh_address_or_host=(host, ssh_port),
-                ssh_username=username,
-                ssh_pkey=key_file,
-                remote_bind_address=("localhost", port),
-                local_bind_address=("localhost", port),
-            )
-
-            tunnel.start()
-
-            if not tunnel.is_active:
-                raise RuntimeError(
-                    f"SSH tunnel for port {port} failed to start - tunnel is not active"
-                )
-
-            self.tunnels.append((port, tunnel))
-
-        except (
-            BaseSSHTunnelForwarderError,
-            paramiko.SSHException,
-            OSError,
-        ) as e:
-            raise RuntimeError(
-                f"Failed to create SSH tunnel for port {port}: {e}"
-            ) from e
-
     def create_tunnels(
         self,
         ports: list[int],
@@ -164,9 +103,7 @@ class PortForwardManager:
         username: str = "ubuntu",
         ssh_port: int = 22,
     ) -> None:
-        """Create SSH tunnels for multiple ports.
-
-        If any tunnel fails, stops all successfully created tunnels and raises.
+        """Create SSH tunnels for multiple ports using single SSHTunnelForwarder.
 
         Parameters
         ----------
@@ -184,27 +121,59 @@ class PortForwardManager:
         Raises
         ------
         RuntimeError
-            If any tunnel creation fails
+            If tunnel creation fails
         """
+        if not ports:
+            return
+
         for port in ports:
-            try:
+            self.validate_port(port)
+        self.validate_key_file(key_file)
+
+        remote_binds = [("localhost", port) for port in ports]
+        local_binds = [("localhost", port) for port in ports]
+
+        try:
+            for port in ports:
                 logger.info(f"Creating SSH tunnel for port {port}...")
-                self.create_tunnel(port, host, key_file, username, ssh_port)
+
+            tunnel = SSHTunnelForwarder(
+                ssh_address_or_host=(host, ssh_port),
+                ssh_username=username,
+                ssh_pkey=key_file,
+                remote_bind_addresses=remote_binds,
+                local_bind_addresses=local_binds,
+            )
+            tunnel.skip_tunnel_checkup = True
+
+            tunnel.start()
+
+            self.tunnel = tunnel
+            self.ports = ports
+
+            for port in ports:
                 logger.info(
                     f"SSH tunnel established: localhost:{port} -> remote:{port}"
                 )
-            except RuntimeError as e:
-                logger.error(f"Failed to create tunnel for port {port}: {e}")
-                self.stop_all_tunnels()
-                raise
+
+        except (
+            BaseSSHTunnelForwarderError,
+            paramiko.SSHException,
+            OSError,
+        ) as e:
+            self.stop_all_tunnels()
+            raise RuntimeError(f"Failed to create SSH tunnels: {e}") from e
 
     def stop_all_tunnels(self) -> None:
-        """Stop all active SSH tunnels."""
-        for port, tunnel in self.tunnels:
-            try:
+        """Stop the SSH tunnel forwarder."""
+        if self.tunnel:
+            for port in self.ports:
                 logger.info(f"Stopping SSH tunnel for port {port}...")
-                tunnel.stop()
-            except (BaseSSHTunnelForwarderError, OSError) as e:
-                logger.warning(f"Error stopping tunnel for port {port}: {e}")
 
-        self.tunnels.clear()
+            try:
+                self.tunnel.stop()
+            except (BaseSSHTunnelForwarderError, OSError) as e:
+                logger.warning(f"Error stopping tunnels: {e}")
+
+            self.tunnel = None
+            self.ports = []

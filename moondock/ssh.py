@@ -91,6 +91,25 @@ def get_ssh_connection_info(
                 )
                 logger.debug(f"SSH key file path: {actual_key_file}")
                 logger.debug(f"SSH key file exists: {os.path.exists(actual_key_file)}")
+
+                http_servers_ready_var = f"HTTP_SERVERS_READY_{instance_id}"
+                http_wait_timeout = 30
+                http_wait_start = time.time()
+                logger.debug(f"Waiting for HTTP servers to be ready (checking {http_servers_ready_var})...")
+
+                while time.time() - http_wait_start < http_wait_timeout:
+                    if http_servers_ready_var in os.environ:
+                        http_elapsed = time.time() - http_wait_start
+                        total_elapsed = time.time() - start
+                        logger.info(
+                            f"HTTP servers ready after {http_elapsed:.1f}s (total: {total_elapsed:.1f}s)"
+                        )
+                        return "localhost", port, actual_key_file
+                    time.sleep(0.1)
+
+                logger.warning(
+                    f"HTTP servers not ready after {http_wait_timeout}s, proceeding anyway"
+                )
                 return "localhost", port, actual_key_file
 
             time.sleep(0.5)
