@@ -88,6 +88,30 @@ def step_marker_file_exists(context: Context, filename: str) -> None:
     logger.info(f"Verified marker file exists: {filename}")
 
 
+@then('file "{filepath}" exists in SSH container')
+def step_file_exists_in_ssh_container(context: Context, filepath: str) -> None:
+    """Verify file exists in SSH container via Docker API.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    filepath : str
+        Path to file in container
+
+    Raises
+    ------
+    AssertionError
+        If file does not exist in container
+    """
+    exit_code, output = exec_in_ssh_container(context, ["test", "-f", filepath])
+
+    if exit_code != 0:
+        raise AssertionError(f"File {filepath} does not exist in SSH container")
+
+    logger.info(f"Verified file exists in SSH container: {filepath}")
+
+
 @then('directory "{dirpath}" exists in SSH container')
 def step_directory_exists(context: Context, dirpath: str) -> None:
     """Verify directory exists in SSH container via Docker API.

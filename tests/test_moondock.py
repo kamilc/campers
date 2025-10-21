@@ -10,6 +10,7 @@ test_moondock_class_exists
 
 """
 
+import shlex
 from pathlib import Path
 
 import pytest
@@ -531,7 +532,8 @@ python app.py"""
     result = moondock_instance._build_command_in_directory("~/app", multiline_script)
 
     assert (
-        result == f"mkdir -p '~/app' && cd '~/app' && bash -c {repr(multiline_script)}"
+        result
+        == f"mkdir -p '~/app' && cd '~/app' && bash -c {shlex.quote(multiline_script)}"
     )
     assert "source .venv/bin/activate" in result
 

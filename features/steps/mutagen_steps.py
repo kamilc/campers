@@ -65,9 +65,11 @@ def step_defaults_no_sync_paths(context: Context) -> None:
 def step_defaults_multiline_startup_script(context: Context) -> None:
     """Add multi-line startup_script with shell features to defaults."""
     defaults = ensure_defaults_section(context)
-    multiline_script = """source .venv/bin/activate
-export DEBUG=1
-cd src"""
+    multiline_script = """set -e
+cd ~/myproject || exit 1
+mkdir -p .venv/bin
+touch .startup_marker
+echo "Activated" > .venv/status.txt"""
     defaults["startup_script"] = multiline_script
 
 

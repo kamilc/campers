@@ -213,54 +213,60 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
     )
 
     if is_localstack:
-        logger.info("LocalStack scenario detected, using in-process execution")
+        logger.debug("LocalStack scenario detected, using in-process execution")
 
         machine_name, command = parse_cli_args(args)
         logger.debug(f"Parsed args: machine_name={machine_name}, command={command}")
 
+        os.environ["MOONDOCK_TEST_MODE"] = "0"
+        logger.debug("Disabled MOONDOCK_TEST_MODE for @localstack scenario")
+
+        from features.steps.mutagen_mocking import mutagen_mocked
+
         try:
-            cli = MoondockCLI()
+            with mutagen_mocked(context):
+                cli = MoondockCLI()
 
-            if args[0] == "run":
-                result = cli.run(
-                    machine_name=machine_name,
-                    command=command,
-                    json_output=True,
-                    plain=True,
-                )
-
-                context.exit_code = 0
-                context.stdout = (
-                    result if isinstance(result, str) else json.dumps(result)
-                )
-                context.stderr = ""
-
-                if isinstance(result, str):
-                    try:
-                        context.final_config = json.loads(result)
-                    except json.JSONDecodeError:
-                        context.final_config = {"raw_output": result}
-                elif isinstance(result, dict):
-                    context.final_config = result
-
-                if context.final_config and "instance_id" in context.final_config:
-                    context.instance_id = context.final_config["instance_id"]
-
-                logger.info(
-                    f"In-process execution succeeded, instance: {context.final_config.get('instance_id', 'unknown')}"
-                )
-
-                if hasattr(context, "monitor_error") and context.monitor_error:
-                    logger.error(
-                        f"Monitor thread reported error: {context.monitor_error}"
+                if args[0] == "run":
+                    result = cli.run(
+                        machine_name=machine_name,
+                        command=command,
+                        json_output=True,
+                        plain=True,
                     )
-            else:
-                raise ValueError(
-                    f"Unsupported command for in-process execution: {args[0]}"
-                )
+
+                    context.exit_code = 0
+                    context.stdout = (
+                        result if isinstance(result, str) else json.dumps(result)
+                    )
+                    context.stderr = ""
+
+                    if isinstance(result, str):
+                        try:
+                            context.final_config = json.loads(result)
+                        except json.JSONDecodeError:
+                            context.final_config = {"raw_output": result}
+                    elif isinstance(result, dict):
+                        context.final_config = result
+
+                    if context.final_config and "instance_id" in context.final_config:
+                        context.instance_id = context.final_config["instance_id"]
+
+                    logger.debug(
+                        f"In-process execution succeeded, instance: {context.final_config.get('instance_id', 'unknown')}"
+                    )
+
+                    if hasattr(context, "monitor_error") and context.monitor_error:
+                        logger.error(
+                            f"Monitor thread reported error: {context.monitor_error}"
+                        )
+                else:
+                    raise ValueError(
+                        f"Unsupported command for in-process execution: {args[0]}"
+                    )
 
         except SystemExit as e:
-            logger.warning(f"CLI raised SystemExit with code {e.code}")
+            logger.debug(f"CLI raised SystemExit with code {e.code}")
             context.exit_code = e.code if e.code is not None else 1
             context.stderr = f"Command exited with code {e.code}"
             context.stdout = ""
@@ -273,7 +279,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
             context.error = str(e)
 
     else:
-        logger.info("Non-LocalStack scenario, using subprocess execution")
+        logger.debug("Non-LocalStack scenario, using subprocess execution")
 
         if args and args[0] == "run":
             args.append("--json-output")
@@ -445,7 +451,9 @@ def step_machine_has_sync_paths_configured(context: Context, machine_name: str) 
 
 
 @given('machine "{machine_name}" has ports {ports_list}')
-def step_machine_has_ports(context: Context, machine_name: str, ports_list: str) -> None:
+def step_machine_has_ports(
+    context: Context, machine_name: str, ports_list: str
+) -> None:
     ensure_machine_exists(context, machine_name)
     ports = json.loads(ports_list)
     context.config_data["machines"][machine_name]["ports"] = ports

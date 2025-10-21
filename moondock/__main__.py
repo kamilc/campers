@@ -1852,7 +1852,7 @@ class Moondock:
         str
             Full command with directory change and proper escaping
         """
-        return f"mkdir -p {shlex.quote(working_dir)} && cd {shlex.quote(working_dir)} && bash -c {repr(command)}"
+        return f"mkdir -p {shlex.quote(working_dir)} && cd {shlex.quote(working_dir)} && bash -c {shlex.quote(command)}"
 
     def _truncate_name(self, name: str) -> str:
         """Truncate machine config name to fit in column width.

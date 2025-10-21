@@ -95,7 +95,9 @@ def get_ssh_connection_info(
                 http_servers_ready_var = f"HTTP_SERVERS_READY_{instance_id}"
                 http_wait_timeout = 30
                 http_wait_start = time.time()
-                logger.debug(f"Waiting for HTTP servers to be ready (checking {http_servers_ready_var})...")
+                logger.debug(
+                    f"Waiting for HTTP servers to be ready (checking {http_servers_ready_var})..."
+                )
 
                 while time.time() - http_wait_start < http_wait_timeout:
                     if http_servers_ready_var in os.environ:
@@ -375,7 +377,7 @@ class SSHManager:
                 f"Command length ({len(command)}) exceeds maximum of {MAX_COMMAND_LENGTH} characters"
             )
 
-        shell_command = f"cd ~ && bash -c {repr(command)}"
+        shell_command = f"cd ~ && bash -c {shlex.quote(command)}"
         return self._execute_with_streaming(shell_command)
 
     def execute_command_raw(self, command: str) -> int:

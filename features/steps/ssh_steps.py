@@ -191,8 +191,11 @@ def step_output_streamed(context: Context) -> None:
 def step_instance_launched(context: Context) -> None:
     """Verify instance was launched."""
 
-    if hasattr(context, "stderr") and "Setup script failed" in context.stderr:
-        assert context.exit_code != 0, "Setup script should have caused failure"
+    if hasattr(context, "stderr") and (
+        "Setup script failed" in context.stderr
+        or "Startup script failed" in context.stderr
+    ):
+        assert context.exit_code != 0, "Setup/Startup script should have caused failure"
     else:
         assert context.exit_code == 0, (
             f"Command failed with exit code {context.exit_code}"
