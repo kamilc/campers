@@ -22,15 +22,15 @@ Scenario: Multi-line startup_script with shell features
   Given config file with defaults section
   And defaults have sync_paths configured
   And defaults have multi-line startup_script with shell features
-  And defaults have command "cat /home/user/myproject/.venv/status.txt"
+  And defaults have command "cat /config/myproject/.venv/status.txt"
   And LocalStack is healthy and responding
 
-  When I run moondock command "run -c 'cat /home/user/myproject/.venv/status.txt'"
+  When I run moondock command "run -c 'cat /config/myproject/.venv/status.txt'"
 
   Then startup_script executes successfully
   And startup_script exit code is 0
   And startup_script creates file in synced directory
-  And file "/home/user/myproject/.venv/status.txt" contains "Activated"
+  And file "/config/myproject/.venv/status.txt" contains "Activated"
   And output contains "Activated"
 
 @error @localstack
@@ -72,7 +72,7 @@ Scenario: Configuration hierarchy for startup_script
 
   When I run moondock command "run override-box -c 'ls ~/myproject'"
 
-  Then file "/home/user/myproject/.machine_marker" exists in SSH container
+  Then file "/config/myproject/.machine_marker" exists in SSH container
   And status message "Startup script completed successfully" is logged
 
 @smoke @localstack @pilot
@@ -89,7 +89,7 @@ Scenario: Execute startup_script after sync via TUI
   Then the TUI log panel contains "Running startup_script..."
   And the TUI log panel contains "Startup script completed successfully"
   And the TUI log panel contains "Command completed successfully"
-  And file "/home/user/myproject/.startup_marker" exists in SSH container
+  And file "/config/myproject/.startup_marker" exists in SSH container
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
 @smoke @localstack @pilot
@@ -104,7 +104,7 @@ Scenario: Multi-line startup_script via TUI
   And I simulate running the machine in the TUI
 
   Then the TUI log panel contains "Startup script completed successfully"
-  And file "/home/user/myproject/.venv/status.txt" contains "Activated"
+  And file "/config/myproject/.venv/status.txt" contains "Activated"
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
 @error @localstack @pilot
@@ -151,7 +151,7 @@ Scenario: Configuration hierarchy via TUI
   And I simulate running the "override-box" in the TUI
 
   Then the TUI log panel contains "Startup script completed successfully"
-  And file "/home/user/myproject/.machine_marker" exists in SSH container
+  And file "/config/myproject/.machine_marker" exists in SSH container
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
 @smoke @dry_run

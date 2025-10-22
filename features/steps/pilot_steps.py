@@ -121,7 +121,9 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
 
     max_wait = 90
     logger.info(f"=== STARTING TUI TEST FOR MACHINE: {machine_name} ===")
-    result = run_tui_test_with_machine(machine_name, context.config_path, max_wait)
+    result = run_tui_test_with_machine(
+        machine_name, context.config_path, max_wait, context
+    )
     context.tui_result = result
     logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {machine_name} ===")
     logger.info(f"TUI result status: {result.get('status', 'UNKNOWN')}")
@@ -289,12 +291,16 @@ def extract_log_lines(app: MoondockTUI) -> tuple[list[str], str]:
 
 
 def run_tui_test_with_machine(
-    machine_name: str, config_path: str, max_wait: int = 90
+    machine_name: str,
+    config_path: str,
+    max_wait: int = 90,
+    behave_context: Context | None = None,
 ) -> dict[str, Any]:
     """Run the TUI test asynchronously with unified timeout budget.
 
     Uses a single unified timeout budget for all polling operations to prevent
-    timeout accumulation that could exceed scenario limits.
+    timeout accumulation that could exceed scenario limits. Applies Mutagen
+    mocking for LocalStack scenarios to avoid real AWS connections.
 
     Parameters
     ----------
@@ -304,6 +310,8 @@ def run_tui_test_with_machine(
         Path to the config file
     max_wait : int
         Maximum time to wait for all conditions in seconds
+    behave_context : Context | None
+        Optional Behave context containing test fixtures for Mutagen mocking
 
     Returns
     -------
@@ -319,37 +327,54 @@ def run_tui_test_with_machine(
         original_values = setup_test_environment(config_path)
 
         try:
-            moondock = Moondock()
-            update_queue: queue.Queue = queue.Queue(maxsize=100)
-            _tui_update_queue = update_queue
+            from contextlib import asynccontextmanager
 
-            app = MoondockTUI(
-                moondock_instance=moondock,
-                run_kwargs={"machine_name": machine_name, "json_output": False},
-                update_queue=update_queue,
-            )
+            from features.steps.mutagen_mocking import mutagen_mocked
 
-            async with app.run_test() as pilot:
-                await pilot.pause()
+            @asynccontextmanager
+            async def mocking_context_manager():
+                if behave_context is not None:
+                    with mutagen_mocked(behave_context):
+                        yield
+                else:
+                    logger.warning(
+                        "No Behave context provided for Mutagen mocking - "
+                        "real Mutagen will be used"
+                    )
+                    yield
 
-                await poll_tui_with_unified_timeout(app, pilot, max_wait)
+            async with mocking_context_manager():
+                moondock = Moondock()
+                update_queue: queue.Queue = queue.Queue(maxsize=100)
+                _tui_update_queue = update_queue
 
-                log_lines, log_text = extract_log_lines(app)
-                status_widget = app.query_one("#status-widget")
-                final_status = str(status_widget.render())
-
-                logger.info(
-                    "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
-                    machine_name,
-                    final_status,
-                    len(log_text),
+                app = MoondockTUI(
+                    moondock_instance=moondock,
+                    run_kwargs={"machine_name": machine_name, "json_output": False},
+                    update_queue=update_queue,
                 )
 
-                return {
-                    "status": final_status,
-                    "log_lines": log_lines,
-                    "log_text": log_text,
-                }
+                async with app.run_test() as pilot:
+                    await pilot.pause()
+
+                    await poll_tui_with_unified_timeout(app, pilot, max_wait)
+
+                    log_lines, log_text = extract_log_lines(app)
+                    status_widget = app.query_one("#status-widget")
+                    final_status = str(status_widget.render())
+
+                    logger.info(
+                        "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
+                        machine_name,
+                        final_status,
+                        len(log_text),
+                    )
+
+                    return {
+                        "status": final_status,
+                        "log_lines": log_lines,
+                        "log_text": log_text,
+                    }
         finally:
             _tui_update_queue = None
             restore_environment(original_values)

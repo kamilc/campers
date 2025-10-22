@@ -1,51 +1,14 @@
 """BDD step definitions for setup script execution testing."""
 
 import logging
-from typing import Union
 
-import docker
 from behave import given, then
 from behave.runner import Context
 
 from features.steps.cli_steps import ensure_machine_exists
+from features.steps.docker_helpers import exec_in_ssh_container
 
 logger = logging.getLogger(__name__)
-
-
-def exec_in_ssh_container(
-    context: Context, command: Union[str, list[str]]
-) -> tuple[int, bytes]:
-    """Execute command in SSH container via Docker API.
-
-    Parameters
-    ----------
-    context : Context
-        Behave context object with instance_id
-    command : str | list[str]
-        Command to execute in container
-
-    Returns
-    -------
-    tuple[int, bytes]
-        Exit code and output from container.exec_run()
-
-    Raises
-    ------
-    AssertionError
-        If instance_id not found or container not found
-    """
-    if not hasattr(context, "instance_id"):
-        raise AssertionError("No instance_id found. Launch instance first.")
-
-    instance_id = context.instance_id
-    docker_client = docker.from_env()
-    container_name = f"ssh-{instance_id}"
-
-    try:
-        container = docker_client.containers.get(container_name)
-        return container.exec_run(command)
-    except docker.errors.NotFound:
-        raise AssertionError(f"SSH container {container_name} not found")
 
 
 @given('machine "{machine_name}" has multi-line setup_script')

@@ -163,7 +163,18 @@ def step_instance_launched_with_ssh(context: Context) -> None:
 @then("SSH connection is established")
 def step_ssh_connection_established(context: Context) -> None:
     """Verify SSH connection was established."""
-    assert context.exit_code == 0, f"Command failed with exit code {context.exit_code}"
+    error_details = ""
+
+    if hasattr(context, "stderr") and context.stderr:
+        error_details += f"\nSTDERR: {context.stderr}"
+
+    if hasattr(context, "error") and context.error:
+        error_details += f"\nERROR: {context.error}"
+
+    if hasattr(context, "stdout") and context.stdout:
+        error_details += f"\nSTDOUT: {context.stdout}"
+
+    assert context.exit_code == 0, f"Command failed with exit code {context.exit_code}{error_details}"
 
 
 @then('command "{command}" executes on remote instance')

@@ -2,55 +2,13 @@
 
 import logging
 
-import docker
 from behave import given, then, when
 from behave.runner import Context
 
-from features.steps.setup_script_steps import exec_in_ssh_container
+from features.steps.docker_helpers import exec_in_ssh_container
 from features.steps.ssh_steps import get_combined_log_output
 
 logger = logging.getLogger(__name__)
-
-
-def create_synced_directory(context: Context) -> None:
-    """Create synced directory in SSH container via Docker API.
-
-    Parameters
-    ----------
-    context : Context
-        Behave context object with instance_id and sync_directory
-
-    Raises
-    ------
-    RuntimeError
-        If directory creation or ownership change fails
-    """
-    if not hasattr(context, "instance_id"):
-        logger.warning(
-            "No instance_id found, directory will be created when instance launches"
-        )
-        return
-
-    if not hasattr(context, "sync_directory"):
-        logger.warning("No sync_directory configured")
-        return
-
-    instance_id = context.instance_id
-    docker_client = docker.from_env()
-    container_name = f"ssh-{instance_id}"
-
-    try:
-        container = docker_client.containers.get(container_name)
-
-        exit_code, output = container.exec_run(["mkdir", "-p", context.sync_directory])
-
-        if exit_code != 0:
-            raise RuntimeError(f"Failed to create sync directory: {output.decode()}")
-
-        logger.info(f"Created synced directory: {context.sync_directory}")
-
-    except docker.errors.NotFound:
-        raise AssertionError(f"SSH container {container_name} not found")
 
 
 def ensure_sync_directory_context(context: Context) -> None:
@@ -72,9 +30,9 @@ def ensure_sync_directory_context(context: Context) -> None:
         sync_paths = context.config_data["defaults"]["sync_paths"]
         if sync_paths and len(sync_paths) > 0:
             remote_path = sync_paths[0].get("remote", "~/myproject")
-            context.sync_directory = remote_path.replace("~", "/home/user")
+            context.sync_directory = remote_path.replace("~", "/config")
     else:
-        context.sync_directory = "/home/user/myproject"
+        context.sync_directory = "/config/myproject"
 
 
 @given('defaults have command "{command}"')
@@ -202,7 +160,9 @@ def step_simulate_running_machine_in_tui(context: Context) -> None:
 
     max_wait = 180
     logger.info(f"=== STARTING TUI TEST FOR MACHINE: {machine_name} ===")
-    result = run_tui_test_with_machine(machine_name, context.config_path, max_wait)
+    result = run_tui_test_with_machine(
+        machine_name, context.config_path, max_wait, context
+    )
     context.tui_result = result
     logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {machine_name} ===")
     logger.info(f"TUI result status: {result.get('status', 'UNKNOWN')}")
