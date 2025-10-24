@@ -203,6 +203,7 @@ async def poll_tui_with_unified_timeout(
     terminating_found = False
     command_completed_found = False
     cleanup_completed_found = False
+    error_found = False
 
     while time.time() - start_time < max_wait:
         try:
@@ -218,7 +219,8 @@ async def poll_tui_with_unified_timeout(
                 logger.info(
                     f"Still polling (terminating: {terminating_found}, "
                     f"command: {command_completed_found}, "
-                    f"cleanup: {cleanup_completed_found})"
+                    f"cleanup: {cleanup_completed_found}, "
+                    f"error: {error_found})"
                 )
                 last_log_time = time.time()
 
@@ -226,6 +228,11 @@ async def poll_tui_with_unified_timeout(
                 if not terminating_found:
                     logger.info("Found 'terminating' status")
                 terminating_found = True
+
+            if "error" in status_text.lower():
+                if not error_found:
+                    logger.info("Found 'error' status")
+                error_found = True
         except NoMatches:
             logger.debug("Status widget not found")
         except Exception as e:
@@ -250,6 +257,11 @@ async def poll_tui_with_unified_timeout(
         except Exception:
             pass
 
+        if error_found:
+            logger.info("Error status detected - breaking early from polling")
+            await pilot.pause(2.0)
+            break
+
         if terminating_found and command_completed_found and cleanup_completed_found:
             logger.info("All TUI conditions met")
             await pilot.pause(3.0)
@@ -262,7 +274,8 @@ async def poll_tui_with_unified_timeout(
         f"TUI polling completed after {elapsed:.1f}s "
         f"(terminating: {terminating_found}, "
         f"command: {command_completed_found}, "
-        f"cleanup: {cleanup_completed_found})"
+        f"cleanup: {cleanup_completed_found}, "
+        f"error: {error_found})"
     )
 
 

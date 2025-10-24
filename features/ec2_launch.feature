@@ -34,7 +34,7 @@ Scenario: Ad-hoc instance tagged without machine name
   When I launch instance with options "--instance-type t3.medium"
   Then instance has tag "MachineConfig" with value "ad-hoc"
 
-@poc @localstack @pilot
+@poc @localstack @pilot @timeout_300
 Scenario: Launch and terminate instance via TUI with LocalStack
   Given a config file with machine "test-machine" defined
   And machine "test-machine" has instance_type "t3.micro"

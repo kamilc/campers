@@ -47,7 +47,7 @@ Scenario: Instance without public IP raises error
   Then command fails with ValueError
   And error message contains "does not have a public IP address"
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_300
 Scenario: Execute command via TUI with real SSH
   Given a config file with machine "test-box" defined
   And machine "test-box" has command "uptime"
@@ -60,7 +60,7 @@ Scenario: Execute command via TUI with real SSH
   And the TUI log panel contains "Command completed successfully"
   And the TUI log panel contains "Cleanup completed successfully"
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_300
 Scenario: Execute command from machine config via TUI
   Given a config file with machine "test-box" defined
   And machine "test-box" has command "hostname"
@@ -71,7 +71,7 @@ Scenario: Execute command from machine config via TUI
   And the TUI log panel contains "SSH connection established"
   And the TUI log panel contains "Command completed successfully"
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_300
 Scenario: Skip SSH when no command specified via TUI
   Given a config file with machine "test-box" defined
   And machine "test-box" has no command field
@@ -83,7 +83,7 @@ Scenario: Skip SSH when no command specified via TUI
   And the TUI status widget shows "Status: terminating" within 180 seconds
   And the TUI log panel contains "Cleanup completed successfully"
 
-@error @localstack @pilot
+@error @localstack @pilot @timeout_300
 Scenario: Command fails with non-zero exit code via TUI
   Given a config file with machine "test-box" defined
   And machine "test-box" has command "exit 42"

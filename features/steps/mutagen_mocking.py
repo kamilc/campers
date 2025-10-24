@@ -1,6 +1,7 @@
 """Mutagen mocking infrastructure for LocalStack testing."""
 
 import logging
+import os
 from contextlib import contextmanager
 from typing import Generator
 from unittest.mock import patch
@@ -40,6 +41,13 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
 
     def mock_create_sync_session(self, *args, **kwargs):
         logger.info("Creating Mutagen sync session")
+        if not hasattr(context, "instance_id"):
+            target_ids = os.environ.get("MOONDOCK_TARGET_INSTANCE_IDS", "")
+            if target_ids:
+                instance_ids = [id.strip() for id in target_ids.split(",") if id.strip()]
+                if instance_ids:
+                    context.instance_id = instance_ids[-1]
+                    logger.debug(f"Set context.instance_id from env: {context.instance_id}")
         create_synced_directories(context)
         logger.info("Sync session created")
         return {"session_id": "mock-session", "status": "synced"}

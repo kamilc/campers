@@ -69,7 +69,7 @@ Scenario: Machine config overrides defaults setup_script
   Then marker file "/tmp/machine_marker" exists in SSH container
   And status message "Setup script completed successfully" is logged
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_300
 Scenario: Execute setup_script before command via TUI
   Given a config file with machine "dev-box" defined
   And machine "dev-box" has setup_script "touch /tmp/setup_marker"
@@ -85,7 +85,7 @@ Scenario: Execute setup_script before command via TUI
   And marker file "/tmp/setup_marker" exists in SSH container
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_300
 Scenario: Multi-line setup_script via TUI
   Given a config file with machine "dev-box" defined
   And machine "dev-box" has multi-line setup_script
@@ -100,7 +100,7 @@ Scenario: Multi-line setup_script via TUI
   And file "/tmp/workspace/status.txt" contains "Ready"
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@error @localstack @pilot
+@error @localstack @pilot @timeout_300
 Scenario: Setup_script failure shown in TUI
   Given a config file with machine "test-box" defined
   And machine "test-box" has setup_script "exit 1"
@@ -115,7 +115,7 @@ Scenario: Setup_script failure shown in TUI
   And the TUI log panel does not contain "Command completed"
   And the TUI status widget shows "Status: error" within 180 seconds
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_300
 Scenario: Skip setup_script via TUI when not defined
   Given a config file with machine "minimal-box" defined
   And machine "minimal-box" has no setup_script
@@ -129,7 +129,7 @@ Scenario: Skip setup_script via TUI when not defined
   And the TUI log panel contains "Command completed successfully"
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@integration @localstack @pilot
+@integration @localstack @pilot @timeout_300
 Scenario: Machine config overrides defaults via TUI
   Given a config file with defaults section
   And defaults have setup_script "touch /tmp/default_marker"

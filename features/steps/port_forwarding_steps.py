@@ -254,7 +254,7 @@ def step_message_before_tunnels(context: Context, message: str) -> None:
     assert message in output
 
     message_index = output.index(message)
-    tunnel_message = "Creating SSH tunnel for port 8888..."
+    tunnel_message = "Creating SSH tunnel for port 48888..."
 
     if tunnel_message in output:
         tunnel_index = output.index(tunnel_message)
@@ -269,7 +269,7 @@ def step_message_after_tunnels(context: Context, message: str) -> None:
 
     assert message in output
 
-    tunnel_message = "SSH tunnel established: localhost:8888 -> remote:8888"
+    tunnel_message = "SSH tunnel established: localhost:48888 -> remote:48888"
 
     if tunnel_message in output:
         tunnel_index = output.index(tunnel_message)

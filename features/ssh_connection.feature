@@ -26,7 +26,7 @@ Scenario: SSH connection fails after all retries
   And error message contains "Failed to establish SSH connection"
   And command fails with non-zero exit code
 
-@integration @localstack @pilot
+@integration @localstack @pilot @timeout_300
 Scenario: SSH connection retry progress shown in TUI
   Given a config file with machine "test-box" defined
   And machine "test-box" has command "echo ready"
@@ -44,7 +44,7 @@ Scenario: SSH connection retry progress shown in TUI
   And the TUI log panel contains "Command completed successfully"
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@error @localstack @pilot
+@error @localstack @pilot @timeout_300
 Scenario: SSH connection failure shown in TUI
   Given a config file with machine "test-box" defined
   And machine "test-box" has command "echo test"

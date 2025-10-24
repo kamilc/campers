@@ -4,6 +4,7 @@ import importlib.util
 import logging
 import logging.handlers
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -16,6 +17,20 @@ logger = logging.getLogger(__name__)
 # Test-specific configuration constants
 TEST_SSH_TIMEOUT_SECONDS = 3
 TEST_SSH_MAX_RETRIES = 6
+SCENARIO_TIMEOUT_SECONDS = 180
+
+
+class ScenarioTimeoutError(Exception):
+    pass
+
+
+_current_timeout_seconds = SCENARIO_TIMEOUT_SECONDS
+
+
+def timeout_handler(signum: int, frame) -> None:
+    raise ScenarioTimeoutError(
+        f"Scenario exceeded timeout of {_current_timeout_seconds} seconds"
+    )
 
 
 class LogCapture(logging.Handler):
@@ -111,6 +126,23 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     """
     import boto3
 
+    timeout_seconds = SCENARIO_TIMEOUT_SECONDS
+    for tag in scenario.tags:
+        if tag.startswith("timeout_"):
+            try:
+                timeout_seconds = int(tag.split("_")[1])
+                logger.info(f"Using custom timeout from tag: {timeout_seconds}s")
+            except (ValueError, IndexError):
+                logger.warning(f"Invalid timeout tag format: {tag}, using default")
+
+    global _current_timeout_seconds
+    _current_timeout_seconds = timeout_seconds
+
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(timeout_seconds)
+    context.timeout_set = True
+    logger.info(f"Scenario timeout set to {timeout_seconds}s for: {scenario.name}")
+
     if hasattr(context, "mock_aws_env") and context.mock_aws_env:
         try:
             context.mock_aws_env.stop()
@@ -119,6 +151,36 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
     is_localstack_scenario = "localstack" in scenario.tags
     is_pilot_scenario = "pilot" in scenario.tags
+
+    if is_localstack_scenario or is_pilot_scenario:
+        import socket
+        import time
+
+        common_test_ports = [48888, 48889, 48890]
+        max_wait_seconds = 5
+
+        for port in common_test_ports:
+            port_released = False
+
+            for attempt in range(max_wait_seconds * 2):
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                        sock.bind(("localhost", port))
+                        port_released = True
+                        logger.debug(f"Port {port} is available")
+                        break
+                except OSError:
+                    if attempt == 0:
+                        logger.warning(
+                            f"Port {port} is in use, waiting up to {max_wait_seconds}s for release..."
+                        )
+
+                    time.sleep(0.5)
+
+            if not port_released:
+                logger.error(
+                    f"Port {port} still in use after {max_wait_seconds}s - test may fail"
+                )
 
     if is_localstack_scenario or is_pilot_scenario:
         try:
@@ -322,6 +384,11 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     scenario : Scenario
         The scenario that just finished.
     """
+    if hasattr(context, "timeout_set") and context.timeout_set:
+        signal.alarm(0)
+        context.timeout_set = False
+        logger.debug(f"Scenario timeout cancelled for: {scenario.name}")
+
     try:
         if hasattr(context, "log_handler") and context.log_handler:
             moondock_ec2_logger = logging.getLogger("moondock.ec2")
@@ -465,6 +532,16 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     cleanup_env_var("MOONDOCK_SSH_BLOCK_CONNECTIONS", logger)
     cleanup_env_var("MOONDOCK_SSH_TIMEOUT", logger)
     cleanup_env_var("MOONDOCK_SSH_MAX_RETRIES", logger)
+
+    try:
+        if hasattr(context, "port_forward_manager") and context.port_forward_manager:
+            try:
+                context.port_forward_manager.stop_all_tunnels()
+                logger.debug("Stopped port forwarding tunnels from test scenario")
+            except Exception as e:
+                logger.debug(f"Error stopping port forwarding tunnels: {e}")
+    except Exception as e:
+        logger.debug(f"Error during port forwarding cleanup: {e}")
 
     try:
         if hasattr(context, "monitor_stop_event") and context.monitor_stop_event:

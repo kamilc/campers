@@ -75,7 +75,7 @@ Scenario: Configuration hierarchy for startup_script
   Then file "/config/myproject/.machine_marker" exists in SSH container
   And status message "Startup script completed successfully" is logged
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_300
 Scenario: Execute startup_script after sync via TUI
   Given a config file with defaults section
   And defaults have sync_paths configured
@@ -92,7 +92,7 @@ Scenario: Execute startup_script after sync via TUI
   And file "/config/myproject/.startup_marker" exists in SSH container
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_300
 Scenario: Multi-line startup_script via TUI
   Given a config file with defaults section
   And defaults have sync_paths configured
@@ -107,7 +107,7 @@ Scenario: Multi-line startup_script via TUI
   And file "/config/myproject/.venv/status.txt" contains "Activated"
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@error @localstack @pilot
+@error @localstack @pilot @timeout_300
 Scenario: Startup_script failure shown in TUI
   Given a config file with defaults section
   And defaults have sync_paths configured
@@ -123,7 +123,7 @@ Scenario: Startup_script failure shown in TUI
   And the TUI log panel does not contain "Command completed"
   And the TUI status widget shows "Status: error" within 180 seconds
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_300
 Scenario: Skip startup_script via TUI when not defined
   Given a config file with defaults section
   And defaults have sync_paths configured
@@ -138,7 +138,7 @@ Scenario: Skip startup_script via TUI when not defined
   And the TUI log panel contains "Command completed successfully"
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@integration @localstack @pilot
+@integration @localstack @pilot @timeout_300
 Scenario: Configuration hierarchy via TUI
   Given a config file with defaults section
   And defaults have sync_paths configured

@@ -93,21 +93,31 @@ def create_directory_in_container(
     if not path.startswith("/"):
         raise ValueError(f"path must be absolute, got: {path}")
 
+    logger.debug(f"Creating directory {path} for instance {getattr(context, 'instance_id', 'UNKNOWN')}")
     container = get_ssh_container(context)
 
     exit_code, output = container.exec_run(["mkdir", "-p", path])
     if exit_code != 0:
+        logger.error(f"mkdir failed with code {exit_code}: {output.decode()}")
         raise RuntimeError(
             f"Failed to create directory {path}: {output.decode()}"
         )
 
     exit_code, output = container.exec_run(["chmod", "-R", mode, path])
     if exit_code != 0:
+        logger.error(f"chmod failed with code {exit_code}: {output.decode()}")
         raise RuntimeError(
             f"Failed to set permissions on {path}: {output.decode()}"
         )
 
-    logger.debug(f"Created directory: {path} (mode: {mode})")
+    exit_code, output = container.exec_run(["chown", "-R", "ubuntu:ubuntu", path])
+    if exit_code != 0:
+        logger.error(f"chown failed with code {exit_code}: {output.decode()}")
+        raise RuntimeError(
+            f"Failed to set ownership on {path}: {output.decode()}"
+        )
+
+    logger.debug(f"Successfully created directory: {path} (mode: {mode}, owner: ubuntu:ubuntu)")
 
 
 def create_symlink_in_container(
@@ -171,10 +181,11 @@ def create_synced_directories(context: Context) -> None:
     """Create all synced directories and symlinks from context.config_data.
 
     Reads sync_paths from context.config_data and for each path:
-    1. Creates the remote directory in the SSH container
-    2. If the path starts with ~/, creates a symlink from /root to /config
+    1. Creates the remote directory in the SSH container at /config/{path}
+    2. Creates symlinks for root user at /root/{path}
+    3. Creates directories for ubuntu user at /home/ubuntu/{path}
 
-    This enables both /config/myproject and ~/myproject to work in tests.
+    This enables ~/myproject paths to work correctly for different users.
 
     Parameters
     ----------
@@ -184,26 +195,36 @@ def create_synced_directories(context: Context) -> None:
     Raises
     ------
     RuntimeError
-        If instance not launched or directory/symlink creation fails
+        If instance not launched or directory creation fails
     """
+    logger.debug(f"create_synced_directories called - has instance_id: {hasattr(context, 'instance_id')}")
     if not hasattr(context, "instance_id"):
         logger.debug("No instance_id - skipping directory creation")
         return
 
+    logger.debug(f"create_synced_directories - has config_data: {hasattr(context, 'config_data')}")
     if not hasattr(context, "config_data"):
         logger.debug("No config_data - skipping directory creation")
         return
 
     sync_paths = context.config_data.get("defaults", {}).get("sync_paths", [])
+    logger.debug(f"Found {len(sync_paths)} sync_paths to create")
 
     for sync_path in sync_paths:
         remote_path = sync_path.get("remote", "~/myproject").replace("~", "/config")
+        logger.debug(f"Creating directory: {remote_path}")
         create_directory_in_container(context, remote_path)
 
         original_remote = sync_path.get("remote", "~/myproject")
 
         if original_remote.startswith("~/"):
-            symlink_path = original_remote.replace("~", "/root")
+            root_path = original_remote.replace("~", "/root")
+            ubuntu_path = original_remote.replace("~", "/home/ubuntu")
 
-            if symlink_path != remote_path:
-                create_symlink_in_container(context, remote_path, symlink_path)
+            if root_path != remote_path:
+                logger.debug(f"Creating directory for root: {root_path}")
+                create_directory_in_container(context, root_path)
+
+            if ubuntu_path != remote_path:
+                logger.debug(f"Creating directory for ubuntu: {ubuntu_path}")
+                create_directory_in_container(context, ubuntu_path)

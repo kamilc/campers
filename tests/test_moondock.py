@@ -405,7 +405,7 @@ def test_run_executes_command_from_synced_directory(moondock_module) -> None:
 
         mock_ssh_instance.execute_command_raw.assert_called_once()
         call_args = mock_ssh_instance.execute_command_raw.call_args[0][0]
-        assert "cd '~/myproject'" in call_args
+        assert "cd ~/myproject" in call_args
         assert "pwd" in call_args
         assert result["instance_id"] == "i-test123"
 
@@ -457,7 +457,7 @@ def test_run_executes_startup_script_from_synced_directory(moondock_module) -> N
 
         assert mock_ssh_instance.execute_command_raw.call_count == 2
         startup_call = mock_ssh_instance.execute_command_raw.call_args_list[0][0][0]
-        assert "cd '~/myproject'" in startup_call
+        assert "cd ~/myproject" in startup_call
         assert "source .venv/bin/activate" in startup_call
         assert result["instance_id"] == "i-test123"
 
@@ -502,10 +502,7 @@ def test_build_command_in_directory(moondock_module) -> None:
         "~/myproject", "python app.py"
     )
 
-    assert (
-        result
-        == "mkdir -p '~/myproject' && cd '~/myproject' && bash -c 'python app.py'"
-    )
+    assert result == "mkdir -p ~/myproject && cd ~/myproject && bash -c 'python app.py'"
 
 
 def test_build_command_in_directory_with_special_chars(moondock_module) -> None:
@@ -516,8 +513,8 @@ def test_build_command_in_directory_with_special_chars(moondock_module) -> None:
         "~/my project", "echo 'hello world'"
     )
 
-    assert "mkdir -p '~/my project'" in result
-    assert "cd '~/my project'" in result
+    assert "mkdir -p ~/'my project'" in result
+    assert "cd ~/'my project'" in result
     assert "bash -c" in result
 
 
@@ -533,7 +530,7 @@ python app.py"""
 
     assert (
         result
-        == f"mkdir -p '~/app' && cd '~/app' && bash -c {shlex.quote(multiline_script)}"
+        == f"mkdir -p ~/app && cd ~/app && bash -c {shlex.quote(multiline_script)}"
     )
     assert "source .venv/bin/activate" in result
 

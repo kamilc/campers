@@ -36,7 +36,7 @@ Scenario: Run with command override
 @smoke
 Scenario: Multiple port forwarding
   Given config file with defaults section
-  When I run moondock command "run --port 8888,6006,5000"
+  When I run moondock command "run --port 48888,6006,5000"
   Then final config contains ports [8888, 6006, 5000]
   And final config does not contain "port" field
 

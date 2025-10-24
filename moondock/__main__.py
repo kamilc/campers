@@ -1843,7 +1843,7 @@ class Moondock:
         Parameters
         ----------
         working_dir : str
-            Directory path to execute command in
+            Directory path to execute command in (may contain ~ for tilde expansion)
         command : str
             Command to execute
 
@@ -1852,7 +1852,22 @@ class Moondock:
         str
             Full command with directory change and proper escaping
         """
-        return f"mkdir -p {shlex.quote(working_dir)} && cd {shlex.quote(working_dir)} && bash -c {shlex.quote(command)}"
+        if working_dir.startswith("~"):
+            if " " in working_dir or any(
+                c in working_dir for c in ["'", '"', "$", "`"]
+            ):
+                parts = working_dir.split("/", 1)
+                if len(parts) == 2:
+                    quoted_rest = shlex.quote(parts[1])
+                    dir_part = f"~/{quoted_rest}"
+                else:
+                    dir_part = working_dir
+            else:
+                dir_part = working_dir
+        else:
+            dir_part = shlex.quote(working_dir)
+
+        return f"mkdir -p {dir_part} && cd {dir_part} && bash -c {shlex.quote(command)}"
 
     def _truncate_name(self, name: str) -> str:
         """Truncate machine config name to fit in column width.
