@@ -119,8 +119,9 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
             "No config path found. Run 'I launch the Moondock TUI with the config file' step first."
         )
 
-    max_wait = 90
+    max_wait = derive_timeout_from_scenario(context)
     logger.info(f"=== STARTING TUI TEST FOR MACHINE: {machine_name} ===")
+    logger.info(f"TUI timeout derived from scenario: {max_wait} seconds")
     result = run_tui_test_with_machine(
         machine_name, context.config_path, max_wait, context
     )
@@ -134,6 +135,32 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
         "start_http_servers_for_all_configured_ports() BEFORE TUI launches. "
         "DO NOT start HTTP servers here - TUI has already terminated and tunnels are closed."
     )
+
+
+def derive_timeout_from_scenario(context: Context) -> int:
+    """Extract timeout value from scenario's @timeout_X tag.
+
+    Derives the TUI polling timeout from the scenario's @timeout_X tag.
+    This ensures the timeout aligns with the scenario's expected duration.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object containing scenario information
+
+    Returns
+    -------
+    int
+        Timeout in seconds, defaults to 90 if no tag present
+    """
+    if hasattr(context, "scenario") and context.scenario.tags:
+        for tag in context.scenario.tags:
+            if tag.startswith("timeout_"):
+                try:
+                    return int(tag.split("_")[1])
+                except (ValueError, IndexError):
+                    pass
+    return 90
 
 
 def setup_test_environment(config_path: str) -> dict[str, str | None]:
@@ -185,7 +212,8 @@ async def poll_tui_with_unified_timeout(
 
     All conditions share a single timeout budget instead of independent timeouts.
     This prevents timeout accumulation where sequential polling operations could
-    exceed the scenario timeout limit.
+    exceed the scenario timeout limit. When error status is detected, applies
+    extended post-error handling with additional polling iterations.
 
     Parameters
     ----------
@@ -204,6 +232,7 @@ async def poll_tui_with_unified_timeout(
     command_completed_found = False
     cleanup_completed_found = False
     error_found = False
+    error_detection_time = None
 
     while time.time() - start_time < max_wait:
         try:
@@ -232,7 +261,8 @@ async def poll_tui_with_unified_timeout(
             if "error" in status_text.lower():
                 if not error_found:
                     logger.info("Found 'error' status")
-                error_found = True
+                    error_found = True
+                    error_detection_time = time.time()
         except NoMatches:
             logger.debug("Status widget not found")
         except Exception as e:
@@ -258,9 +288,32 @@ async def poll_tui_with_unified_timeout(
             pass
 
         if error_found:
-            logger.info("Error status detected - breaking early from polling")
-            await pilot.pause(2.0)
-            break
+            if error_detection_time and time.time() - error_detection_time > 5:
+                logger.info(
+                    "Extended post-error pause completed - performing final polling iterations"
+                )
+                for iteration in range(3):
+                    logger.info(
+                        f"Final polling iteration {iteration + 1}/3 after error detection"
+                    )
+                    await pilot.pause(1.0)
+                    try:
+                        status_widget = app.query_one("#status-widget")
+                        status_text = str(status_widget.render())
+                        if status_text != last_status:
+                            logger.info(
+                                f"Status updated during final iteration: {status_text}"
+                            )
+                            last_status = status_text
+                    except Exception:
+                        pass
+                logger.info(
+                    "Error status detected with extended post-error handling - breaking from polling"
+                )
+                break
+            elif not error_detection_time:
+                await pilot.pause(0.5)
+                continue
 
         if terminating_found and command_completed_found and cleanup_completed_found:
             logger.info("All TUI conditions met")
@@ -356,38 +409,58 @@ def run_tui_test_with_machine(
                     )
                     yield
 
-            async with mocking_context_manager():
-                moondock = Moondock()
-                update_queue: queue.Queue = queue.Queue(maxsize=100)
-                _tui_update_queue = update_queue
+            try:
+                async with mocking_context_manager():
+                    moondock = Moondock()
+                    update_queue: queue.Queue = queue.Queue(maxsize=100)
+                    _tui_update_queue = update_queue
 
-                app = MoondockTUI(
-                    moondock_instance=moondock,
-                    run_kwargs={"machine_name": machine_name, "json_output": False},
-                    update_queue=update_queue,
-                )
-
-                async with app.run_test() as pilot:
-                    await pilot.pause()
-
-                    await poll_tui_with_unified_timeout(app, pilot, max_wait)
-
-                    log_lines, log_text = extract_log_lines(app)
-                    status_widget = app.query_one("#status-widget")
-                    final_status = str(status_widget.render())
-
-                    logger.info(
-                        "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
-                        machine_name,
-                        final_status,
-                        len(log_text),
+                    app = MoondockTUI(
+                        moondock_instance=moondock,
+                        run_kwargs={"machine_name": machine_name, "json_output": False},
+                        update_queue=update_queue,
                     )
 
-                    return {
-                        "status": final_status,
-                        "log_lines": log_lines,
-                        "log_text": log_text,
-                    }
+                    async with app.run_test() as pilot:
+                        await pilot.pause()
+
+                        await poll_tui_with_unified_timeout(app, pilot, max_wait)
+
+                        await pilot.pause(3.0)
+                        log_lines, log_text = extract_log_lines(app)
+                        status_widget = app.query_one("#status-widget")
+                        final_status = str(status_widget.render())
+
+                        logger.info(
+                            "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
+                            machine_name,
+                            final_status,
+                            len(log_text),
+                        )
+
+                        return {
+                            "status": final_status,
+                            "log_lines": log_lines,
+                            "log_text": log_text,
+                        }
+            except Exception as e:
+                logger.error(f"Exception during TUI result extraction: {e}")
+                log_lines, log_text = (
+                    extract_log_lines(app) if "app" in locals() else ([], "")
+                )
+                exit_code = (
+                    getattr(app, "worker_exit_code", None)
+                    if "app" in locals()
+                    else None
+                )
+
+                return {
+                    "status": "extraction_failed",
+                    "error": str(e),
+                    "log_lines": log_lines,
+                    "log_text": log_text,
+                    "exit_code": exit_code,
+                }
         finally:
             _tui_update_queue = None
             restore_environment(original_values)

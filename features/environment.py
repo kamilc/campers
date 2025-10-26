@@ -225,12 +225,15 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                 known_hosts_content = known_hosts_path.read_text()
                 lines = known_hosts_content.split("\n")
                 filtered_lines = [
-                    line for line in lines
+                    line
+                    for line in lines
                     if not line.startswith("[localhost]:2222") and line.strip()
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
-                    logger.info("Cleaned up localhost:2222 entries from ~/.ssh/known_hosts")
+                    logger.info(
+                        "Cleaned up localhost:2222 entries from ~/.ssh/known_hosts"
+                    )
         except Exception as e:
             logger.debug(f"Error cleaning known_hosts: {e}")
 
@@ -247,10 +250,14 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                 config_content = ssh_config_path.read_text()
                 if "Host localhost" not in config_content:
                     ssh_config_path.write_text(config_content + localhost_config)
-                    logger.info("Added localhost SSH config to disable strict host key checking")
+                    logger.info(
+                        "Added localhost SSH config to disable strict host key checking"
+                    )
             else:
                 ssh_config_path.write_text(localhost_config)
-                logger.info("Created SSH config with localhost strict host key checking disabled")
+                logger.info(
+                    "Created SSH config with localhost strict host key checking disabled"
+                )
         except Exception as e:
             logger.debug(f"Error setting up SSH config: {e}")
 
@@ -694,12 +701,15 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                 known_hosts_content = known_hosts_path.read_text()
                 lines = known_hosts_content.split("\n")
                 filtered_lines = [
-                    line for line in lines
+                    line
+                    for line in lines
                     if not line.startswith("[localhost]:2222") and line.strip()
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
-                    logger.debug("Cleaned up localhost:2222 entries from ~/.ssh/known_hosts after scenario")
+                    logger.debug(
+                        "Cleaned up localhost:2222 entries from ~/.ssh/known_hosts after scenario"
+                    )
         except Exception as e:
             logger.debug(f"Error cleaning known_hosts after scenario: {e}")
 

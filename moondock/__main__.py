@@ -1609,6 +1609,27 @@ class Moondock:
                     logging.debug("Cleanup in progress, aborting port forwarding")
                     return {}
 
+                instance_id = instance_details["instance_id"]
+                http_servers_ready_var = f"HTTP_SERVERS_READY_{instance_id}"
+
+                if http_servers_ready_var in os.environ:
+                    logging.debug(
+                        f"Waiting for HTTP servers to be ready for instance {instance_id}..."
+                    )
+                    max_wait = 10
+                    start_time = time.time()
+                    while time.time() - start_time < max_wait:
+                        if os.environ.get(http_servers_ready_var) == "1":
+                            logging.debug(
+                                "HTTP servers are ready, proceeding with port forwarding"
+                            )
+                            break
+                        time.sleep(0.5)
+                    else:
+                        logging.warning(
+                            f"HTTP servers readiness timeout after {max_wait}s"
+                        )
+
                 portforward_mgr = PortForwardManager()
 
                 with self._resources_lock:
