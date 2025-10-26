@@ -2,10 +2,13 @@
 
 import json
 import os
+from pathlib import Path
 from typing import Any
 
 from behave import given, then, when
 from behave.runner import Context
+
+from features.steps.docker_helpers import exec_in_ssh_container
 
 
 def ensure_defaults_section(context: Context) -> dict[str, Any]:
@@ -409,4 +412,136 @@ def step_ssh_not_attempted_for_startup_script(context: Context) -> None:
     """
     assert hasattr(context, "test_mode_enabled") and context.test_mode_enabled, (
         "Test mode must be enabled for this verification"
+    )
+
+
+@given('local directory has file "{filename}"')
+def step_local_has_file_given(context: Context, filename: str) -> None:
+    """Create file in local sync directory.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context with config_data
+    filename : str
+        Name of file to create
+    """
+    sync_path = context.config_data["defaults"]["sync_paths"][0]["local"]
+    local_path = Path(sync_path).expanduser() / filename
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    local_path.write_text(f"content-{filename}-local")
+    context.local_test_file = local_path
+
+
+@then('remote directory has file "{filename}"')
+def step_remote_has_file_then(context: Context, filename: str) -> None:
+    """Verify file exists in SSH container.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context with instance_id
+    filename : str
+        Name of file to verify
+    """
+    if "localstack" not in context.tags:
+        return
+
+    sync_path = context.config_data["defaults"]["sync_paths"][0]["remote"]
+    remote_path = sync_path.replace("~", "/home/user")
+
+    exit_code, output = exec_in_ssh_container(
+        context, ["cat", f"{remote_path}/{filename}"]
+    )
+
+    assert exit_code == 0, f"File {filename} not found in remote: {output.decode()}"
+    content = output.decode().strip()
+    assert "content-" in content, f"File content mismatch: {content}"
+
+
+@given('remote directory has file "{filename}"')
+def step_remote_has_file_given(context: Context, filename: str) -> None:
+    """Create file in remote directory via SSH.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context with instance_id
+    filename : str
+        Name of file to create
+    """
+    if "localstack" not in context.tags:
+        return
+
+    sync_path = context.config_data["defaults"]["sync_paths"][0]["remote"]
+    remote_path = sync_path.replace("~", "/home/user")
+
+    mkdir_cmd = f"mkdir -p {remote_path}"
+    echo_cmd = f"echo 'content-{filename}-remote' > {remote_path}/{filename}"
+    full_cmd = f"{mkdir_cmd} && {echo_cmd}"
+
+    exit_code, output = exec_in_ssh_container(
+        context,
+        ["bash", "-c", full_cmd],
+    )
+
+    assert exit_code == 0, f"Failed to create remote file: {output.decode()}"
+
+
+@then('local directory has file "{filename}"')
+def step_local_has_file_then(context: Context, filename: str) -> None:
+    """Verify file synced to local directory.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context with config_data
+    filename : str
+        Name of file to verify
+    """
+    if "localstack" not in context.tags:
+        return
+
+    sync_path = context.config_data["defaults"]["sync_paths"][0]["local"]
+    local_path = Path(sync_path).expanduser() / filename
+
+    assert local_path.exists(), f"File {filename} not found in local directory"
+    content = local_path.read_text()
+    assert "content-" in content, f"File content mismatch: {content}"
+
+
+@then('mutagen sync list shows session in "watching" state')
+def step_mutagen_watching_state(context: Context) -> None:
+    """Verify Mutagen session reaches watching state.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context with mutagen_session_name
+    """
+    import subprocess
+    import time
+
+    if "localstack" not in context.tags:
+        return
+
+    session_name = getattr(context, "mutagen_session_name", "moondock-")
+    timeout = 60
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        result = subprocess.run(
+            ["mutagen", "sync", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        if session_name in result.stdout and "watching" in result.stdout:
+            return
+
+        time.sleep(2)
+
+    raise AssertionError(
+        f"Session {session_name} did not reach watching state within {timeout}s"
     )

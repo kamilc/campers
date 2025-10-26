@@ -93,31 +93,29 @@ def create_directory_in_container(
     if not path.startswith("/"):
         raise ValueError(f"path must be absolute, got: {path}")
 
-    logger.debug(f"Creating directory {path} for instance {getattr(context, 'instance_id', 'UNKNOWN')}")
+    logger.debug(
+        f"Creating directory {path} for instance {getattr(context, 'instance_id', 'UNKNOWN')}"
+    )
     container = get_ssh_container(context)
 
     exit_code, output = container.exec_run(["mkdir", "-p", path])
     if exit_code != 0:
         logger.error(f"mkdir failed with code {exit_code}: {output.decode()}")
-        raise RuntimeError(
-            f"Failed to create directory {path}: {output.decode()}"
-        )
+        raise RuntimeError(f"Failed to create directory {path}: {output.decode()}")
 
     exit_code, output = container.exec_run(["chmod", "-R", mode, path])
     if exit_code != 0:
         logger.error(f"chmod failed with code {exit_code}: {output.decode()}")
-        raise RuntimeError(
-            f"Failed to set permissions on {path}: {output.decode()}"
-        )
+        raise RuntimeError(f"Failed to set permissions on {path}: {output.decode()}")
 
     exit_code, output = container.exec_run(["chown", "-R", "ubuntu:ubuntu", path])
     if exit_code != 0:
         logger.error(f"chown failed with code {exit_code}: {output.decode()}")
-        raise RuntimeError(
-            f"Failed to set ownership on {path}: {output.decode()}"
-        )
+        raise RuntimeError(f"Failed to set ownership on {path}: {output.decode()}")
 
-    logger.debug(f"Successfully created directory: {path} (mode: {mode}, owner: ubuntu:ubuntu)")
+    logger.debug(
+        f"Successfully created directory: {path} (mode: {mode}, owner: ubuntu:ubuntu)"
+    )
 
 
 def create_symlink_in_container(
@@ -197,12 +195,16 @@ def create_synced_directories(context: Context) -> None:
     RuntimeError
         If instance not launched or directory creation fails
     """
-    logger.debug(f"create_synced_directories called - has instance_id: {hasattr(context, 'instance_id')}")
+    logger.debug(
+        f"create_synced_directories called - has instance_id: {hasattr(context, 'instance_id')}"
+    )
     if not hasattr(context, "instance_id"):
         logger.debug("No instance_id - skipping directory creation")
         return
 
-    logger.debug(f"create_synced_directories - has config_data: {hasattr(context, 'config_data')}")
+    logger.debug(
+        f"create_synced_directories - has config_data: {hasattr(context, 'config_data')}"
+    )
     if not hasattr(context, "config_data"):
         logger.debug("No config_data - skipping directory creation")
         return

@@ -409,6 +409,11 @@ class MoondockTUI(App):
         root_logger.handlers = [tui_handler]
         root_logger.setLevel(logging.INFO)
 
+        for module in ["portforward", "ssh", "sync", "ec2"]:
+            module_logger = logging.getLogger(f"moondock.{module}")
+            module_logger.propagate = True
+            module_logger.setLevel(logging.INFO)
+
         self.instance_start_time = datetime.now()
         self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
         self.set_interval(1.0, self.update_uptime, name="uptime-timer")
@@ -1543,12 +1548,13 @@ class Moondock:
                     session_name=mutagen_session_name,
                     local_path=sync_config["local"],
                     remote_path=sync_config["remote"],
-                    host=instance_details["public_ip"],
-                    key_file=instance_details["key_file"],
+                    host=ssh_host,
+                    key_file=ssh_key_file,
                     username="ubuntu",
                     ignore_patterns=merged_config.get("ignore"),
                     include_vcs=merged_config.get("include_vcs", False),
                     ssh_wrapper_dir=moondock_dir,
+                    ssh_port=ssh_port,
                 )
 
             if merged_config.get("setup_script", "").strip():

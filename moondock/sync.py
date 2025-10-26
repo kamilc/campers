@@ -117,6 +117,7 @@ class MutagenManager:
         ignore_patterns: list[str] | None = None,
         include_vcs: bool = False,
         ssh_wrapper_dir: str | None = None,
+        ssh_port: int = 22,
     ) -> None:
         """Create Mutagen sync session.
 
@@ -140,6 +141,8 @@ class MutagenManager:
             Whether to include version control files (.git, etc.)
         ssh_wrapper_dir : str | None
             Directory to create SSH wrapper script in
+        ssh_port : int
+            SSH port for remote host (default: 22)
 
         Raises
         ------
@@ -181,12 +184,15 @@ class MutagenManager:
             raise ValueError(f"Invalid host: {host}")
 
         local = str(Path(local_path).expanduser().resolve())
-        remote = f"{username}@{host}:{remote_path}"
+        if ssh_port != 22:
+            remote = f"{username}@{host}:{ssh_port}:{remote_path}"
+        else:
+            remote = f"{username}@{host}:{remote_path}"
 
         cmd.append(local)
         cmd.append(remote)
 
-        key_path = str(Path(key_file).expanduser())
+        key_path = str(Path(key_file).expanduser().resolve())
 
         with open(key_path, "r") as f:
             key_content = f.read()
@@ -194,7 +200,7 @@ class MutagenManager:
         if ssh_wrapper_dir is None:
             ssh_wrapper_dir = tempfile.gettempdir()
 
-        moondock_ssh_dir = Path(ssh_wrapper_dir)
+        moondock_ssh_dir = Path(ssh_wrapper_dir).resolve()
         moondock_ssh_dir.mkdir(parents=True, exist_ok=True)
 
         temp_key_path = moondock_ssh_dir / f"moondock-key-{session_name}.pem"
@@ -202,13 +208,14 @@ class MutagenManager:
             f.write(key_content)
         os.chmod(temp_key_path, 0o600)
 
-        moondock_config_path = moondock_ssh_dir / "moondock-ssh-config"
+        moondock_config_path = (moondock_ssh_dir / "moondock-ssh-config").resolve()
 
         host_config = f"""
 Host {host}
     HostName {host}
+    Port {ssh_port}
     User {username}
-    IdentityFile {temp_key_path}
+    IdentityFile {str(temp_key_path.resolve())}
     IdentitiesOnly yes
     StrictHostKeyChecking accept-new
     ConnectTimeout 30

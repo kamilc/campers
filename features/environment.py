@@ -24,13 +24,26 @@ class ScenarioTimeoutError(Exception):
     pass
 
 
-_current_timeout_seconds = SCENARIO_TIMEOUT_SECONDS
+def make_timeout_handler(timeout_seconds: int):
+    """Create a timeout handler with the specified timeout value.
 
+    Parameters
+    ----------
+    timeout_seconds : int
+        Timeout value in seconds to use in error messages
 
-def timeout_handler(signum: int, frame) -> None:
-    raise ScenarioTimeoutError(
-        f"Scenario exceeded timeout of {_current_timeout_seconds} seconds"
-    )
+    Returns
+    -------
+    callable
+        A signal handler function with the timeout value bound
+    """
+
+    def timeout_handler(signum: int, frame) -> None:
+        raise ScenarioTimeoutError(
+            f"Scenario exceeded timeout of {timeout_seconds} seconds"
+        )
+
+    return timeout_handler
 
 
 class LogCapture(logging.Handler):
@@ -135,9 +148,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
             except (ValueError, IndexError):
                 logger.warning(f"Invalid timeout tag format: {tag}, using default")
 
-    global _current_timeout_seconds
-    _current_timeout_seconds = timeout_seconds
-
+    timeout_handler = make_timeout_handler(timeout_seconds)
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(timeout_seconds)
     context.timeout_set = True
@@ -171,16 +182,20 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                         break
                 except OSError:
                     if attempt == 0:
-                        logger.warning(
-                            f"Port {port} is in use, waiting up to {max_wait_seconds}s for release..."
+                        msg = (
+                            f"Port {port} is in use, waiting up to "
+                            f"{max_wait_seconds}s for release..."
                         )
+                        logger.warning(msg)
 
                     time.sleep(0.5)
 
             if not port_released:
-                logger.error(
-                    f"Port {port} still in use after {max_wait_seconds}s - test may fail"
+                msg = (
+                    f"Port {port} still in use after {max_wait_seconds}s - "
+                    f"test may fail"
                 )
+                logger.error(msg)
 
     if is_localstack_scenario or is_pilot_scenario:
         try:
@@ -193,14 +208,51 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
             for container in orphaned_containers:
                 try:
-                    logger.info(
-                        f"Cleaning up orphaned container before scenario: {container.name}"
+                    msg = (
+                        f"Cleaning up orphaned container before scenario: "
+                        f"{container.name}"
                     )
+                    logger.info(msg)
                     container.remove(force=True)
                 except Exception as e:
                     logger.debug(f"Error removing container {container.name}: {e}")
         except Exception as e:
             logger.debug(f"Error during pre-scenario Docker cleanup: {e}")
+
+        try:
+            known_hosts_path = Path.home() / ".ssh" / "known_hosts"
+            if known_hosts_path.exists():
+                known_hosts_content = known_hosts_path.read_text()
+                lines = known_hosts_content.split("\n")
+                filtered_lines = [
+                    line for line in lines
+                    if not line.startswith("[localhost]:2222") and line.strip()
+                ]
+                if len(filtered_lines) < len(lines):
+                    known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
+                    logger.info("Cleaned up localhost:2222 entries from ~/.ssh/known_hosts")
+        except Exception as e:
+            logger.debug(f"Error cleaning known_hosts: {e}")
+
+        try:
+            ssh_dir = Path.home() / ".ssh"
+            ssh_dir.mkdir(parents=True, exist_ok=True)
+            ssh_config_path = ssh_dir / "config"
+            localhost_config = (
+                "\nHost localhost\n"
+                "    StrictHostKeyChecking no\n"
+                "    UserKnownHostsFile=/dev/null\n"
+            )
+            if ssh_config_path.exists():
+                config_content = ssh_config_path.read_text()
+                if "Host localhost" not in config_content:
+                    ssh_config_path.write_text(config_content + localhost_config)
+                    logger.info("Added localhost SSH config to disable strict host key checking")
+            else:
+                ssh_config_path.write_text(localhost_config)
+                logger.info("Created SSH config with localhost strict host key checking disabled")
+        except Exception as e:
+            logger.debug(f"Error setting up SSH config: {e}")
 
     if "no_credentials" not in scenario.tags and not is_localstack_scenario:
         context.mock_aws_env = mock_aws()
@@ -234,6 +286,17 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     moondock_ssh_logger = logging.getLogger("moondock.ssh")
     moondock_ssh_logger.addHandler(log_handler)
     moondock_ssh_logger.setLevel(logging.DEBUG)
+
+    if is_localstack_scenario or "dry_run" in scenario.tags:
+        moondock_portforward_logger = logging.getLogger("moondock.portforward")
+        moondock_portforward_logger.addHandler(log_handler)
+        moondock_portforward_logger.setLevel(logging.INFO)
+        moondock_portforward_logger.propagate = True
+
+        moondock_sync_logger = logging.getLogger("moondock.sync")
+        moondock_sync_logger.addHandler(log_handler)
+        moondock_sync_logger.setLevel(logging.INFO)
+        moondock_sync_logger.propagate = True
 
     root_logger = logging.getLogger()
     root_logger.addHandler(log_handler)
@@ -396,6 +459,12 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
             moondock_ssh_logger = logging.getLogger("moondock.ssh")
             moondock_ssh_logger.removeHandler(context.log_handler)
+
+            moondock_portforward_logger = logging.getLogger("moondock.portforward")
+            moondock_portforward_logger.removeHandler(context.log_handler)
+
+            moondock_sync_logger = logging.getLogger("moondock.sync")
+            moondock_sync_logger.removeHandler(context.log_handler)
 
             root_logger = logging.getLogger()
             root_logger.removeHandler(context.log_handler)
@@ -577,6 +646,62 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     ]
     for var in monitor_error_vars:
         cleanup_env_var(var, logger)
+
+    is_localstack_scenario = "localstack" in scenario.tags
+
+    if is_localstack_scenario and hasattr(context, "config_data"):
+        try:
+            import subprocess
+
+            config_data = getattr(context, "config_data", {})
+            if "sync_paths" in config_data.get("defaults", {}):
+                logger.debug("Cleaning up Mutagen sessions for @localstack test")
+
+                result = subprocess.run(
+                    ["mutagen", "sync", "list"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+
+                for line in result.stdout.split("\n"):
+                    if "moondock-" in line:
+                        parts = line.split()
+                        if parts:
+                            session_name = parts[0]
+                            logger.debug(f"Terminating Mutagen session: {session_name}")
+                            subprocess.run(
+                                ["mutagen", "sync", "terminate", session_name],
+                                capture_output=True,
+                                timeout=10,
+                            )
+
+                moondock_dir = os.environ.get("MOONDOCK_DIR")
+                if moondock_dir and "tmp/test-moondock" in moondock_dir:
+                    test_dir = Path(moondock_dir)
+                    if test_dir.exists():
+                        import shutil
+
+                        shutil.rmtree(test_dir, ignore_errors=True)
+                        logger.debug(f"Cleaned up test MOONDOCK_DIR: {test_dir}")
+        except Exception as e:
+            logger.debug(f"Error during Mutagen cleanup: {e}")
+
+    if is_localstack_scenario:
+        try:
+            known_hosts_path = Path.home() / ".ssh" / "known_hosts"
+            if known_hosts_path.exists():
+                known_hosts_content = known_hosts_path.read_text()
+                lines = known_hosts_content.split("\n")
+                filtered_lines = [
+                    line for line in lines
+                    if not line.startswith("[localhost]:2222") and line.strip()
+                ]
+                if len(filtered_lines) < len(lines):
+                    known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
+                    logger.debug("Cleaned up localhost:2222 entries from ~/.ssh/known_hosts after scenario")
+        except Exception as e:
+            logger.debug(f"Error cleaning known_hosts after scenario: {e}")
 
     try:
         if hasattr(context, "saved_env") and context.saved_env:

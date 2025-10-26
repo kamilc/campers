@@ -20,9 +20,10 @@ Scenario: No sync_paths skips mutagen operations
   And mutagen session is not created
   And command executes from home directory
 
-@smoke @dry_run
+@smoke @localstack @pilot
 Scenario: Create mutagen sync session
   Given config file with defaults section
+  And LocalStack is healthy and responding
   And defaults have sync_paths with local "~/myproject" and remote "~/myproject"
   When I run moondock command "run -c 'echo test'"
   Then mutagen session is created with name pattern "moondock-"
@@ -30,16 +31,18 @@ Scenario: Create mutagen sync session
   And sync local path is "~/myproject"
   And sync remote path is "ubuntu@{host}:~/myproject"
 
-@smoke @dry_run
+@smoke @localstack @pilot
 Scenario: Wait for initial sync completion
   Given config file with defaults section
+  And LocalStack is healthy and responding
   And defaults have sync_paths configured
   When I run moondock command "run -c 'echo test'"
   Then command exit code is 0
 
-@error @dry_run
+@error @localstack @pilot
 Scenario: Initial sync timeout
   Given config file with defaults section
+  And LocalStack is healthy and responding
   And defaults have sync_paths configured
   And sync does not complete within timeout
   When I run moondock command "run -c 'echo test'"
@@ -48,10 +51,11 @@ Scenario: Initial sync timeout
   And mutagen session is terminated
   And instance remains running
 
-@smoke @dry_run
+@smoke @localstack @pilot
 Scenario: Execute startup_script after sync completes
   Given config file with defaults section
-  And defaults have startup_script "source .venv/bin/activate && python --version"
+  And LocalStack is healthy and responding
+  And defaults have startup_script "echo 'Startup script executed successfully'"
   And defaults have sync_paths with local "~/myproject" and remote "~/myproject"
   When I run moondock command "run -c 'echo test'"
   Then command exit code is 0
@@ -67,9 +71,10 @@ Scenario: startup_script without sync_paths raises error
   Then command fails with ValueError
   And error message contains "startup_script is defined but no sync_paths configured"
 
-@smoke @dry_run
+@smoke @localstack @pilot
 Scenario: Command executes from synced directory
   Given config file with defaults section
+  And LocalStack is healthy and responding
   And defaults have sync_paths with local "~/myproject" and remote "~/myproject"
   And mutagen sync completes
   When I run moondock command "run -c 'pwd'"
@@ -104,16 +109,18 @@ Scenario: VCS files included when enabled
   Then ignore pattern ".git" is not configured
   And ignore pattern ".gitignore" is not configured
 
-@integration @dry_run
+@integration @localstack @pilot
 Scenario: Mutagen session cleanup on normal exit
-  Given mutagen sync session is running
+  Given LocalStack is healthy and responding
+  And mutagen sync session is running
   When command completes normally
   Then mutagen session is terminated
   And session is removed from mutagen list
 
-@integration @dry_run
+@integration @localstack @pilot
 Scenario: Mutagen session cleanup on error
-  Given mutagen sync session is running
+  Given LocalStack is healthy and responding
+  And mutagen sync session is running
   And startup_script is configured
   When startup_script fails with exit code 1
   Then command fails with RuntimeError
@@ -136,9 +143,10 @@ Scenario: Test mode simulates mutagen sync
   And status message "Running startup_script..." is logged
   And status message "Startup script completed successfully" is logged
 
-@smoke @dry_run
+@smoke @localstack @pilot
 Scenario: Orphaned session cleanup before new session
-  Given orphaned mutagen session exists with name "moondock-123"
+  Given LocalStack is healthy and responding
+  And orphaned mutagen session exists with name "moondock-123"
   And config file with defaults section
   And defaults have sync_paths configured
   When I run moondock command "run -c 'echo test'"

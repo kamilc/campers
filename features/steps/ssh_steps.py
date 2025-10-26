@@ -174,7 +174,9 @@ def step_ssh_connection_established(context: Context) -> None:
     if hasattr(context, "stdout") and context.stdout:
         error_details += f"\nSTDOUT: {context.stdout}"
 
-    assert context.exit_code == 0, f"Command failed with exit code {context.exit_code}{error_details}"
+    assert context.exit_code == 0, (
+        f"Command failed with exit code {context.exit_code}{error_details}"
+    )
 
 
 @then('command "{command}" executes on remote instance')
