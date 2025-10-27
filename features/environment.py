@@ -24,7 +24,7 @@ class ScenarioTimeoutError(Exception):
     pass
 
 
-def make_timeout_handler(timeout_seconds: int):
+def make_timeout_handler(timeout_seconds: int) -> callable:
     """Create a timeout handler with the specified timeout value.
 
     Parameters
@@ -90,8 +90,179 @@ def cleanup_env_var(var_name: str, logger: logging.Logger) -> None:
         logger.error(f"Unexpected error removing {var_name}: {e}", exc_info=True)
 
 
+def run_mutagen_command_with_retry(
+    args: list[str],
+    timeout: int = 10,
+    max_attempts: int = 3,
+    text_output: bool = False,
+) -> str | bool:
+    """Run mutagen command with retry logic.
+
+    Parameters
+    ----------
+    args : list[str]
+        Command arguments after 'mutagen'
+    timeout : int
+        Timeout in seconds for command execution
+    max_attempts : int
+        Maximum number of retry attempts
+    text_output : bool
+        If True, returns command output as string; if False, returns bool
+
+    Returns
+    -------
+    str | bool
+        Command output if text_output is True, success status otherwise
+    """
+    import subprocess
+    import time
+
+    for attempt in range(max_attempts):
+        try:
+            result = subprocess.run(
+                ["mutagen"] + args,
+                capture_output=True,
+                text=text_output,
+                timeout=timeout,
+            )
+
+            if result.returncode == 0:
+                return result.stdout if text_output else True
+
+            logger.warning(
+                f"Mutagen command failed with returncode={result.returncode}: "
+                f"{' '.join(args)}"
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Mutagen command timed out after {timeout}s")
+        except Exception as e:
+            logger.warning(f"Mutagen command error: {e}")
+
+        if attempt < max_attempts - 1:
+            time.sleep(2)
+
+    error_msg = f"Mutagen command failed after {max_attempts} attempts: {' '.join(args)}"
+    logger.error(error_msg)
+    return "" if text_output else False
+
+
+def terminate_mutagen_with_retry(
+    session_name: str, max_attempts: int = 3
+) -> bool:
+    """Terminate Mutagen session with retry logic.
+
+    Parameters
+    ----------
+    session_name : str
+        Name of the Mutagen session to terminate
+    max_attempts : int
+        Maximum number of retry attempts
+
+    Returns
+    -------
+    bool
+        True if termination succeeded, False if all retries exhausted
+    """
+    result = run_mutagen_command_with_retry(
+        ["sync", "terminate", session_name],
+        timeout=10,
+        max_attempts=max_attempts,
+        text_output=False,
+    )
+
+    if result:
+        logger.debug(f"Successfully terminated {session_name}")
+
+    return bool(result)
+
+
+def list_mutagen_sessions_with_retry(max_attempts: int = 3) -> str:
+    """List Mutagen sessions with retry logic.
+
+    Parameters
+    ----------
+    max_attempts : int
+        Maximum number of retry attempts
+
+    Returns
+    -------
+    str
+        Output from mutagen sync list command, empty string if failed
+    """
+    result = run_mutagen_command_with_retry(
+        ["sync", "list"],
+        timeout=10,
+        max_attempts=max_attempts,
+        text_output=True,
+    )
+
+    if result:
+        logger.debug("Successfully listed Mutagen sessions")
+
+    return str(result) if result else ""
+
+
+def check_mutagen_daemon_health() -> bool:
+    """Check if Mutagen daemon is responsive before scenario execution.
+
+    Returns
+    -------
+    bool
+        True if daemon is responsive, False otherwise
+    """
+    import subprocess
+    import time
+
+    max_health_checks = 5
+
+    for attempt in range(max_health_checks):
+        try:
+            result = subprocess.run(
+                ["mutagen", "daemon", "status"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+
+            if result.returncode == 0:
+                logger.debug("Mutagen daemon is responsive")
+                return True
+
+            logger.warning(
+                f"Mutagen daemon check failed "
+                f"(attempt {attempt + 1}/{max_health_checks}), "
+                f"returncode={result.returncode}"
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                f"Mutagen daemon check timed out "
+                f"(attempt {attempt + 1}/{max_health_checks})"
+            )
+        except FileNotFoundError:
+            logger.warning(
+                "Mutagen command not found - Mutagen may not be installed"
+            )
+            return False
+        except Exception as e:
+            logger.debug(f"Mutagen daemon check error: {e}")
+
+        if attempt < max_health_checks - 1:
+            time.sleep(2)
+
+    logger.warning(
+        "Mutagen daemon not responsive after all attempts - test may be unstable"
+    )
+    return False
+
+
 def before_all(context: Context) -> None:
-    """Setup executed before all tests."""
+    """Setup executed before all tests.
+
+    Parameters
+    ----------
+    context : Context
+        The Behave context object
+    """
     project_root = Path(__file__).parent.parent
     tmp_dir = project_root / "tmp" / "test-artifacts"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -182,20 +353,14 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                         break
                 except OSError:
                     if attempt == 0:
-                        msg = (
-                            f"Port {port} is in use, waiting up to "
-                            f"{max_wait_seconds}s for release..."
+                        logger.warning(
+                            f"Port {port} in use, waiting {max_wait_seconds}s..."
                         )
-                        logger.warning(msg)
 
                     time.sleep(0.5)
 
             if not port_released:
-                msg = (
-                    f"Port {port} still in use after {max_wait_seconds}s - "
-                    f"test may fail"
-                )
-                logger.error(msg)
+                logger.error(f"Port {port} still in use after {max_wait_seconds}s")
 
     if is_localstack_scenario or is_pilot_scenario:
         try:
@@ -208,16 +373,15 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
             for container in orphaned_containers:
                 try:
-                    msg = (
-                        f"Cleaning up orphaned container before scenario: "
-                        f"{container.name}"
-                    )
-                    logger.info(msg)
+                    logger.info(f"Cleaning up orphaned container: {container.name}")
                     container.remove(force=True)
                 except Exception as e:
                     logger.debug(f"Error removing container {container.name}: {e}")
         except Exception as e:
             logger.debug(f"Error during pre-scenario Docker cleanup: {e}")
+
+        if "localstack" in scenario.tags:
+            check_mutagen_daemon_health()
 
         try:
             known_hosts_path = Path.home() / ".ssh" / "known_hosts"
@@ -231,9 +395,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
-                    logger.info(
-                        "Cleaned up localhost:2222 entries from ~/.ssh/known_hosts"
-                    )
+                    logger.debug("Cleaned up localhost:2222 from ~/.ssh/known_hosts")
         except Exception as e:
             logger.debug(f"Error cleaning known_hosts: {e}")
 
@@ -250,14 +412,10 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                 config_content = ssh_config_path.read_text()
                 if "Host localhost" not in config_content:
                     ssh_config_path.write_text(config_content + localhost_config)
-                    logger.info(
-                        "Added localhost SSH config to disable strict host key checking"
-                    )
+                    logger.debug("Added localhost SSH config")
             else:
                 ssh_config_path.write_text(localhost_config)
-                logger.info(
-                    "Created SSH config with localhost strict host key checking disabled"
-                )
+                logger.debug("Created SSH config with localhost entry")
         except Exception as e:
             logger.debug(f"Error setting up SSH config: {e}")
 
@@ -658,39 +816,41 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
     if is_localstack_scenario and hasattr(context, "config_data"):
         try:
-            import subprocess
+            import shutil
 
             config_data = getattr(context, "config_data", {})
             if "sync_paths" in config_data.get("defaults", {}):
                 logger.debug("Cleaning up Mutagen sessions for @localstack test")
 
-                result = subprocess.run(
-                    ["mutagen", "sync", "list"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-
-                for line in result.stdout.split("\n"):
-                    if "moondock-" in line:
-                        parts = line.split()
-                        if parts:
-                            session_name = parts[0]
-                            logger.debug(f"Terminating Mutagen session: {session_name}")
-                            subprocess.run(
-                                ["mutagen", "sync", "terminate", session_name],
-                                capture_output=True,
-                                timeout=10,
-                            )
+                sessions_output = list_mutagen_sessions_with_retry(max_attempts=3)
+                if sessions_output:
+                    for line in sessions_output.split("\n"):
+                        if "moondock-" in line:
+                            parts = line.split()
+                            if parts:
+                                session_name = parts[0]
+                                msg = f"Terminating Mutagen session: {session_name}"
+                                logger.info(msg)
+                                terminate_mutagen_with_retry(
+                                    session_name, max_attempts=3
+                                )
+                else:
+                    logger.warning(
+                        "Could not list Mutagen sessions, skipping cleanup"
+                    )
 
                 moondock_dir = os.environ.get("MOONDOCK_DIR")
                 if moondock_dir and "tmp/test-moondock" in moondock_dir:
                     test_dir = Path(moondock_dir)
                     if test_dir.exists():
-                        import shutil
-
                         shutil.rmtree(test_dir, ignore_errors=True)
                         logger.debug(f"Cleaned up test MOONDOCK_DIR: {test_dir}")
+
+            if hasattr(context, "orphaned_temp_dir") and context.orphaned_temp_dir:
+                orphan_dir = Path(context.orphaned_temp_dir)
+                if orphan_dir.exists():
+                    shutil.rmtree(orphan_dir, ignore_errors=True)
+                    logger.debug(f"Cleaned up orphaned temp directory: {orphan_dir}")
         except Exception as e:
             logger.debug(f"Error during Mutagen cleanup: {e}")
 

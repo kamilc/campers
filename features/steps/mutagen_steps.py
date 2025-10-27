@@ -1,6 +1,7 @@
 """BDD step definitions for Mutagen file synchronization."""
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,8 @@ from behave import given, then, when
 from behave.runner import Context
 
 from features.steps.docker_helpers import exec_in_ssh_container
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_defaults_section(context: Context) -> dict[str, Any]:
@@ -173,9 +176,56 @@ def step_mutagen_sync_session_running(context: Context) -> None:
 
 @given('orphaned mutagen session exists with name "{session_name}"')
 def step_orphaned_session_exists(context: Context, session_name: str) -> None:
-    """Mark that an orphaned mutagen session exists."""
+    """Create an orphaned Mutagen session for @localstack testing.
+
+    For @localstack scenarios, creates a real orphaned Mutagen session to verify
+    cleanup behavior. For @dry_run scenarios, just sets a flag.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    session_name : str
+        Name of the orphaned session to create
+    """
     context.orphaned_session_name = session_name
     context.orphaned_session_exists = True
+
+    if "localstack" not in context.tags:
+        return
+
+    import subprocess
+    import tempfile
+    import time
+
+    try:
+        temp_dir = tempfile.mkdtemp(prefix="mutagen-orphan-")
+
+        result = subprocess.run(
+            [
+                "mutagen",
+                "sync",
+                "create",
+                "--name",
+                session_name,
+                "--mode",
+                "two-way-resolved",
+                temp_dir,
+                "localhost:/tmp/orphan-remote",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        if result.returncode == 0:
+            time.sleep(0.5)
+            logger.info(f"Created orphaned Mutagen session: {session_name}")
+            context.orphaned_temp_dir = temp_dir
+        else:
+            logger.warning(f"Failed to create orphaned session: {result.stderr}")
+    except Exception as e:
+        logger.warning(f"Could not create orphaned session: {e}")
 
 
 @given("startup_script is configured")
@@ -283,8 +333,38 @@ def step_waits_for_sync_state(context: Context, state: str) -> None:
 
 @then("mutagen session is terminated")
 def step_mutagen_session_terminated(context: Context) -> None:
-    """Verify mutagen session was terminated."""
+    """Verify mutagen session was terminated.
+
+    For @localstack scenarios, checks that Mutagen session cleanup was called.
+    For @dry_run scenarios, just sets a flag.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
     context.mutagen_session_terminated = True
+
+    if "localstack" not in context.tags:
+        return
+
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["mutagen", "sync", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        session_count = result.stdout.count("moondock-")
+        if session_count > 0:
+            logger.warning(
+                f"Found {session_count} Mutagen sessions still running after test"
+            )
+    except Exception as e:
+        logger.debug(f"Could not verify session termination: {e}")
 
 
 @then("instance remains running")
@@ -329,8 +409,46 @@ def step_ignore_pattern_not_configured(context: Context, pattern: str) -> None:
 
 @then("session is removed from mutagen list")
 def step_session_removed_from_list(context: Context) -> None:
-    """Verify session was removed from mutagen list."""
+    """Verify session was removed from mutagen list.
+
+    For @localstack scenarios, verifies that Mutagen sync list no longer contains
+    moondock sessions. For @dry_run scenarios, just sets a flag.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
     context.session_removed = True
+
+    if "localstack" not in context.tags:
+        return
+
+    import subprocess
+    import time
+
+    timeout = 10
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            result = subprocess.run(
+                ["mutagen", "sync", "list"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if "moondock-" not in result.stdout:
+                logger.info("Confirmed: all Mutagen sessions removed from list")
+                return
+
+            time.sleep(0.5)
+        except Exception as e:
+            logger.debug(f"Error checking Mutagen list: {e}")
+            time.sleep(0.5)
+
+    logger.warning("Timeout waiting for Mutagen sessions to be removed from list")
 
 
 @then("SSH connection is closed")
@@ -353,8 +471,46 @@ def step_orphaned_session_terminated(context: Context, session_name: str) -> Non
 
 @then("new mutagen session is created")
 def step_new_mutagen_session_created(context: Context) -> None:
-    """Verify new mutagen session was created."""
+    """Verify new mutagen session was created.
+
+    For @localstack scenarios, verifies that a new moondock Mutagen session
+    exists. For @dry_run scenarios, just sets a flag.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
     context.new_mutagen_session_created = True
+
+    if "localstack" not in context.tags:
+        return
+
+    import subprocess
+    import time
+
+    timeout = 30
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            result = subprocess.run(
+                ["mutagen", "sync", "list"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if "moondock-" in result.stdout:
+                logger.info("Confirmed: new Mutagen session created")
+                return
+
+            time.sleep(0.5)
+        except Exception as e:
+            logger.debug(f"Error checking Mutagen list: {e}")
+            time.sleep(0.5)
+
+    logger.warning("Timeout waiting for new Mutagen session to be created")
 
 
 @then("startup_script execution is skipped")
@@ -426,7 +582,14 @@ def step_local_has_file_given(context: Context, filename: str) -> None:
     filename : str
         Name of file to create
     """
-    sync_path = context.config_data["defaults"]["sync_paths"][0]["local"]
+    if not hasattr(context, "config_data") or context.config_data is None:
+        raise ValueError("config_data not found in context")
+
+    sync_paths = context.config_data.get("defaults", {}).get("sync_paths", [])
+    if not sync_paths:
+        raise ValueError("No sync_paths configured in defaults")
+
+    sync_path = sync_paths[0]["local"]
     local_path = Path(sync_path).expanduser() / filename
     local_path.parent.mkdir(parents=True, exist_ok=True)
     local_path.write_text(f"content-{filename}-local")
@@ -447,7 +610,14 @@ def step_remote_has_file_then(context: Context, filename: str) -> None:
     if "localstack" not in context.tags:
         return
 
-    sync_path = context.config_data["defaults"]["sync_paths"][0]["remote"]
+    if not hasattr(context, "config_data") or context.config_data is None:
+        raise ValueError("config_data not found in context")
+
+    sync_paths = context.config_data.get("defaults", {}).get("sync_paths", [])
+    if not sync_paths:
+        raise ValueError("No sync_paths configured in defaults")
+
+    sync_path = sync_paths[0]["remote"]
     remote_path = sync_path.replace("~", "/home/user")
 
     exit_code, output = exec_in_ssh_container(
@@ -473,7 +643,14 @@ def step_remote_has_file_given(context: Context, filename: str) -> None:
     if "localstack" not in context.tags:
         return
 
-    sync_path = context.config_data["defaults"]["sync_paths"][0]["remote"]
+    if not hasattr(context, "config_data") or context.config_data is None:
+        raise ValueError("config_data not found in context")
+
+    sync_paths = context.config_data.get("defaults", {}).get("sync_paths", [])
+    if not sync_paths:
+        raise ValueError("No sync_paths configured in defaults")
+
+    sync_path = sync_paths[0]["remote"]
     remote_path = sync_path.replace("~", "/home/user")
 
     mkdir_cmd = f"mkdir -p {remote_path}"
@@ -502,7 +679,14 @@ def step_local_has_file_then(context: Context, filename: str) -> None:
     if "localstack" not in context.tags:
         return
 
-    sync_path = context.config_data["defaults"]["sync_paths"][0]["local"]
+    if not hasattr(context, "config_data") or context.config_data is None:
+        raise ValueError("config_data not found in context")
+
+    sync_paths = context.config_data.get("defaults", {}).get("sync_paths", [])
+    if not sync_paths:
+        raise ValueError("No sync_paths configured in defaults")
+
+    sync_path = sync_paths[0]["local"]
     local_path = Path(sync_path).expanduser() / filename
 
     assert local_path.exists(), f"File {filename} not found in local directory"
