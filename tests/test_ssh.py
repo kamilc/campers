@@ -61,6 +61,7 @@ def test_connect_success_first_attempt(
         username="ubuntu",
         pkey=mock_key,
         timeout=30,
+        auth_timeout=30,
         banner_timeout=30,
     )
     assert ssh_manager.client == mock_client

@@ -1,9 +1,11 @@
 """Textual Pilot step definitions for TUI testing."""
 
+import asyncio
 import logging
 import os
 import queue
 import tempfile
+import threading
 import time
 from typing import Any
 
@@ -288,13 +290,13 @@ async def poll_tui_with_unified_timeout(
             pass
 
         if error_found:
-            if error_detection_time and time.time() - error_detection_time > 5:
+            if error_detection_time and time.time() - error_detection_time > 10:
                 logger.info(
                     "Extended post-error pause completed - performing final polling iterations"
                 )
-                for iteration in range(3):
+                for iteration in range(5):
                     logger.info(
-                        f"Final polling iteration {iteration + 1}/3 after error detection"
+                        f"Final polling iteration {iteration + 1}/5 after error detection"
                     )
                     await pilot.pause(1.0)
                     try:
@@ -384,11 +386,23 @@ def run_tui_test_with_machine(
     dict[str, Any]
         Dictionary containing TUI state after execution
     """
+    timeout_triggered = threading.Event()
+    test_completed = threading.Event()
+
+    def timeout_handler():
+        timeout_triggered.set()
+        logger.error(
+            f"[TIMEOUT-ENFORCER] Test exceeded {max_wait}s timeout - marking as failed"
+        )
+
+    timer = threading.Timer(max_wait, timeout_handler)
 
     async def run_tui_test() -> dict[str, Any]:
         global _tui_update_queue
 
         logger.info("=== TUI TEST START === (machine: %s)", machine_name)
+        logger.info(f"[TIMEOUT-ENFORCER] Starting test with {max_wait}s timeout")
+        timer.start()
 
         original_values = setup_test_environment(config_path)
 
@@ -421,28 +435,45 @@ def run_tui_test_with_machine(
                         update_queue=update_queue,
                     )
 
-                    async with app.run_test() as pilot:
-                        await pilot.pause()
+                    try:
+                        async with asyncio.timeout(max_wait):
+                            async with app.run_test() as pilot:
+                                await pilot.pause()
 
-                        await poll_tui_with_unified_timeout(app, pilot, max_wait)
+                                await poll_tui_with_unified_timeout(
+                                    app, pilot, max_wait
+                                )
 
-                        await pilot.pause(3.0)
-                        log_lines, log_text = extract_log_lines(app)
-                        status_widget = app.query_one("#status-widget")
-                        final_status = str(status_widget.render())
+                                if timeout_triggered.is_set():
+                                    logger.error(
+                                        "[TIMEOUT-CHECK] Timeout triggered during test execution"
+                                    )
+                                    raise AssertionError(
+                                        f"Test exceeded {max_wait}s timeout during execution"
+                                    )
 
-                        logger.info(
-                            "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
-                            machine_name,
-                            final_status,
-                            len(log_text),
+                                await pilot.pause(3.0)
+                                log_lines, log_text = extract_log_lines(app)
+                                status_widget = app.query_one("#status-widget")
+                                final_status = str(status_widget.render())
+
+                                logger.info(
+                                    "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
+                                    machine_name,
+                                    final_status,
+                                    len(log_text),
+                                )
+
+                                return {
+                                    "status": final_status,
+                                    "log_lines": log_lines,
+                                    "log_text": log_text,
+                                }
+                    except asyncio.TimeoutError:
+                        raise AssertionError(
+                            f"TUI test exceeded {max_wait}s timeout. "
+                            f"Check logs for container boot delays or SSH issues."
                         )
-
-                        return {
-                            "status": final_status,
-                            "log_lines": log_lines,
-                            "log_text": log_text,
-                        }
             except Exception as e:
                 logger.error(f"Exception during TUI result extraction: {e}")
                 log_lines, log_text = (
@@ -462,10 +493,32 @@ def run_tui_test_with_machine(
                     "exit_code": exit_code,
                 }
         finally:
+            test_completed.set()
             _tui_update_queue = None
             restore_environment(original_values)
 
-    return run_async_test(run_tui_test)
+    try:
+        test_result = run_async_test(run_tui_test)
+
+        if timeout_triggered.is_set():
+            logger.error(
+                f"[TIMEOUT-ENFORCER] Test exceeded {max_wait}s timeout - raising AssertionError"
+            )
+            raise AssertionError(
+                f"TUI test exceeded {max_wait}s timeout. "
+                f"Check logs for container boot delays or SSH issues. "
+                f"Test may still be running in background."
+            )
+
+        return test_result
+
+    finally:
+        timer.cancel()
+
+        if not test_completed.is_set():
+            logger.warning(
+                "[TIMEOUT-ENFORCER] Test incomplete - worker may still be running"
+            )
 
 
 @then('the TUI status widget shows "{expected_status}" within {timeout:d} seconds')

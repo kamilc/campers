@@ -4,7 +4,6 @@ import importlib.util
 import logging
 import logging.handlers
 import os
-import signal
 import sys
 from pathlib import Path
 
@@ -18,32 +17,6 @@ logger = logging.getLogger(__name__)
 TEST_SSH_TIMEOUT_SECONDS = 3
 TEST_SSH_MAX_RETRIES = 6
 SCENARIO_TIMEOUT_SECONDS = 180
-
-
-class ScenarioTimeoutError(Exception):
-    pass
-
-
-def make_timeout_handler(timeout_seconds: int) -> callable:
-    """Create a timeout handler with the specified timeout value.
-
-    Parameters
-    ----------
-    timeout_seconds : int
-        Timeout value in seconds to use in error messages
-
-    Returns
-    -------
-    callable
-        A signal handler function with the timeout value bound
-    """
-
-    def timeout_handler(signum: int, frame) -> None:
-        raise ScenarioTimeoutError(
-            f"Scenario exceeded timeout of {timeout_seconds} seconds"
-        )
-
-    return timeout_handler
 
 
 class LogCapture(logging.Handler):
@@ -141,14 +114,14 @@ def run_mutagen_command_with_retry(
         if attempt < max_attempts - 1:
             time.sleep(2)
 
-    error_msg = f"Mutagen command failed after {max_attempts} attempts: {' '.join(args)}"
+    error_msg = (
+        f"Mutagen command failed after {max_attempts} attempts: {' '.join(args)}"
+    )
     logger.error(error_msg)
     return "" if text_output else False
 
 
-def terminate_mutagen_with_retry(
-    session_name: str, max_attempts: int = 3
-) -> bool:
+def terminate_mutagen_with_retry(session_name: str, max_attempts: int = 3) -> bool:
     """Terminate Mutagen session with retry logic.
 
     Parameters
@@ -239,9 +212,7 @@ def check_mutagen_daemon_health() -> bool:
                 f"(attempt {attempt + 1}/{max_health_checks})"
             )
         except FileNotFoundError:
-            logger.warning(
-                "Mutagen command not found - Mutagen may not be installed"
-            )
+            logger.warning("Mutagen command not found - Mutagen may not be installed")
             return False
         except Exception as e:
             logger.debug(f"Mutagen daemon check error: {e}")
@@ -319,11 +290,8 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
             except (ValueError, IndexError):
                 logger.warning(f"Invalid timeout tag format: {tag}, using default")
 
-    timeout_handler = make_timeout_handler(timeout_seconds)
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(timeout_seconds)
-    context.timeout_set = True
-    logger.info(f"Scenario timeout set to {timeout_seconds}s for: {scenario.name}")
+    context.scenario_timeout = timeout_seconds
+    logger.info(f"Scenario timeout stored as {timeout_seconds}s for: {scenario.name}")
 
     if hasattr(context, "mock_aws_env") and context.mock_aws_env:
         try:
@@ -435,6 +403,11 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
         os.environ["MOONDOCK_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
         os.environ["MOONDOCK_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
+
+        if "error" in scenario.tags:
+            os.environ["MOONDOCK_SSH_TIMEOUT"] = "2"
+            os.environ["MOONDOCK_SSH_MAX_RETRIES"] = "3"
+            logger.info("Using reduced SSH retry config for @error scenario")
 
     if is_localstack_scenario or is_pilot_scenario:
         os.environ["MOONDOCK_TEST_MODE"] = "0"
@@ -612,10 +585,6 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     scenario : Scenario
         The scenario that just finished.
     """
-    if hasattr(context, "timeout_set") and context.timeout_set:
-        signal.alarm(0)
-        context.timeout_set = False
-        logger.debug(f"Scenario timeout cancelled for: {scenario.name}")
 
     try:
         if hasattr(context, "log_handler") and context.log_handler:
@@ -835,9 +804,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                                     session_name, max_attempts=3
                                 )
                 else:
-                    logger.warning(
-                        "Could not list Mutagen sessions, skipping cleanup"
-                    )
+                    logger.warning("Could not list Mutagen sessions, skipping cleanup")
 
                 moondock_dir = os.environ.get("MOONDOCK_DIR")
                 if moondock_dir and "tmp/test-moondock" in moondock_dir:

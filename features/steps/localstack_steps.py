@@ -259,6 +259,44 @@ def monitor_localstack_instances(
     logger.info("Monitor thread stopped")
 
 
+def wait_for_ssh_ready(host: str, port: int, timeout: int = 30) -> bool:
+    """Verify SSH daemon is accepting connections.
+
+    Parameters
+    ----------
+    host : str
+        SSH server hostname or IP address
+    port : int
+        SSH server port
+    timeout : int
+        Maximum time to wait in seconds (default: 30)
+
+    Returns
+    -------
+    bool
+        True if SSH daemon is ready, False if timeout exceeded
+    """
+    import socket
+
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex((host, port))
+            sock.close()
+
+            if result == 0:
+                return True
+        except Exception:
+            pass
+
+        time.sleep(0.5)
+
+    return False
+
+
 @given("LocalStack is healthy and responding")
 def step_localstack_is_healthy(context: Context) -> None:
     """Verify that LocalStack is running and healthy.
@@ -269,6 +307,14 @@ def step_localstack_is_healthy(context: Context) -> None:
         Behave context object
     """
     wait_for_localstack_health()
+
+    ssh_port = 2222
+    if not wait_for_ssh_ready("localhost", ssh_port, timeout=30):
+        logger.warning(
+            f"LocalStack SSH daemon not ready on port {ssh_port} after 30s - "
+            f"tests may fail due to SSH connection timeouts"
+        )
+
     context.container_manager = EC2ContainerManager()
     ec2_client = create_localstack_ec2_client()
 

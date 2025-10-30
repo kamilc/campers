@@ -237,6 +237,7 @@ class SSHManager:
                     username=self.username,
                     pkey=key,
                     timeout=timeout_seconds,
+                    auth_timeout=30,
                     banner_timeout=timeout_seconds,
                 )
                 return
