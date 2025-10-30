@@ -15,6 +15,10 @@ SSH_CONTAINER_BOOT_BASE_TIMEOUT = int(
     os.environ.get("MOONDOCK_SSH_CONTAINER_BOOT_TIMEOUT", "20")
 )
 
+SSH_CONTAINER_IMAGE = os.environ.get(
+    "MOONDOCK_SSH_IMAGE", "moondock/python-ssh:latest"
+)
+
 
 def get_ssh_container_boot_timeout() -> int:
     """Calculate SSH container boot timeout including delay and initialization.
@@ -230,7 +234,7 @@ exec /init
                     f"About to call containers.run() for {instance_id} with delay"
                 )
                 container = self.client.containers.run(
-                    "linuxserver/openssh-server",
+                    SSH_CONTAINER_IMAGE,
                     name=f"ssh-{instance_id}",
                     detach=True,
                     remove=True,
@@ -251,7 +255,7 @@ exec /init
             try:
                 logger.debug(f"About to call containers.run() for {instance_id}")
                 container = self.client.containers.run(
-                    "linuxserver/openssh-server",
+                    SSH_CONTAINER_IMAGE,
                     name=f"ssh-{instance_id}",
                     detach=True,
                     remove=True,

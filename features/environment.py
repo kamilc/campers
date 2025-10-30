@@ -460,7 +460,6 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
     root_logger = logging.getLogger()
     root_logger.addHandler(log_handler)
-    root_logger.setLevel(logging.DEBUG)
 
     context.ec2_config = None
     context._config = None

@@ -5,7 +5,8 @@ unit-test options="":
   uv run pytest {{options}}
 
 bdd-test options="":
-  uv run behave --summary {{options}}
+  just build-ssh-image
+  uv run behave --summary --stop {{options}}
 
 test: unit-test bdd-test
 
@@ -22,3 +23,6 @@ localstack-restart: localstack-stop localstack-start
 
 localstack-health:
   curl -s http://localhost:4566/_localstack/health | python3 -m json.tool
+
+build-ssh-image:
+  docker build -t moondock/python-ssh:latest docker/python-ssh
