@@ -353,7 +353,7 @@ def step_sigint_received(context: Context) -> None:
             stdout, stderr = context.app_process.communicate()
             raise AssertionError(
                 f"Graceful shutdown did not complete within {GRACEFUL_CLEANUP_TIMEOUT_SECONDS}s. "
-                f"Process appears hung. Last output:\n{stderr.decode() if stderr else 'No stderr'}[-1000:]"
+                f"Process appears hung. Last output:\n{stderr[-1000:] if stderr else 'No stderr'}"
             )
     else:
         capture_logs_during_cleanup(
@@ -394,7 +394,7 @@ def step_sigterm_received(context: Context) -> None:
             stdout, stderr = context.app_process.communicate()
             raise AssertionError(
                 f"Graceful shutdown did not complete within {GRACEFUL_CLEANUP_TIMEOUT_SECONDS}s. "
-                f"Process appears hung. Last output:\n{stderr.decode() if stderr else 'No stderr'}[-1000:]"
+                f"Process appears hung. Last output:\n{stderr[-1000:] if stderr else 'No stderr'}"
             )
     else:
         capture_logs_during_cleanup(
