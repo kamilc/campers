@@ -111,9 +111,15 @@ def monitor_localstack_instances(
 ) -> None:
     """Monitor LocalStack for new EC2 instances and create SSH containers.
 
-    This monitor continuously polls LocalStack EC2 API for instances matching
-    the MOONDOCK_TARGET_INSTANCE_IDS environment variable. When a target instance
-    reaches 'pending' or 'running' state, it provisions a corresponding SSH container.
+    This monitor continuously polls LocalStack EC2 API for instances. It supports
+    two detection modes:
+    1. Target-specific: When instance IDs are registered via queue or environment
+       variable (MOONDOCK_TARGET_INSTANCE_IDS), only those instances are monitored.
+    2. Universal: When no target IDs are available, ALL instances in LocalStack
+       are detected (since LocalStack is cleaned before each test).
+
+    When an instance reaches 'pending' or 'running' state, it provisions a
+    corresponding SSH container.
 
     Parameters
     ----------
@@ -157,32 +163,31 @@ def monitor_localstack_instances(
                     f"Monitor thread: Target IDs from env: '{target_ids_env}' -> parsed: {target_instance_ids}"
                 )
 
-            if target_instance_ids:
-                try:
+            try:
+                if target_instance_ids:
                     response = ec2_client.describe_instances(
                         InstanceIds=list(target_instance_ids)
                     )
-                except Exception as e:
-                    if "InvalidInstanceID.NotFound" in str(e):
-                        time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
-                        continue
-                    else:
-                        logger.error(
-                            f"Error querying instances: {e}",
-                            exc_info=True,
-                        )
-                        time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
-                        continue
-            else:
-                time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
-                continue
+                else:
+                    response = ec2_client.describe_instances()
+            except Exception as e:
+                if "InvalidInstanceID.NotFound" in str(e):
+                    time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
+                    continue
+                else:
+                    logger.error(
+                        f"Error querying instances: {e}",
+                        exc_info=True,
+                    )
+                    time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
+                    continue
 
             for reservation in response.get("Reservations", []):
                 for instance in reservation.get("Instances", []):
                     instance_id = instance["InstanceId"]
                     state = instance["State"]["Name"]
 
-                    if instance_id not in target_instance_ids:
+                    if target_instance_ids and instance_id not in target_instance_ids:
                         continue
 
                     if instance_id not in seen_instances and state in [
