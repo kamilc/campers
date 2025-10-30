@@ -153,7 +153,10 @@ def step_status_panel_shows_placeholder_instance_id(context: Context) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_moondock = context.moondock_module.Moondock()
         app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue
+            moondock_instance=mock_moondock,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test():
             widget = app.query_one("#ssh-widget", Static)
@@ -181,7 +184,10 @@ def step_status_panel_shows_placeholder_instance_type(context: Context) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_moondock = context.moondock_module.Moondock()
         app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue
+            moondock_instance=mock_moondock,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test():
             widget = app.query_one("#instance-type-widget", Static)
@@ -209,7 +215,10 @@ def step_status_panel_shows_placeholder_region(context: Context) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_moondock = context.moondock_module.Moondock()
         app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue
+            moondock_instance=mock_moondock,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test():
             widget = app.query_one("#region-widget", Static)
@@ -237,7 +246,10 @@ def step_status_panel_shows_placeholder_machine_name(context: Context) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_moondock = context.moondock_module.Moondock()
         app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue
+            moondock_instance=mock_moondock,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test():
             widget = app.query_one("#machine-name-widget", Static)
@@ -265,7 +277,10 @@ def step_status_panel_shows_placeholder_command(context: Context) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_moondock = context.moondock_module.Moondock()
         app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue
+            moondock_instance=mock_moondock,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test():
             widget = app.query_one("#command-widget", Static)
@@ -310,7 +325,10 @@ def step_status_panel_shows_placeholder_ssh_connection(context: Context) -> None
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_moondock = context.moondock_module.Moondock()
         app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue
+            moondock_instance=mock_moondock,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test():
             widget = app.query_one("#ssh-widget", Static)

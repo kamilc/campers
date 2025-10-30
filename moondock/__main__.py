@@ -348,6 +348,7 @@ class MoondockTUI(App):
         moondock_instance: "Moondock",
         run_kwargs: dict[str, Any],
         update_queue: queue.Queue,
+        start_worker: bool = True,
     ) -> None:
         """Initialize MoondockTUI.
 
@@ -359,11 +360,15 @@ class MoondockTUI(App):
             Keyword arguments for run method
         update_queue : queue.Queue
             Queue for receiving updates from worker thread
+        start_worker : bool
+            Whether to start the worker thread on mount (default: True)
+            Set to False for tests that verify initial placeholder state
         """
         super().__init__()
         self.moondock = moondock_instance
         self.run_kwargs = run_kwargs
         self._update_queue = update_queue
+        self._start_worker = start_worker
         self.original_handlers: list[logging.Handler] = []
         self.worker_exit_code = 0
         self.instance_start_time: datetime | None = None
@@ -417,7 +422,9 @@ class MoondockTUI(App):
         self.instance_start_time = datetime.now()
         self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
         self.set_interval(1.0, self.update_uptime, name="uptime-timer")
-        self.run_worker(self.run_moondock_logic, exit_on_error=False, thread=True)
+
+        if self._start_worker:
+            self.run_worker(self.run_moondock_logic, exit_on_error=False, thread=True)
 
     def check_for_updates(self) -> None:
         """Check queue for updates and update widgets accordingly.
