@@ -165,11 +165,20 @@ def monitor_localstack_instances(
 
             try:
                 if target_instance_ids:
-                    response = ec2_client.describe_instances(
+                    paginator = ec2_client.get_paginator("describe_instances")
+                    page_iterator = paginator.paginate(
                         InstanceIds=list(target_instance_ids)
                     )
                 else:
-                    response = ec2_client.describe_instances()
+                    paginator = ec2_client.get_paginator("describe_instances")
+                    page_iterator = paginator.paginate(
+                        Filters=[
+                            {
+                                "Name": "instance-state-name",
+                                "Values": ["pending", "running"],
+                            }
+                        ]
+                    )
             except Exception as e:
                 if "InvalidInstanceID.NotFound" in str(e):
                     time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
@@ -182,74 +191,75 @@ def monitor_localstack_instances(
                     time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
                     continue
 
-            for reservation in response.get("Reservations", []):
-                for instance in reservation.get("Instances", []):
-                    instance_id = instance["InstanceId"]
-                    state = instance["State"]["Name"]
+            for page in page_iterator:
+                for reservation in page.get("Reservations", []):
+                    for instance in reservation.get("Instances", []):
+                        instance_id = instance["InstanceId"]
+                        state = instance["State"]["Name"]
 
-                    if target_instance_ids and instance_id not in target_instance_ids:
-                        continue
+                        if target_instance_ids and instance_id not in target_instance_ids:
+                            continue
 
-                    if instance_id not in seen_instances and state in [
-                        "pending",
-                        "running",
-                    ]:
-                        logger.info(
-                            f"Detected new instance {instance_id} (state: {state}), creating SSH container"
-                        )
-
-                        try:
-                            port, key_file = (
-                                container_manager.create_instance_container(instance_id)
+                        if instance_id not in seen_instances and state in [
+                            "pending",
+                            "running",
+                        ]:
+                            logger.info(
+                                f"Detected new instance {instance_id} (state: {state}), creating SSH container"
                             )
 
-                            if port is not None:
-                                os.environ[f"SSH_PORT_{instance_id}"] = str(port)
-                                os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
-                                    key_file
-                                )
-                                os.environ[f"SSH_READY_{instance_id}"] = "1"
-                                seen_instances.add(instance_id)
-
-                                context.instance_id = instance_id
-
-                                from features.steps.port_forwarding_steps import (
-                                    start_http_servers_for_all_configured_ports,
+                            try:
+                                port, key_file = (
+                                    container_manager.create_instance_container(instance_id)
                                 )
 
-                                logger.info(
-                                    f"Monitor thread: Starting HTTP servers for all configured ports for {instance_id}"
-                                )
-                                start_http_servers_for_all_configured_ports(context)
-                                logger.info(
-                                    f"Monitor thread: HTTP servers started successfully for {instance_id}"
-                                )
+                                if port is not None:
+                                    os.environ[f"SSH_PORT_{instance_id}"] = str(port)
+                                    os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
+                                        key_file
+                                    )
+                                    os.environ[f"SSH_READY_{instance_id}"] = "1"
+                                    seen_instances.add(instance_id)
 
-                                os.environ[f"HTTP_SERVERS_READY_{instance_id}"] = "1"
-                                logger.info(
-                                    f"SSH container ready for {instance_id} (port={port}), HTTP servers started"
-                                )
-                            else:
-                                os.environ[f"SSH_PORT_{instance_id}"] = "65535"
-                                os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
-                                    key_file
-                                )
-                                os.environ[f"SSH_READY_{instance_id}"] = "1"
-                                seen_instances.add(instance_id)
-                                logger.info(
-                                    f"Monitor thread: Container for {instance_id} created WITHOUT port mapping (blocked), setting SSH_PORT to 65535 (unreachable)"
-                                )
-                        except Exception as e:
-                            logger.error(
-                                f"Monitor thread: Failed to create container for {instance_id}: {e}",
-                                exc_info=True,
-                            )
-                            logger.error(f"Instance state was: {state}")
-                            logger.error(f"Instance details: {instance}")
+                                    context.instance_id = instance_id
 
-                            os.environ[f"MONITOR_ERROR_{instance_id}"] = str(e)
-                            if hasattr(context, "monitor_error"):
-                                context.monitor_error = str(e)
+                                    from features.steps.port_forwarding_steps import (
+                                        start_http_servers_for_all_configured_ports,
+                                    )
+
+                                    logger.info(
+                                        f"Monitor thread: Starting HTTP servers for all configured ports for {instance_id}"
+                                    )
+                                    start_http_servers_for_all_configured_ports(context)
+                                    logger.info(
+                                        f"Monitor thread: HTTP servers started successfully for {instance_id}"
+                                    )
+
+                                    os.environ[f"HTTP_SERVERS_READY_{instance_id}"] = "1"
+                                    logger.info(
+                                        f"SSH container ready for {instance_id} (port={port}), HTTP servers started"
+                                    )
+                                else:
+                                    os.environ[f"SSH_PORT_{instance_id}"] = "65535"
+                                    os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
+                                        key_file
+                                    )
+                                    os.environ[f"SSH_READY_{instance_id}"] = "1"
+                                    seen_instances.add(instance_id)
+                                    logger.info(
+                                        f"Monitor thread: Container for {instance_id} created WITHOUT port mapping (blocked), setting SSH_PORT to 65535 (unreachable)"
+                                    )
+                            except Exception as e:
+                                logger.error(
+                                    f"Monitor thread: Failed to create container for {instance_id}: {e}",
+                                    exc_info=True,
+                                )
+                                logger.error(f"Instance state was: {state}")
+                                logger.error(f"Instance details: {instance}")
+
+                                os.environ[f"MONITOR_ERROR_{instance_id}"] = str(e)
+                                if hasattr(context, "monitor_error"):
+                                    context.monitor_error = str(e)
         except Exception as e:
             logger.error(f"Exception in monitor loop: {e}", exc_info=True)
             import traceback
@@ -324,22 +334,23 @@ def step_localstack_is_healthy(context: Context) -> None:
     ec2_client = create_localstack_ec2_client()
 
     try:
-        response = ec2_client.describe_instances()
+        paginator = ec2_client.get_paginator("describe_instances")
+        page_iterator = paginator.paginate()
 
         instance_ids = []
-        for reservation in response.get("Reservations", []):
-            for instance in reservation["Instances"]:
-                instance_ids.append(instance["InstanceId"])
+        non_terminated = []
+
+        for page in page_iterator:
+            for reservation in page.get("Reservations", []):
+                for instance in reservation["Instances"]:
+                    instance_ids.append(instance["InstanceId"])
+                    if instance["State"]["Name"] != "terminated":
+                        non_terminated.append(instance["InstanceId"])
 
         if instance_ids:
             logger.info(
                 f"Cleaning {len(instance_ids)} old instances from LocalStack (all states): {instance_ids}"
             )
-            non_terminated = []
-            for reservation in response.get("Reservations", []):
-                for instance in reservation["Instances"]:
-                    if instance["State"]["Name"] != "terminated":
-                        non_terminated.append(instance["InstanceId"])
 
             if non_terminated:
                 ec2_client.terminate_instances(InstanceIds=non_terminated)

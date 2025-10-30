@@ -420,7 +420,8 @@ class EC2Manager:
             try:
                 regional_ec2 = boto3.client("ec2", region_name=region)
 
-                response = regional_ec2.describe_instances(
+                paginator = regional_ec2.get_paginator("describe_instances")
+                page_iterator = paginator.paginate(
                     Filters=[
                         {"Name": "tag:ManagedBy", "Values": ["moondock"]},
                         {
@@ -430,23 +431,24 @@ class EC2Manager:
                     ]
                 )
 
-                for reservation in response["Reservations"]:
-                    for instance in reservation["Instances"]:
-                        tags = {
-                            tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])
-                        }
-
-                        instances.append(
-                            {
-                                "instance_id": instance["InstanceId"],
-                                "name": tags.get("Name", "N/A"),
-                                "state": instance["State"]["Name"],
-                                "region": region,
-                                "instance_type": instance["InstanceType"],
-                                "launch_time": instance["LaunchTime"],
-                                "machine_config": tags.get("MachineConfig", "ad-hoc"),
+                for page in page_iterator:
+                    for reservation in page["Reservations"]:
+                        for instance in reservation["Instances"]:
+                            tags = {
+                                tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])
                             }
-                        )
+
+                            instances.append(
+                                {
+                                    "instance_id": instance["InstanceId"],
+                                    "name": tags.get("Name", "N/A"),
+                                    "state": instance["State"]["Name"],
+                                    "region": region,
+                                    "instance_type": instance["InstanceType"],
+                                    "launch_time": instance["LaunchTime"],
+                                    "machine_config": tags.get("MachineConfig", "ad-hoc"),
+                                }
+                            )
 
             except NoCredentialsError:
                 raise

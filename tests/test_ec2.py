@@ -476,7 +476,9 @@ def test_list_instances_no_credentials_error(ec2_manager) -> None:
 
     def mock_boto3_client(*args, **kwargs):
         mock_client = MagicMock()
-        mock_client.describe_instances.side_effect = NoCredentialsError()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.side_effect = NoCredentialsError()
+        mock_client.get_paginator.return_value = mock_paginator
         return mock_client
 
     with patch("boto3.client", side_effect=mock_boto3_client):
