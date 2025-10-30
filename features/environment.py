@@ -820,7 +820,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         try:
             import shutil
 
-            config_data = getattr(context, "config_data", {})
+            config_data = getattr(context, "config_data", None) or {}
             if "sync_paths" in config_data.get("defaults", {}):
                 logger.debug("Cleaning up Mutagen sessions for @localstack test")
 

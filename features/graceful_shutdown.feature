@@ -2,7 +2,8 @@ Feature: Graceful Shutdown with Resource Cleanup
 
 @smoke @localstack @pilot
 Scenario: SIGINT triggers cleanup during command execution
-  Given config file with defaults section
+  Given LocalStack is healthy and responding
+  And config file with defaults section
   And instance is running with all resources active
   And command is executing
   When SIGINT signal is received
@@ -16,7 +17,8 @@ Scenario: SIGINT triggers cleanup during command execution
 
 @smoke @localstack @pilot
 Scenario: SIGTERM triggers cleanup with correct exit code
-  Given config file with defaults section
+  Given LocalStack is healthy and responding
+  And config file with defaults section
   And instance is running with all resources active
   When SIGTERM signal is received
   Then cleanup sequence executes
@@ -24,7 +26,8 @@ Scenario: SIGTERM triggers cleanup with correct exit code
 
 @smoke @localstack @pilot
 Scenario: Cleanup during instance launch only cleans created resources
-  Given config file with defaults section
+  Given LocalStack is healthy and responding
+  And config file with defaults section
   And instance launch is in progress
   And SSH is not yet connected
   When SIGINT signal is received
@@ -35,7 +38,8 @@ Scenario: Cleanup during instance launch only cleans created resources
 
 @smoke @localstack @pilot
 Scenario: Cleanup continues despite individual failures
-  Given config file with defaults section
+  Given LocalStack is healthy and responding
+  And config file with defaults section
   And instance is running with all resources active
   And mutagen termination will fail
   When SIGINT signal is received
@@ -48,7 +52,8 @@ Scenario: Cleanup continues despite individual failures
 
 @smoke @localstack @pilot
 Scenario: Duplicate cleanup is prevented
-  Given config file with defaults section
+  Given LocalStack is healthy and responding
+  And config file with defaults section
   And instance is running with all resources active
   And cleanup is already in progress
   When another SIGINT signal is received
@@ -57,7 +62,8 @@ Scenario: Duplicate cleanup is prevented
 
 @smoke @localstack @pilot
 Scenario: Normal completion without interruption
-  Given config file with defaults section
+  Given LocalStack is healthy and responding
+  And config file with defaults section
   When moondock run completes normally
   Then cleanup happens in finally block
 

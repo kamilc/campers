@@ -187,11 +187,11 @@ def step_instance_running_with_all_resources(context: Context) -> None:
 
         logging.warning(
             f"Port forwarding not active after {max_wait}s, "
-            "proceeding with signal test anyway"
+            f"proceeding with signal test anyway. This is expected in LocalStack "
+            f"where SSH tunnel establishment may take longer than {max_wait}s. "
+            f"Graceful shutdown testing does not require port forwarding to be active."
         )
-
-        context.forwarded_ports = [48888]
-        context.mutagen_session_name = "moondock-test-box"
+        return
     else:
         setup_mock_resources_with_cleanup_tracking(context)
 
@@ -625,7 +625,7 @@ def step_ssh_closed_third(context: Context) -> None:
             ssh_not_established = (
                 "Waiting for SSH" in output
                 or "SSH wait timeout" in output
-                or "SSH env vars" not in output
+                or "Waiting for SSH env vars" in output
             )
 
             if not ssh_cleanup_found and not ssh_not_established:
