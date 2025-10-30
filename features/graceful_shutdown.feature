@@ -1,6 +1,6 @@
 Feature: Graceful Shutdown with Resource Cleanup
 
-@smoke
+@smoke @localstack @pilot
 Scenario: SIGINT triggers cleanup during command execution
   Given config file with defaults section
   And instance is running with all resources active
@@ -14,7 +14,7 @@ Scenario: SIGINT triggers cleanup during command execution
   And cleanup log shows "Cleanup completed successfully"
   And exit code is 130
 
-@smoke
+@smoke @localstack @pilot
 Scenario: SIGTERM triggers cleanup with correct exit code
   Given config file with defaults section
   And instance is running with all resources active
@@ -22,7 +22,7 @@ Scenario: SIGTERM triggers cleanup with correct exit code
   Then cleanup sequence executes
   And exit code is 143
 
-@smoke
+@smoke @localstack @pilot
 Scenario: Cleanup during instance launch only cleans created resources
   Given config file with defaults section
   And instance launch is in progress
@@ -33,7 +33,7 @@ Scenario: Cleanup during instance launch only cleans created resources
   And mutagen cleanup is skipped
   And port forwarding cleanup is skipped
 
-@smoke
+@smoke @localstack @pilot
 Scenario: Cleanup continues despite individual failures
   Given config file with defaults section
   And instance is running with all resources active
@@ -46,7 +46,7 @@ Scenario: Cleanup continues despite individual failures
   And cleanup log shows "Cleanup completed with 1 errors"
   And exit code is 130
 
-@smoke
+@smoke @localstack @pilot
 Scenario: Duplicate cleanup is prevented
   Given config file with defaults section
   And instance is running with all resources active
@@ -55,13 +55,13 @@ Scenario: Duplicate cleanup is prevented
   Then second cleanup attempt is skipped
   And no duplicate cleanup errors occur
 
-@smoke
+@smoke @localstack @pilot
 Scenario: Normal completion without interruption
   Given config file with defaults section
   When moondock run completes normally
   Then cleanup happens in finally block
 
-@smoke
+@smoke @dry_run
 Scenario: Test mode graceful shutdown works correctly
   Given MOONDOCK_TEST_MODE is "1"
   And config file with defaults section

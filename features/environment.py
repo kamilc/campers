@@ -268,6 +268,28 @@ def before_all(context: Context) -> None:
 
     context.moondock_module = moondock_module
 
+    import subprocess
+
+    logging.info("Installing moondock in editable mode...")
+    result = subprocess.run(
+        ["uv", "pip", "install", "-e", "."],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    if result.returncode != 0:
+        error_msg = (
+            "Failed to install moondock in editable mode. "
+            "This is required for @localstack graceful shutdown tests.\n"
+            f"stderr: {result.stderr}\n"
+            f"stdout: {result.stdout}"
+        )
+        logging.error(error_msg)
+        raise RuntimeError(error_msg)
+
+    logging.info("Moondock installed successfully in editable mode")
+
 
 def before_scenario(context: Context, scenario: Scenario) -> None:
     """Setup executed before each scenario.
@@ -585,6 +607,17 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     scenario : Scenario
         The scenario that just finished.
     """
+    try:
+        if "localstack" in scenario.tags and hasattr(context, "app_process"):
+            if context.app_process and context.app_process.poll() is None:
+                logger.info("Killing orphaned app_process from graceful shutdown test")
+                context.app_process.kill()
+                try:
+                    context.app_process.wait(timeout=5)
+                except Exception as e:
+                    logger.warning(f"Error waiting for app_process to terminate: {e}")
+    except Exception as e:
+        logger.debug(f"Error cleaning up app_process: {e}")
 
     try:
         if hasattr(context, "log_handler") and context.log_handler:
