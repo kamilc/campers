@@ -780,6 +780,9 @@ class Moondock:
     boto3_client_factory : Callable[..., Any] | None
         Optional factory function for creating boto3 clients.
         If None, uses the default boto3.client function.
+    boto3_resource_factory : Callable[..., Any] | None
+        Optional factory function for creating boto3 resources.
+        If None, uses the default boto3.resource function.
     """
 
     def __init__(
@@ -787,6 +790,7 @@ class Moondock:
         ec2_manager_factory: Any | None = None,
         ssh_manager_factory: Any | None = None,
         boto3_client_factory: Any | None = None,
+        boto3_resource_factory: Any | None = None,
     ) -> None:
         """Initialize Moondock CLI.
 
@@ -802,6 +806,8 @@ class Moondock:
             Optional factory for SSHManager (default: None, uses SSHManager)
         boto3_client_factory : Callable[..., Any] | None
             Optional factory for boto3 clients (default: None, uses boto3.client)
+        boto3_resource_factory : Callable[..., Any] | None
+            Optional factory for boto3 resources (default: None, uses boto3.resource)
         """
         self._config_loader = ConfigLoader()
         self._cleanup_lock = threading.Lock()
@@ -809,9 +815,34 @@ class Moondock:
         self._cleanup_in_progress = False
         self._resources: dict[str, Any] = {}
         self._update_queue: queue.Queue | None = None
-        self.ec2_manager_factory = ec2_manager_factory or EC2Manager
-        self.ssh_manager_factory = ssh_manager_factory or SSHManager
         self.boto3_client_factory = boto3_client_factory or boto3.client
+        self.boto3_resource_factory = boto3_resource_factory or boto3.resource
+
+        if ec2_manager_factory is None:
+            self.ec2_manager_factory = self._create_ec2_manager
+        else:
+            self.ec2_manager_factory = ec2_manager_factory
+
+        self.ssh_manager_factory = ssh_manager_factory or SSHManager
+
+    def _create_ec2_manager(self, region: str) -> EC2Manager:
+        """Create EC2Manager with dependency injection for boto3 factories.
+
+        Parameters
+        ----------
+        region : str
+            AWS region for the EC2 manager
+
+        Returns
+        -------
+        EC2Manager
+            EC2Manager instance with boto3 factory dependencies injected
+        """
+        return EC2Manager(
+            region=region,
+            boto3_client_factory=self.boto3_client_factory,
+            boto3_resource_factory=self.boto3_resource_factory,
+        )
 
     def _log_and_print_error(self, message: str, *args: Any) -> None:
         """Log error message and print to stderr.
@@ -1790,10 +1821,8 @@ class Moondock:
         ValueError
             If region is not a valid AWS region
         """
-        import boto3
-
         try:
-            ec2_client = boto3.client("ec2", region_name="us-east-1")
+            ec2_client = self.boto3_client_factory("ec2", region_name="us-east-1")
             regions_response = ec2_client.describe_regions()
             valid_regions = {r["RegionName"] for r in regions_response["Regions"]}
 
@@ -1832,7 +1861,7 @@ class Moondock:
             self._validate_region(region)
 
         try:
-            ec2_manager = EC2Manager(region=region or default_region)
+            ec2_manager = self._create_ec2_manager(region=region or default_region)
             instances = ec2_manager.list_instances(region_filter=region)
 
             if not instances:
@@ -1899,7 +1928,7 @@ class Moondock:
         target: dict[str, Any] | None = None
 
         try:
-            search_manager = EC2Manager(region=region or default_region)
+            search_manager = self._create_ec2_manager(region=region or default_region)
             matches = search_manager.find_instances_by_name_or_id(
                 name_or_id=name_or_id, region_filter=region
             )
@@ -1935,7 +1964,7 @@ class Moondock:
                 target["region"],
             )
 
-            regional_manager = EC2Manager(region=target["region"])
+            regional_manager = self._create_ec2_manager(region=target["region"])
             regional_manager.terminate_instance(target["instance_id"])
 
             print(f"Instance {target['instance_id']} has been successfully terminated.")
@@ -2032,11 +2061,10 @@ class Moondock:
         bool
             True if credentials are valid, False otherwise
         """
-        import boto3
         from botocore.exceptions import ClientError, NoCredentialsError
 
         try:
-            sts_client = boto3.client("sts", region_name=effective_region)
+            sts_client = self.boto3_client_factory("sts", region_name=effective_region)
             sts_client.get_caller_identity()
             print("AWS credentials found")
             return True
@@ -2246,9 +2274,6 @@ class Moondock:
         SystemExit
             Exits with code 1 if AWS credentials are not found
         """
-
-        import boto3
-
         effective_region = self._get_effective_region(region)
 
         print(f"Checking AWS prerequisites for {effective_region}...\n")
@@ -2257,7 +2282,7 @@ class Moondock:
             sys.exit(1)
 
         if ec2_client is None:
-            ec2_client = boto3.client("ec2", region_name=effective_region)
+            ec2_client = self.boto3_client_factory("ec2", region_name=effective_region)
 
         vpc_exists, missing_perms = self._check_infrastructure(
             ec2_client, effective_region
@@ -2308,9 +2333,6 @@ class Moondock:
         SystemExit
             Exits with code 1 if AWS credentials are not found
         """
-
-        import boto3
-
         effective_region = self._get_effective_region(region)
 
         print(f"Running diagnostics for {effective_region}...\n")
@@ -2319,7 +2341,7 @@ class Moondock:
             sys.exit(1)
 
         if ec2_client is None:
-            ec2_client = boto3.client("ec2", region_name=effective_region)
+            ec2_client = self.boto3_client_factory("ec2", region_name=effective_region)
 
         vpc_exists, missing_perms = self._check_infrastructure(
             ec2_client, effective_region
@@ -2364,6 +2386,9 @@ class MoondockCLI(Moondock):
     boto3_client_factory : Callable[..., Any] | None
         Optional factory function for creating boto3 clients.
         If None, uses the default boto3.client function.
+    boto3_resource_factory : Callable[..., Any] | None
+        Optional factory function for creating boto3 resources.
+        If None, uses the default boto3.resource function.
     """
 
     def __init__(
@@ -2371,6 +2396,7 @@ class MoondockCLI(Moondock):
         ec2_manager_factory: Any | None = None,
         ssh_manager_factory: Any | None = None,
         boto3_client_factory: Any | None = None,
+        boto3_resource_factory: Any | None = None,
     ) -> None:
         """Initialize MoondockCLI with optional dependency injection.
 
@@ -2382,11 +2408,14 @@ class MoondockCLI(Moondock):
             Optional factory for SSHManager (default: None, uses SSHManager)
         boto3_client_factory : Callable[..., Any] | None
             Optional factory for boto3 clients (default: None, uses boto3.client)
+        boto3_resource_factory : Callable[..., Any] | None
+            Optional factory for boto3 resources (default: None, uses boto3.resource)
         """
         super().__init__(
             ec2_manager_factory=ec2_manager_factory,
             ssh_manager_factory=ssh_manager_factory,
             boto3_client_factory=boto3_client_factory,
+            boto3_resource_factory=boto3_resource_factory,
         )
 
     def run(

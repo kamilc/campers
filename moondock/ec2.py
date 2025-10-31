@@ -75,17 +75,28 @@ VALID_INSTANCE_TYPES = [
 class EC2Manager:
     """Manage EC2 instance lifecycle for moondock."""
 
-    def __init__(self, region: str) -> None:
+    def __init__(
+        self,
+        region: str,
+        boto3_client_factory: Any | None = None,
+        boto3_resource_factory: Any | None = None,
+    ) -> None:
         """Initialize EC2 manager.
 
         Parameters
         ----------
         region : str
             AWS region for EC2 operations
+        boto3_client_factory : Callable[..., Any] | None
+            Optional factory for creating boto3 clients. If None, uses boto3.client
+        boto3_resource_factory : Callable[..., Any] | None
+            Optional factory for creating boto3 resources. If None, uses boto3.resource
         """
         self.region = region
-        self.ec2_client = boto3.client("ec2", region_name=region)
-        self.ec2_resource = boto3.resource("ec2", region_name=region)
+        self.boto3_client_factory = boto3_client_factory or boto3.client
+        self.boto3_resource_factory = boto3_resource_factory or boto3.resource
+        self.ec2_client = self.boto3_client_factory("ec2", region_name=region)
+        self.ec2_resource = self.boto3_resource_factory("ec2", region_name=region)
 
     def find_ubuntu_ami(self) -> str:
         """Find latest Ubuntu 22.04 LTS AMI in region.
@@ -375,7 +386,7 @@ class EC2Manager:
             regions = [region_filter]
         else:
             try:
-                ec2_client = boto3.client("ec2", region_name=self.region)
+                ec2_client = self.boto3_client_factory("ec2", region_name=self.region)
                 regions_response = ec2_client.describe_regions()
                 regions = [r["RegionName"] for r in regions_response["Regions"]]
             except NoCredentialsError:
@@ -392,7 +403,7 @@ class EC2Manager:
 
         for region in regions:
             try:
-                regional_ec2 = boto3.client("ec2", region_name=region)
+                regional_ec2 = self.boto3_client_factory("ec2", region_name=region)
 
                 paginator = regional_ec2.get_paginator("describe_instances")
                 page_iterator = paginator.paginate(

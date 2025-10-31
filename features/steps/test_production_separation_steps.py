@@ -238,9 +238,7 @@ def step_verify_cli_args(context: Context) -> None:
 def step_verify_no_test_mode_args(context: Context) -> None:
     """Verify no test mode arguments in CLI."""
     if "MOONDOCK_TEST_MODE" in context.cli_content:
-        raise AssertionError(
-            "Test mode argument found in CLI code (should be removed)"
-        )
+        raise AssertionError("Test mode argument found in CLI code (should be removed)")
 
     if "_run_test_mode" in context.cli_content:
         raise AssertionError(
@@ -262,9 +260,7 @@ def step_verify_ssh_functions(context: Context) -> None:
 
     for pattern in required_patterns:
         if pattern not in content:
-            raise AssertionError(
-                f"SSH file missing expected pattern: {pattern}"
-            )
+            raise AssertionError(f"SSH file missing expected pattern: {pattern}")
 
 
 def find_pattern_in_code(search_path: Path, pattern: str) -> list[tuple[str, int, str]]:

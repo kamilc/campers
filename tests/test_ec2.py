@@ -470,7 +470,7 @@ def test_list_instances_handles_missing_tags(ec2_manager, registered_ami) -> Non
 
 def test_list_instances_no_credentials_error(ec2_manager) -> None:
     """Test that NoCredentialsError is raised when credentials missing."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     from botocore.exceptions import NoCredentialsError
 
@@ -481,14 +481,15 @@ def test_list_instances_no_credentials_error(ec2_manager) -> None:
         mock_client.get_paginator.return_value = mock_paginator
         return mock_client
 
-    with patch("boto3.client", side_effect=mock_boto3_client):
-        with pytest.raises(NoCredentialsError):
-            ec2_manager.list_instances(region_filter="us-east-1")
+    ec2_manager.boto3_client_factory = mock_boto3_client
+
+    with pytest.raises(NoCredentialsError):
+        ec2_manager.list_instances(region_filter="us-east-1")
 
 
 def test_list_instances_region_query_failure(ec2_manager) -> None:
     """Test that region query failure falls back to default region."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     from botocore.exceptions import ClientError
 
@@ -507,6 +508,6 @@ def test_list_instances_region_query_failure(ec2_manager) -> None:
             mock_client.describe_instances.return_value = {"Reservations": []}
         return mock_client
 
-    with patch("boto3.client", side_effect=mock_client_factory):
-        result = ec2_manager.list_instances()
-        assert isinstance(result, list)
+    ec2_manager.boto3_client_factory = mock_client_factory
+    result = ec2_manager.list_instances()
+    assert isinstance(result, list)

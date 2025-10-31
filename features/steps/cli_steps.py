@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -5,6 +6,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from unittest.mock import MagicMock
 
 import yaml
 from behave import given, then, when
@@ -15,6 +17,98 @@ from moondock.__main__ import MoondockCLI
 JSON_OUTPUT_TRUNCATE_LENGTH = 200
 
 logger = logging.getLogger(__name__)
+
+
+def create_cli_test_boto3_factory():
+    """Create a boto3 client factory that returns mocked clients for CLI tests.
+
+    Returns
+    -------
+    callable
+        Factory function that returns mocked boto3 clients
+    """
+
+    def mock_boto3_client(service_name: str, region_name: str = None):
+        if service_name == "ec2":
+            mock_client = MagicMock()
+            mock_client.describe_images.return_value = {
+                "Images": [
+                    {
+                        "ImageId": "ami-12345678",
+                        "CreationDate": "2023-12-01T00:00:00.000Z",
+                        "OwnerId": "099720109477",
+                        "Name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+                    }
+                ]
+            }
+            mock_client.describe_regions.return_value = {
+                "Regions": [
+                    {"RegionName": "us-east-1"},
+                    {"RegionName": "us-west-2"},
+                    {"RegionName": "eu-west-1"},
+                ]
+            }
+            mock_client.describe_vpcs.return_value = {
+                "Vpcs": [{"VpcId": "vpc-12345678"}]
+            }
+            return mock_client
+        elif service_name == "sts":
+            mock_client = MagicMock()
+            mock_client.get_caller_identity.return_value = {
+                "UserId": "AIDAI123456789012345",
+                "Account": "123456789012",
+                "Arn": "arn:aws:iam::123456789012:user/test",
+            }
+            return mock_client
+        else:
+            return MagicMock()
+
+    return mock_boto3_client
+
+
+def create_cli_test_ec2_manager_factory():
+    """Create an EC2Manager factory that returns mock managers for CLI tests.
+
+    Returns
+    -------
+    callable
+        Factory function that returns mock EC2Manager instances
+    """
+
+    def mock_ec2_manager(region: str, **kwargs):
+        mock_mgr = MagicMock()
+        mock_mgr.launch_instance.return_value = {
+            "instance_id": "i-test123456789",
+            "public_ip": "192.168.1.1",
+            "state": "running",
+            "key_file": "/tmp/test_key.pem",
+            "security_group_id": "sg-test123456789",
+            "unique_id": "test_unique_id",
+        }
+        return mock_mgr
+
+    return mock_ec2_manager
+
+
+def create_cli_test_ssh_manager_factory():
+    """Create an SSHManager factory that returns mock managers for CLI tests.
+
+    Returns
+    -------
+    callable
+        Factory function that returns mock SSHManager instances
+    """
+
+    def mock_ssh_manager(**kwargs):
+        mock_mgr = MagicMock()
+        mock_mgr.connect.return_value = None
+        mock_mgr.filter_environment_variables.return_value = {}
+        mock_mgr.build_command_with_env.return_value = "mock_command"
+        mock_mgr.execute_command.return_value = 0
+        mock_mgr.execute_command_raw.return_value = 0
+        return mock_mgr
+
+    return mock_ssh_manager
 
 
 def ensure_machine_exists(context: Context, machine_name: str) -> None:
@@ -158,34 +252,94 @@ def step_defaults_have_instance_type(context: Context, instance_type: str) -> No
     context.config_data["defaults"]["instance_type"] = instance_type
 
 
-def parse_cli_args(args: list[str]) -> tuple[str | None, str | None]:
-    """Parse CLI arguments to extract machine name and command.
+def parse_cli_args(args: list[str]) -> dict[str, any]:
+    """Parse CLI arguments to extract all parameters.
 
     Parameters
     ----------
     args : list[str]
-        Parsed command-line arguments (e.g., ["run", "test-box"] or ["run", "-c", "uptime"])
+        Parsed command-line arguments (e.g., ["run", "test-box", "--region", "us-west-2"])
 
     Returns
     -------
-    tuple[str | None, str | None]
-        (machine_name, command) tuple, either or both may be None
+    dict[str, any]
+        Dictionary with parsed parameters
     """
-    machine_name = None
-    command = None
+    params = {
+        "machine_name": None,
+        "command": None,
+        "instance_type": None,
+        "disk_size": None,
+        "region": None,
+        "port": None,
+        "include_vcs": None,
+        "ignore": None,
+    }
 
     if not args or args[0] != "run":
-        return machine_name, command
+        return params
 
-    if len(args) > 1 and not args[1].startswith("-"):
-        machine_name = args[1]
+    i = 1
+    while i < len(args):
+        arg = args[i]
 
-    if "-c" in args:
-        c_index = args.index("-c")
-        if c_index + 1 < len(args):
-            command = args[c_index + 1]
+        if arg == "-c" or arg == "--command":
+            if i + 1 < len(args):
+                params["command"] = args[i + 1]
+                i += 2
+            else:
+                i += 1
 
-    return machine_name, command
+        elif arg == "--instance-type":
+            if i + 1 < len(args):
+                params["instance_type"] = args[i + 1]
+                i += 2
+            else:
+                i += 1
+
+        elif arg == "--disk-size":
+            if i + 1 < len(args):
+                params["disk_size"] = int(args[i + 1])
+                i += 2
+            else:
+                i += 1
+
+        elif arg == "--region":
+            if i + 1 < len(args):
+                params["region"] = args[i + 1]
+                i += 2
+            else:
+                i += 1
+
+        elif arg == "--port":
+            if i + 1 < len(args):
+                params["port"] = args[i + 1]
+                i += 2
+            else:
+                i += 1
+
+        elif arg == "--include-vcs":
+            if i + 1 < len(args):
+                params["include_vcs"] = args[i + 1]
+                i += 2
+            else:
+                i += 1
+
+        elif arg == "--ignore":
+            if i + 1 < len(args):
+                params["ignore"] = args[i + 1]
+                i += 2
+            else:
+                i += 1
+
+        elif not arg.startswith("-") and params["machine_name"] is None:
+            params["machine_name"] = arg
+            i += 1
+
+        else:
+            i += 1
+
+    return params
 
 
 @when('I run moondock command "{moondock_args}"')
@@ -212,22 +366,50 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
         hasattr(context, "scenario") and "localstack" in context.scenario.tags
     )
 
-    if is_localstack:
+    is_cli_test = (
+        hasattr(context, "scenario")
+        and ("smoke" in context.scenario.tags or "error" in context.scenario.tags)
+    ) and (args and args[0] == "run")
+
+    if is_localstack or is_cli_test:
         logger.debug("LocalStack scenario detected, using in-process execution")
 
-        machine_name, command = parse_cli_args(args)
-        logger.debug(f"Parsed args: machine_name={machine_name}, command={command}")
+        params = parse_cli_args(args)
+        logger.debug(f"Parsed args: {params}")
 
         from features.steps.mutagen_mocking import mutagen_mocked
 
+        boto3_factory = None
+        ec2_manager_factory = None
+        ssh_manager_factory = None
+
+        if is_cli_test and not is_localstack:
+            boto3_factory = create_cli_test_boto3_factory()
+            ec2_manager_factory = create_cli_test_ec2_manager_factory()
+            ssh_manager_factory = create_cli_test_ssh_manager_factory()
+
+        stderr_capture = io.StringIO()
+        old_stderr = sys.stderr
+        sys.stderr = stderr_capture
+
         try:
             with mutagen_mocked(context):
-                cli = MoondockCLI()
+                cli = MoondockCLI(
+                    ec2_manager_factory=ec2_manager_factory,
+                    ssh_manager_factory=ssh_manager_factory,
+                    boto3_client_factory=boto3_factory,
+                )
 
                 if args[0] == "run":
                     result = cli.run(
-                        machine_name=machine_name,
-                        command=command,
+                        machine_name=params["machine_name"],
+                        command=params["command"],
+                        instance_type=params["instance_type"],
+                        disk_size=params["disk_size"],
+                        region=params["region"],
+                        port=params["port"],
+                        include_vcs=params["include_vcs"],
+                        ignore=params["ignore"],
                         json_output=True,
                         plain=True,
                     )
@@ -236,7 +418,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
                     context.stdout = (
                         result if isinstance(result, str) else json.dumps(result)
                     )
-                    context.stderr = ""
+                    context.stderr = stderr_capture.getvalue()
 
                     if isinstance(result, str):
                         try:
@@ -265,15 +447,20 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
         except SystemExit as e:
             logger.debug(f"CLI raised SystemExit with code {e.code}")
             context.exit_code = e.code if e.code is not None else 1
-            context.stderr = f"Command exited with code {e.code}"
+            captured_stderr = stderr_capture.getvalue()
+            context.stderr = captured_stderr
             context.stdout = ""
-            context.error = f"SystemExit: {e.code}"
+            context.error = (
+                captured_stderr if captured_stderr else f"SystemExit: {e.code}"
+            )
         except Exception as e:
             logger.error(f"In-process execution failed: {e}", exc_info=True)
             context.exit_code = 1
-            context.stderr = str(e)
+            context.stderr = stderr_capture.getvalue() or str(e)
             context.stdout = ""
             context.error = str(e)
+        finally:
+            sys.stderr = old_stderr
 
     else:
         logger.debug("Non-LocalStack scenario, using subprocess execution")

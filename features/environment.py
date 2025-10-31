@@ -322,6 +322,12 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
     is_localstack_scenario = "localstack" in scenario.tags
     is_pilot_scenario = "pilot" in scenario.tags
+    is_dry_run = "dry_run" in scenario.tags
+
+    if is_dry_run and not is_localstack_scenario:
+        context.use_direct_instantiation = True
+    else:
+        context.use_direct_instantiation = False
 
     if is_localstack_scenario or is_pilot_scenario:
         import socket
@@ -414,6 +420,64 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         os.environ["AWS_ACCESS_KEY_ID"] = "testing"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+
+        if is_dry_run:
+            ec2_client = boto3.client("ec2", region_name="us-east-1")
+
+            vpcs = ec2_client.describe_vpcs()
+            for vpc in vpcs.get("Vpcs", []):
+                if vpc.get("IsDefault"):
+                    vpc_id = vpc["VpcId"]
+                    try:
+                        subnets = ec2_client.describe_subnets(
+                            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+                        )
+                        for subnet in subnets.get("Subnets", []):
+                            try:
+                                ec2_client.delete_subnet(SubnetId=subnet["SubnetId"])
+                            except Exception as e:
+                                logger.debug(
+                                    f"Could not delete subnet {subnet['SubnetId']}: {e}"
+                                )
+
+                        igws = ec2_client.describe_internet_gateways(
+                            Filters=[{"Name": "attachment.vpc-id", "Values": [vpc_id]}]
+                        )
+                        for igw in igws.get("InternetGateways", []):
+                            try:
+                                ec2_client.detach_internet_gateway(
+                                    InternetGatewayId=igw["InternetGatewayId"],
+                                    VpcId=vpc_id,
+                                )
+                                ec2_client.delete_internet_gateway(
+                                    InternetGatewayId=igw["InternetGatewayId"]
+                                )
+                            except Exception as e:
+                                igw_id = igw["InternetGatewayId"]
+                                logger.debug(f"Could not delete internet gateway {igw_id}: {e}")
+
+                        ec2_client.delete_vpc(VpcId=vpc_id)
+                    except Exception as e:
+                        logger.debug(f"Could not delete VPC {vpc_id}: {e}")
+
+            ec2_client.register_image(
+                Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+                Description="Ubuntu 22.04 LTS",
+                Architecture="x86_64",
+                RootDeviceName="/dev/sda1",
+                VirtualizationType="hvm",
+            )
+
+            original_describe_images = ec2_client.describe_images
+
+            def mock_describe_images(**kwargs) -> dict:
+                response = original_describe_images(**kwargs)
+                for image in response.get("Images", []):
+                    image["OwnerId"] = "099720109477"
+                return response
+
+            ec2_client.describe_images = mock_describe_images
+            context.patched_ec2_client = ec2_client
     else:
         context.mock_aws_env = None
 
@@ -834,9 +898,8 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
-                    logger.debug(
-                        "Cleaned up localhost:2222 entries from ~/.ssh/known_hosts after scenario"
-                    )
+                    msg = "Cleaned up localhost:2222 entries from ~/.ssh/known_hosts after scenario"
+                    logger.debug(msg)
         except Exception as e:
             logger.debug(f"Error cleaning known_hosts after scenario: {e}")
 

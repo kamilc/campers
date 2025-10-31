@@ -62,6 +62,20 @@ def step_run_command(context, command: str) -> None:
     """
     import os
 
+    if getattr(context, "use_direct_instantiation", False) and "moondock" in command:
+        from features.steps.common_steps import execute_command_direct
+
+        parts = command.replace("moondock", "").strip().split()
+        if parts:
+            cmd_name = parts[0]
+            region = None
+            if "--region" in parts:
+                idx = parts.index("--region")
+                if idx + 1 < len(parts):
+                    region = parts[idx + 1]
+            execute_command_direct(context, cmd_name, region=region)
+            return
+
     project_root = Path(__file__).parent.parent.parent
 
     env = os.environ.copy()
