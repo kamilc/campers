@@ -30,6 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import boto3
 import fire
 import paramiko
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -766,13 +767,41 @@ class MoondockTUI(App):
 
 
 class Moondock:
-    """Main CLI interface for moondock."""
+    """Main CLI interface for moondock.
 
-    def __init__(self) -> None:
+    Parameters
+    ----------
+    ec2_manager_factory : Callable[..., Any] | None
+        Optional factory function for creating EC2Manager instances.
+        If None, uses the default EC2Manager class.
+    ssh_manager_factory : Callable[..., Any] | None
+        Optional factory function for creating SSHManager instances.
+        If None, uses the default SSHManager class.
+    boto3_client_factory : Callable[..., Any] | None
+        Optional factory function for creating boto3 clients.
+        If None, uses the default boto3.client function.
+    """
+
+    def __init__(
+        self,
+        ec2_manager_factory: Any | None = None,
+        ssh_manager_factory: Any | None = None,
+        boto3_client_factory: Any | None = None,
+    ) -> None:
         """Initialize Moondock CLI.
 
         Creates a ConfigLoader instance for handling configuration loading,
         merging, and validation. Also initializes cleanup tracking state.
+        Accepts optional dependency injection factories for testing.
+
+        Parameters
+        ----------
+        ec2_manager_factory : Callable[..., Any] | None
+            Optional factory for EC2Manager (default: None, uses EC2Manager)
+        ssh_manager_factory : Callable[..., Any] | None
+            Optional factory for SSHManager (default: None, uses SSHManager)
+        boto3_client_factory : Callable[..., Any] | None
+            Optional factory for boto3 clients (default: None, uses boto3.client)
         """
         self._config_loader = ConfigLoader()
         self._cleanup_lock = threading.Lock()
@@ -780,6 +809,9 @@ class Moondock:
         self._cleanup_in_progress = False
         self._resources: dict[str, Any] = {}
         self._update_queue: queue.Queue | None = None
+        self.ec2_manager_factory = ec2_manager_factory or EC2Manager
+        self.ssh_manager_factory = ssh_manager_factory or SSHManager
+        self.boto3_client_factory = boto3_client_factory or boto3.client
 
     def _log_and_print_error(self, message: str, *args: Any) -> None:
         """Log error message and print to stderr.
@@ -1070,130 +1102,6 @@ class Moondock:
             with self._cleanup_lock:
                 self._cleanup_in_progress = False
 
-    def _run_test_mode(
-        self, merged_config: dict[str, Any], json_output: bool
-    ) -> dict[str, Any] | str:
-        """Handle test mode execution without real AWS/SSH operations.
-
-        Parameters
-        ----------
-        merged_config : dict[str, Any]
-            Merged configuration dictionary
-        json_output : bool
-            If True, return JSON string instead of dict
-
-        Returns
-        -------
-        dict[str, Any] | str
-            Mock instance details (as dict or JSON string)
-
-        Raises
-        ------
-        ValueError
-            If instance has no public IP but command execution is required
-            If startup_script defined but no sync_paths configured
-        """
-        if merged_config.get("startup_script") and not merged_config.get("sync_paths"):
-            raise ValueError(
-                "startup_script is defined but no sync_paths configured. "
-                "startup_script requires a synced directory to run in."
-            )
-
-        moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-        public_ip = "203.0.113.1"
-
-        if os.environ.get("MOONDOCK_NO_PUBLIC_IP") == "1":
-            public_ip = None
-
-        mock_instance = {
-            "instance_id": "i-mock123",
-            "public_ip": public_ip,
-            "state": "running",
-            "key_file": str(Path(moondock_dir) / "keys" / "mock.pem"),
-            "security_group_id": "sg-mock123",
-            "unique_id": "mock123",
-        }
-
-        need_ssh = (
-            merged_config.get("setup_script")
-            or merged_config.get("startup_script")
-            or merged_config.get("command")
-        )
-
-        if need_ssh:
-            if mock_instance["public_ip"] is None:
-                raise ValueError(
-                    "Instance does not have a public IP address. "
-                    "SSH connection requires public networking configuration."
-                )
-
-            logging.info("Waiting for SSH to be ready...")
-            logging.info("SSH connection established")
-
-            if merged_config.get("env_filter"):
-                from moondock.ssh import SSHManager
-
-                mock_ssh = SSHManager(
-                    host="203.0.113.1", key_file="/tmp/mock.pem", username="ubuntu"
-                )
-                mock_ssh.filter_environment_variables(merged_config["env_filter"])
-
-            if merged_config.get("setup_script", "").strip():
-                logging.info("Running setup_script...")
-
-                script_exit_code = self._extract_exit_code_from_script(
-                    merged_config["setup_script"]
-                )
-
-                if script_exit_code != 0:
-                    raise RuntimeError(
-                        f"Setup script failed with exit code: {script_exit_code}"
-                    )
-
-                logging.info("Setup script completed successfully")
-
-            if merged_config.get("sync_paths"):
-                logging.info("Starting Mutagen file sync...")
-                logging.info("Waiting for initial file sync to complete...")
-
-                if os.environ.get("MOONDOCK_SYNC_TIMEOUT") == "1":
-                    raise RuntimeError(
-                        "Mutagen sync timed out after 300 seconds. "
-                        "Initial sync did not complete."
-                    )
-
-                logging.info("File sync completed")
-
-            if merged_config.get("ports"):
-                self._log_port_forwarding_setup(merged_config["ports"])
-
-            if merged_config.get("startup_script"):
-                logging.info("Running startup_script...")
-
-                script_exit_code = self._extract_exit_code_from_script(
-                    merged_config["startup_script"]
-                )
-
-                if script_exit_code != 0:
-                    raise RuntimeError(
-                        f"Startup script failed with exit code: {script_exit_code}"
-                    )
-
-                logging.info("Startup script completed successfully")
-
-            if merged_config.get("command"):
-                cmd = merged_config["command"]
-                exit_code = self._extract_exit_code_from_script(cmd)
-
-                logging.info("Executing command: %s", cmd)
-                logging.info("Command completed with exit code: %s", exit_code)
-                mock_instance["command_exit_code"] = exit_code
-
-        if json_output:
-            return json.dumps(mock_instance, indent=2)
-
-        return mock_instance
-
     def run(
         self,
         machine_name: str | None = None,
@@ -1247,9 +1155,8 @@ class Moondock:
             If include_vcs is not "true" or "false", or if machine name is invalid
         """
         is_tty = sys.stdout.isatty()
-        is_test = os.environ.get("MOONDOCK_TEST_MODE") == "1"
 
-        use_tui = not (plain or json_output or is_test or not is_tty)
+        use_tui = not (plain or json_output or not is_tty)
 
         if use_tui:
             run_kwargs = {
@@ -1387,9 +1294,6 @@ class Moondock:
             logging.debug("Sending merged_config to TUI queue")
             update_queue.put({"type": "merged_config", "payload": merged_config})
 
-        if os.environ.get("MOONDOCK_TEST_MODE") == "1":
-            return self._run_test_mode(merged_config, json_output)
-
         self._update_queue = update_queue
 
         if not tui_mode:
@@ -1402,7 +1306,7 @@ class Moondock:
             if merged_config.get("sync_paths"):
                 mutagen_mgr.check_mutagen_installed()
 
-            ec2_manager = EC2Manager(region=merged_config["region"])
+            ec2_manager = self.ec2_manager_factory(region=merged_config["region"])
 
             with self._resources_lock:
                 self._resources["ec2_manager"] = ec2_manager
@@ -1433,29 +1337,7 @@ class Moondock:
 
                 return instance_details
 
-            if os.environ.get("AWS_ENDPOINT_URL"):
-                target_ids_env = os.environ.get("MOONDOCK_TARGET_INSTANCE_IDS", "")
-                existing_ids = [
-                    id.strip() for id in target_ids_env.split(",") if id.strip()
-                ]
-                if instance_details["instance_id"] not in existing_ids:
-                    existing_ids.append(instance_details["instance_id"])
-                    new_target_ids = ",".join(existing_ids)
-                    os.environ["MOONDOCK_TARGET_INSTANCE_IDS"] = new_target_ids
-                    logging.info(
-                        f"Registered instance {instance_details['instance_id']} with monitor thread"
-                    )
-
-                    if update_queue is not None:
-                        update_queue.put(
-                            {
-                                "type": "instance_registered",
-                                "payload": {
-                                    "instance_id": instance_details["instance_id"]
-                                },
-                            }
-                        )
-            elif instance_details["public_ip"] is None:
+            if instance_details["public_ip"] is None:
                 raise ValueError(
                     "Instance does not have a public IP address. "
                     "SSH connection requires public networking configuration."
@@ -1469,7 +1351,7 @@ class Moondock:
                 instance_details["key_file"],
             )
 
-            ssh_manager = SSHManager(
+            ssh_manager = self.ssh_manager_factory(
                 host=ssh_host,
                 key_file=ssh_key_file,
                 username="ubuntu",
@@ -1484,11 +1366,6 @@ class Moondock:
                     f"Failed to establish SSH connection after 10 attempts: {str(e)}"
                 )
                 logging.error(error_msg)
-
-                if update_queue is not None and os.environ.get("AWS_ENDPOINT_URL"):
-                    update_queue.put(
-                        {"type": "status_update", "payload": {"status": "error"}}
-                    )
                 raise
 
             if self._cleanup_in_progress:
@@ -1615,27 +1492,6 @@ class Moondock:
                 if self._cleanup_in_progress:
                     logging.debug("Cleanup in progress, aborting port forwarding")
                     return {}
-
-                instance_id = instance_details["instance_id"]
-                http_servers_ready_var = f"HTTP_SERVERS_READY_{instance_id}"
-
-                if http_servers_ready_var in os.environ:
-                    logging.debug(
-                        f"Waiting for HTTP servers to be ready for instance {instance_id}..."
-                    )
-                    max_wait = 10
-                    start_time = time.time()
-                    while time.time() - start_time < max_wait:
-                        if os.environ.get(http_servers_ready_var) == "1":
-                            logging.debug(
-                                "HTTP servers are ready, proceeding with port forwarding"
-                            )
-                            break
-                        time.sleep(0.5)
-                    else:
-                        logging.warning(
-                            f"HTTP servers readiness timeout after {max_wait}s"
-                        )
 
                 portforward_mgr = PortForwardManager()
 
@@ -2390,7 +2246,6 @@ class Moondock:
         SystemExit
             Exits with code 1 if AWS credentials are not found
         """
-        import os
 
         import boto3
 
@@ -2401,18 +2256,12 @@ class Moondock:
         if not self._check_aws_credentials(effective_region):
             sys.exit(1)
 
-        is_test_mode = os.environ.get("MOONDOCK_TEST_MODE") == "1"
-
-        if ec2_client is None and not is_test_mode:
+        if ec2_client is None:
             ec2_client = boto3.client("ec2", region_name=effective_region)
 
-        if not is_test_mode:
-            vpc_exists, missing_perms = self._check_infrastructure(
-                ec2_client, effective_region
-            )
-        else:
-            vpc_exists = os.environ.get("MOONDOCK_TEST_VPC_EXISTS") == "true"
-            missing_perms = []
+        vpc_exists, missing_perms = self._check_infrastructure(
+            ec2_client, effective_region
+        )
 
         if not vpc_exists:
             print(f"No default VPC found in {effective_region}\n")
@@ -2421,8 +2270,7 @@ class Moondock:
 
             if response.lower() == "y":
                 try:
-                    if not is_test_mode:
-                        ec2_client.create_default_vpc()
+                    ec2_client.create_default_vpc()
                     print(f"Default VPC created in {effective_region}")
                 except ClientError as e:
                     print(f"\nFailed to create VPC: {e}")
@@ -2460,7 +2308,6 @@ class Moondock:
         SystemExit
             Exits with code 1 if AWS credentials are not found
         """
-        import os
 
         import boto3
 
@@ -2471,21 +2318,12 @@ class Moondock:
         if not self._check_aws_credentials(effective_region):
             sys.exit(1)
 
-        is_test_mode = os.environ.get("MOONDOCK_TEST_MODE") == "1"
-
-        if ec2_client is None and not is_test_mode:
+        if ec2_client is None:
             ec2_client = boto3.client("ec2", region_name=effective_region)
 
-        if not is_test_mode:
-            vpc_exists, missing_perms = self._check_infrastructure(
-                ec2_client, effective_region
-            )
-        else:
-            vpc_exists = os.environ.get("MOONDOCK_TEST_VPC_EXISTS") == "true"
-            missing_perms = []
-
-            if ec2_client is None:
-                ec2_client = boto3.client("ec2", region_name=effective_region)
+        vpc_exists, missing_perms = self._check_infrastructure(
+            ec2_client, effective_region
+        )
 
         if not vpc_exists:
             print(f"No default VPC in {effective_region}\n")
@@ -2513,7 +2351,43 @@ class Moondock:
 
 
 class MoondockCLI(Moondock):
-    """CLI wrapper that handles process exit codes."""
+    """CLI wrapper that handles process exit codes.
+
+    Parameters
+    ----------
+    ec2_manager_factory : Callable[..., Any] | None
+        Optional factory function for creating EC2Manager instances.
+        If None, uses the default EC2Manager class.
+    ssh_manager_factory : Callable[..., Any] | None
+        Optional factory function for creating SSHManager instances.
+        If None, uses the default SSHManager class.
+    boto3_client_factory : Callable[..., Any] | None
+        Optional factory function for creating boto3 clients.
+        If None, uses the default boto3.client function.
+    """
+
+    def __init__(
+        self,
+        ec2_manager_factory: Any | None = None,
+        ssh_manager_factory: Any | None = None,
+        boto3_client_factory: Any | None = None,
+    ) -> None:
+        """Initialize MoondockCLI with optional dependency injection.
+
+        Parameters
+        ----------
+        ec2_manager_factory : Callable[..., Any] | None
+            Optional factory for EC2Manager (default: None, uses EC2Manager)
+        ssh_manager_factory : Callable[..., Any] | None
+            Optional factory for SSHManager (default: None, uses SSHManager)
+        boto3_client_factory : Callable[..., Any] | None
+            Optional factory for boto3 clients (default: None, uses boto3.client)
+        """
+        super().__init__(
+            ec2_manager_factory=ec2_manager_factory,
+            ssh_manager_factory=ssh_manager_factory,
+            boto3_client_factory=boto3_client_factory,
+        )
 
     def run(
         self,

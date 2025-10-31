@@ -197,7 +197,10 @@ def monitor_localstack_instances(
                         instance_id = instance["InstanceId"]
                         state = instance["State"]["Name"]
 
-                        if target_instance_ids and instance_id not in target_instance_ids:
+                        if (
+                            target_instance_ids
+                            and instance_id not in target_instance_ids
+                        ):
                             continue
 
                         if instance_id not in seen_instances and state in [
@@ -210,7 +213,9 @@ def monitor_localstack_instances(
 
                             try:
                                 port, key_file = (
-                                    container_manager.create_instance_container(instance_id)
+                                    container_manager.create_instance_container(
+                                        instance_id
+                                    )
                                 )
 
                                 if port is not None:
@@ -235,7 +240,9 @@ def monitor_localstack_instances(
                                         f"Monitor thread: HTTP servers started successfully for {instance_id}"
                                     )
 
-                                    os.environ[f"HTTP_SERVERS_READY_{instance_id}"] = "1"
+                                    os.environ[f"HTTP_SERVERS_READY_{instance_id}"] = (
+                                        "1"
+                                    )
                                     logger.info(
                                         f"SSH container ready for {instance_id} (port={port}), HTTP servers started"
                                     )

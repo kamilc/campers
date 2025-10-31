@@ -47,68 +47,6 @@ def test_moondock_class_exists(moondock_module) -> None:
     assert moondock_instance is not None
 
 
-def test_run_test_mode_with_setup_script(moondock_module) -> None:
-    """Test that test mode handles setup_script execution."""
-    import os
-    from unittest.mock import patch
-
-    moondock_instance = moondock_module()
-
-    merged_config = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-        "setup_script": "sudo apt update",
-        "command": "echo hello",
-    }
-
-    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
-        result = moondock_instance._run_test_mode(merged_config, json_output=False)
-
-    assert result is not None
-    assert result["instance_id"] == "i-mock123"
-    assert result["public_ip"] == "203.0.113.1"
-
-
-def test_run_test_mode_setup_script_without_command(moondock_module) -> None:
-    """Test that test mode handles setup_script without command."""
-    import os
-    from unittest.mock import patch
-
-    moondock_instance = moondock_module()
-
-    merged_config = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-        "setup_script": "sudo apt update",
-    }
-
-    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
-        result = moondock_instance._run_test_mode(merged_config, json_output=False)
-
-    assert result is not None
-    assert result["instance_id"] == "i-mock123"
-
-
-def test_run_test_mode_no_ssh_operations(moondock_module) -> None:
-    """Test that test mode skips SSH when no setup_script or command."""
-    import os
-    from unittest.mock import patch
-
-    moondock_instance = moondock_module()
-
-    merged_config = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-    }
-
-    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
-        result = moondock_instance._run_test_mode(merged_config, json_output=False)
-
-    assert result is not None
-    assert result["instance_id"] == "i-mock123"
-    assert "command_exit_code" not in result
-
-
 def test_run_executes_setup_script_before_command(moondock_module) -> None:
     """Test that run() executes setup_script before command."""
     from unittest.mock import MagicMock, patch
@@ -462,38 +400,6 @@ def test_run_executes_startup_script_from_synced_directory(moondock_module) -> N
         assert result["instance_id"] == "i-test123"
 
 
-def test_test_mode_bypasses_mutagen_check_with_sync_paths(moondock_module) -> None:
-    """Test that test mode skips mutagen installation check even with sync_paths."""
-    import os
-    from unittest.mock import MagicMock, patch
-    from moto import mock_aws
-
-    moondock_instance = moondock_module()
-    moondock_instance._config_loader = MagicMock()
-    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance._config_loader.get_machine_config.return_value = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
-        "command": "echo test",
-    }
-    moondock_instance._config_loader.validate_config.return_value = None
-
-    with mock_aws():
-        with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
-            with patch("moondock_cli.MutagenManager") as mock_mutagen:
-                mock_mutagen_instance = MagicMock()
-                mock_mutagen.return_value = mock_mutagen_instance
-
-                result = moondock_instance.run()
-
-                mock_mutagen_instance.check_mutagen_installed.assert_not_called()
-
-                assert result is not None
-                assert result["instance_id"] == "i-mock123"
-                assert result["public_ip"] == "203.0.113.1"
-
-
 def test_build_command_in_directory(moondock_module) -> None:
     """Test build_command_in_directory creates proper command string."""
     moondock_instance = moondock_module()
@@ -642,50 +548,6 @@ cd src"""
         assert "export DEBUG=1" in startup_call
         assert "cd src" in startup_call
         assert result["instance_id"] == "i-test123"
-
-
-def test_run_test_mode_with_startup_script_failure(moondock_module) -> None:
-    """Test that test mode simulates startup_script failure."""
-    import os
-    from unittest.mock import patch
-
-    moondock_instance = moondock_module()
-
-    merged_config = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
-        "startup_script": "exit 42",
-        "command": "echo hello",
-    }
-
-    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
-        with pytest.raises(
-            RuntimeError, match="Startup script failed with exit code: 42"
-        ):
-            moondock_instance._run_test_mode(merged_config, json_output=False)
-
-
-def test_run_test_mode_with_startup_script_success(moondock_module) -> None:
-    """Test that test mode simulates startup_script success."""
-    import os
-    from unittest.mock import patch
-
-    moondock_instance = moondock_module()
-
-    merged_config = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
-        "startup_script": "source .venv/bin/activate",
-        "command": "python --version",
-    }
-
-    with patch.dict(os.environ, {"MOONDOCK_TEST_MODE": "1"}):
-        result = moondock_instance._run_test_mode(merged_config, json_output=False)
-
-    assert result is not None
-    assert result["instance_id"] == "i-mock123"
 
 
 def test_run_with_port_forwarding_creates_tunnels(moondock_module) -> None:

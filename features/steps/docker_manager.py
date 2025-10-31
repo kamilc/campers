@@ -15,9 +15,7 @@ SSH_CONTAINER_BOOT_BASE_TIMEOUT = int(
     os.environ.get("MOONDOCK_SSH_CONTAINER_BOOT_TIMEOUT", "20")
 )
 
-SSH_CONTAINER_IMAGE = os.environ.get(
-    "MOONDOCK_SSH_IMAGE", "moondock/python-ssh:latest"
-)
+SSH_CONTAINER_IMAGE = os.environ.get("MOONDOCK_SSH_IMAGE", "moondock/python-ssh:latest")
 
 
 def get_ssh_container_boot_timeout() -> int:

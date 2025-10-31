@@ -72,18 +72,6 @@ VALID_INSTANCE_TYPES = [
 ]
 
 
-def is_localstack_environment() -> bool:
-    """Detect if running against LocalStack mock AWS service.
-
-    Returns
-    -------
-    bool
-        True if AWS_ENDPOINT_URL is set, False otherwise
-    """
-    endpoint = os.environ.get("AWS_ENDPOINT_URL", "")
-    return bool(endpoint)
-
-
 class EC2Manager:
     """Manage EC2 instance lifecycle for moondock."""
 
@@ -112,32 +100,18 @@ class EC2Manager:
         ValueError
             If no suitable AMI found in region
         """
-        if is_localstack_environment():
-            filters = [
-                {
-                    "Name": "name",
-                    "Values": [
-                        "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
-                    ],
-                },
-                {"Name": "state", "Values": ["available"]},
-            ]
-            response = self.ec2_client.describe_images(Filters=filters)
-        else:
-            filters = [
-                {
-                    "Name": "name",
-                    "Values": [
-                        "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
-                    ],
-                },
-                {"Name": "virtualization-type", "Values": ["hvm"]},
-                {"Name": "architecture", "Values": ["x86_64"]},
-                {"Name": "state", "Values": ["available"]},
-            ]
-            response = self.ec2_client.describe_images(
-                Owners=["099720109477"], Filters=filters
-            )
+        filters = [
+            {
+                "Name": "name",
+                "Values": ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"],
+            },
+            {"Name": "virtualization-type", "Values": ["hvm"]},
+            {"Name": "architecture", "Values": ["x86_64"]},
+            {"Name": "state", "Values": ["available"]},
+        ]
+        response = self.ec2_client.describe_images(
+            Owners=["099720109477"], Filters=filters
+        )
 
         if not response["Images"]:
             raise ValueError(f"No Ubuntu 22.04 AMI found in region {self.region}")
@@ -435,7 +409,8 @@ class EC2Manager:
                     for reservation in page["Reservations"]:
                         for instance in reservation["Instances"]:
                             tags = {
-                                tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])
+                                tag["Key"]: tag["Value"]
+                                for tag in instance.get("Tags", [])
                             }
 
                             instances.append(
@@ -446,7 +421,9 @@ class EC2Manager:
                                     "region": region,
                                     "instance_type": instance["InstanceType"],
                                     "launch_time": instance["LaunchTime"],
-                                    "machine_config": tags.get("MachineConfig", "ad-hoc"),
+                                    "machine_config": tags.get(
+                                        "MachineConfig", "ad-hoc"
+                                    ),
                                 }
                             )
 

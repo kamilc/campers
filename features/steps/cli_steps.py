@@ -218,9 +218,6 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
         machine_name, command = parse_cli_args(args)
         logger.debug(f"Parsed args: machine_name={machine_name}, command={command}")
 
-        os.environ["MOONDOCK_TEST_MODE"] = "0"
-        logger.debug("Disabled MOONDOCK_TEST_MODE for @localstack scenario")
-
         from features.steps.mutagen_mocking import mutagen_mocked
 
         try:

@@ -75,6 +75,12 @@ def simulate_launch_timeout(context: Context) -> None:
     ec2_manager = EC2Manager(region="us-east-1")
     patch_ec2_manager_for_canonical_owner(ec2_manager)
 
+    original_create_key_pair = ec2_manager.create_key_pair
+
+    def capture_unique_id_wrapper(unique_id: str):
+        context.unique_id = unique_id
+        return original_create_key_pair(unique_id)
+
     waiter_mock = MagicMock()
     waiter_mock.wait.side_effect = WaiterError(
         name="InstanceRunning",
@@ -83,11 +89,14 @@ def simulate_launch_timeout(context: Context) -> None:
     )
 
     with patch.object(ec2_manager.ec2_client, "get_waiter", return_value=waiter_mock):
-        try:
-            ec2_manager.launch_instance(context.ec2_config)
-            context.exception = None
-        except RuntimeError as e:
-            context.exception = e
+        with patch.object(
+            ec2_manager, "create_key_pair", side_effect=capture_unique_id_wrapper
+        ):
+            try:
+                ec2_manager.launch_instance(context.ec2_config)
+                context.exception = None
+            except RuntimeError as e:
+                context.exception = e
 
     context.ec2_client = ec2_manager.ec2_client
 
@@ -1120,10 +1129,10 @@ def step_verify_rollback_cleanup(context: Context) -> None:
     moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
     keys_dir = Path(moondock_dir) / "keys"
 
-    if keys_dir.exists():
-        pem_files = list(keys_dir.glob("*.pem"))
-        assert len(pem_files) == 0, (
-            f"Rollback failed: Found orphaned key files: {[str(f) for f in pem_files]}"
+    if keys_dir.exists() and hasattr(context, "unique_id"):
+        expected_key_file = keys_dir / f"{context.unique_id}.pem"
+        assert not expected_key_file.exists(), (
+            f"Rollback failed: Key file still exists: {expected_key_file}"
         )
 
 

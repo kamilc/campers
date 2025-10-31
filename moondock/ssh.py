@@ -18,10 +18,7 @@ MAX_COMMAND_LENGTH = 10000
 def get_ssh_connection_info(
     instance_id: str, public_ip: str, key_file: str
 ) -> tuple[str, int, str]:
-    """Determine SSH connection host, port, and key file.
-
-    For LocalStack scenarios, redirects to Docker container.
-    For real AWS, uses actual instance public IP.
+    """Determine SSH connection host, port, and key file for real EC2 instances.
 
     Parameters
     ----------
@@ -30,112 +27,22 @@ def get_ssh_connection_info(
     public_ip : str
         Instance public IP address
     key_file : str
-        Original key file path from instance details
+        SSH private key file path
 
     Returns
     -------
     tuple[str, int, str]
         (host, port, key_file) tuple for SSH connection
+
+    Raises
+    ------
+    RuntimeError
+        If instance has no public IP address
     """
-    if os.environ.get("AWS_ENDPOINT_URL"):
-        port_env_var = f"SSH_PORT_{instance_id}"
-        key_file_env_var = f"SSH_KEY_FILE_{instance_id}"
-        ready_env_var = f"SSH_READY_{instance_id}"
-
-        base_timeout = 120
-        container_boot = int(
-            os.environ.get("MOONDOCK_SSH_CONTAINER_BOOT_TIMEOUT", "20")
-        )
-        ssh_delay = int(os.environ.get("MOONDOCK_SSH_DELAY_SECONDS", "0"))
-        buffer_for_init = 5
-        first_run_pull = 180
-
-        total_timeout = (
-            base_timeout + container_boot + ssh_delay + buffer_for_init + first_run_pull
-        )
-
-        start = time.time()
-        last_logged = 0
-
-        logger.info(
-            f"SSH wait timeout: {total_timeout}s "
-            f"(base={base_timeout}s, boot={container_boot}s, delay={ssh_delay}s, buffer={buffer_for_init}s, pull={first_run_pull}s)"
-        )
-        logger.debug(
-            f"Looking for env vars: {port_env_var}, {key_file_env_var}, {ready_env_var}"
-        )
-        logger.debug(
-            f"Current MOONDOCK_TARGET_INSTANCE_IDS: '{os.environ.get('MOONDOCK_TARGET_INSTANCE_IDS', '')}'"
-        )
-
-        while time.time() - start < total_timeout:
-            elapsed = time.time() - start
-
-            if int(elapsed) % 5 == 0 and int(elapsed) > last_logged:
-                logger.info(
-                    f"Waiting for SSH env vars... ({int(elapsed)}/{total_timeout}s)"
-                )
-                logger.debug(
-                    f"SSH env var check: {port_env_var}={port_env_var in os.environ}, "
-                    f"{key_file_env_var}={key_file_env_var in os.environ}, "
-                    f"{ready_env_var}={os.environ.get(ready_env_var)}"
-                )
-                last_logged = int(elapsed)
-
-            if port_env_var in os.environ and key_file_env_var in os.environ:
-                port = int(os.environ[port_env_var])
-                actual_key_file = os.environ[key_file_env_var]
-                elapsed = time.time() - start
-                logger.info(
-                    f"LocalStack mode: SSH container ready after {elapsed:.1f}s - connecting to localhost:{port} with key {actual_key_file}"
-                )
-                logger.debug(f"SSH key file path: {actual_key_file}")
-                logger.debug(f"SSH key file exists: {os.path.exists(actual_key_file)}")
-
-                http_servers_ready_var = f"HTTP_SERVERS_READY_{instance_id}"
-                http_wait_timeout = 30
-                http_wait_start = time.time()
-                logger.debug(
-                    f"Waiting for HTTP servers to be ready (checking {http_servers_ready_var})..."
-                )
-
-                while time.time() - http_wait_start < http_wait_timeout:
-                    if http_servers_ready_var in os.environ:
-                        http_elapsed = time.time() - http_wait_start
-                        total_elapsed = time.time() - start
-                        logger.info(
-                            f"HTTP servers ready after {http_elapsed:.1f}s (total: {total_elapsed:.1f}s)"
-                        )
-                        return "localhost", port, actual_key_file
-                    time.sleep(0.1)
-
-                logger.warning(
-                    f"HTTP servers not ready after {http_wait_timeout}s, proceeding anyway"
-                )
-                return "localhost", port, actual_key_file
-
-            time.sleep(0.5)
-
-        monitor_error = os.environ.get(f"MONITOR_ERROR_{instance_id}")
-        if monitor_error:
-            raise ConnectionError(
-                f"Monitor thread failed to provision SSH container for {instance_id}: {monitor_error}"
-            )
-
-        logger.error(
-            f"SSH container not ready for {instance_id} after {total_timeout}s, using fallback (this will likely fail)"
-        )
-        logger.error(
-            f"Environment check failed - {port_env_var} present: {port_env_var in os.environ}, "
-            f"{key_file_env_var} present: {key_file_env_var in os.environ}, "
-            f"{ready_env_var} = '{os.environ.get(ready_env_var)}'"
-        )
-        all_ssh_vars = {k: v for k, v in os.environ.items() if k.startswith("SSH_")}
-        logger.error(f"All SSH_* environment variables: {all_ssh_vars}")
-
-        raise ConnectionError(
-            f"SSH container environment variables not set after {total_timeout}s for {instance_id}. "
-            f"Monitor thread may be stalled or Docker provisioning taking longer than expected."
+    if not public_ip:
+        raise RuntimeError(
+            f"Instance {instance_id} has no public IP address. "
+            "SSH connection requires public networking configuration."
         )
 
     return public_ip, 22, key_file

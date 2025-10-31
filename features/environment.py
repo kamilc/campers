@@ -258,7 +258,6 @@ def before_all(context: Context) -> None:
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-    os.environ["MOONDOCK_TEST_MODE"] = "1"
 
     moondock_script = project_root / "moondock" / "__main__.py"
     spec = importlib.util.spec_from_file_location("moondock_module", moondock_script)
@@ -430,9 +429,6 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
             os.environ["MOONDOCK_SSH_TIMEOUT"] = "2"
             os.environ["MOONDOCK_SSH_MAX_RETRIES"] = "3"
             logger.info("Using reduced SSH retry config for @error scenario")
-
-    if is_localstack_scenario or is_pilot_scenario:
-        os.environ["MOONDOCK_TEST_MODE"] = "0"
 
     log_handler = LogCapture()
     log_handler.setLevel(logging.DEBUG)
@@ -738,17 +734,6 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         )
 
     try:
-        if "MOONDOCK_TEST_MODE" in os.environ:
-            if os.environ.get("MOONDOCK_TEST_MODE") != "1":
-                os.environ["MOONDOCK_TEST_MODE"] = "1"
-    except KeyError as e:
-        logger.debug(f"Expected error restoring MOONDOCK_TEST_MODE: {e}")
-    except Exception as e:
-        logger.error(
-            f"Unexpected error restoring MOONDOCK_TEST_MODE: {e}", exc_info=True
-        )
-
-    try:
         if "MOONDOCK_SYNC_TIMEOUT" in os.environ:
             del os.environ["MOONDOCK_SYNC_TIMEOUT"]
     except KeyError as e:
@@ -777,23 +762,6 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                 logger.debug(f"Error stopping port forwarding tunnels: {e}")
     except Exception as e:
         logger.debug(f"Error during port forwarding cleanup: {e}")
-
-    try:
-        if hasattr(context, "monitor_stop_event") and context.monitor_stop_event:
-            context.monitor_stop_event.set()
-            logger.debug("Signaled LocalStack monitor thread to stop")
-        if hasattr(context, "monitor_thread") and context.monitor_thread:
-            context.monitor_thread.join(timeout=5)
-            logger.debug("LocalStack monitor thread stopped")
-    except Exception as e:
-        logger.debug(f"Error stopping monitor thread: {e}")
-
-    try:
-        if hasattr(context, "container_manager") and context.container_manager:
-            context.container_manager.cleanup_all()
-            logger.debug("Cleaned up all Docker SSH containers")
-    except Exception as e:
-        logger.debug(f"Error cleaning up Docker containers: {e}")
 
     ssh_port_vars = [k for k in os.environ.keys() if k.startswith("SSH_PORT_")]
     for var in ssh_port_vars:
@@ -916,7 +884,6 @@ def after_all(context: Context) -> None:
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
         "AWS_DEFAULT_REGION",
-        "MOONDOCK_TEST_MODE",
     ]:
         if key in os.environ:
             del os.environ[key]
