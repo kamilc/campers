@@ -55,7 +55,6 @@ def patch_ec2_manager_for_canonical_owner(ec2_manager: EC2Manager) -> None:
         response = original_describe_images(**modified_kwargs)
 
         for image in response.get("Images", []):
-            image["OwnerId"] = "099720109477"
             image["VirtualizationType"] = "hvm"
             image["Architecture"] = "x86_64"
 
@@ -72,6 +71,24 @@ def simulate_launch_timeout(context: Context) -> None:
     context : Context
         Behave test context containing ec2_config
     """
+    setup_moto_environment(context)
+
+    ec2_client = boto3.client("ec2", region_name="us-east-1")
+    ec2_client.register_image(
+        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+        Description="Ubuntu 22.04 LTS",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+    if not vpcs["Vpcs"]:
+        try:
+            ec2_client.create_default_vpc()
+        except ClientError:
+            pass
+
     ec2_manager = EC2Manager(region="us-east-1")
     patch_ec2_manager_for_canonical_owner(ec2_manager)
 
@@ -305,6 +322,14 @@ def step_security_group_exists(context: Context, sg_name: str) -> None:
     vpcs = context.ec2_client.describe_vpcs(
         Filters=[{"Name": "isDefault", "Values": ["true"]}]
     )
+    if not vpcs["Vpcs"]:
+        try:
+            context.ec2_client.create_default_vpc()
+        except ClientError:
+            pass
+        vpcs = context.ec2_client.describe_vpcs(
+            Filters=[{"Name": "isDefault", "Values": ["true"]}]
+        )
     vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
     response = context.ec2_client.create_security_group(
@@ -374,6 +399,13 @@ def step_launch_instance(context: Context) -> None:
         VirtualizationType="hvm",
     )
 
+    vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+    if not vpcs["Vpcs"]:
+        try:
+            ec2_client.create_default_vpc()
+        except ClientError:
+            pass
+
     ec2_manager = EC2Manager(region="us-east-1")
     patch_ec2_manager_for_canonical_owner(ec2_manager)
 
@@ -381,7 +413,7 @@ def step_launch_instance(context: Context) -> None:
         context.instance_details = ec2_manager.launch_instance(context.ec2_config)
 
     context.ec2_manager = ec2_manager
-    context.ec2_client = ec2_client
+    context.ec2_client = ec2_manager.ec2_client
 
 
 @when('I launch instance with machine "{machine_name}"')
@@ -457,7 +489,7 @@ def step_lookup_ubuntu_ami(context: Context) -> None:
     ec2_manager = EC2Manager(region=context.region)
     patch_ec2_manager_for_canonical_owner(ec2_manager)
     context.found_ami_id = ec2_manager.find_ubuntu_ami()
-    context.ec2_client = ec2_client
+    context.ec2_client = ec2_manager.ec2_client
 
 
 @when("I attempt to lookup AMI")
@@ -551,7 +583,7 @@ def step_instance_launch_fails(context: Context) -> None:
         except Exception as e:
             context.exception = e
 
-    context.ec2_client = ec2_client
+    context.ec2_client = ec2_manager.ec2_client
 
 
 @when("I launch instance with same unique_id")

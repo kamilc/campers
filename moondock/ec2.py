@@ -120,9 +120,7 @@ class EC2Manager:
             {"Name": "architecture", "Values": ["x86_64"]},
             {"Name": "state", "Values": ["available"]},
         ]
-        response = self.ec2_client.describe_images(
-            Owners=["099720109477"], Filters=filters
-        )
+        response = self.ec2_client.describe_images(Filters=filters)
 
         if not response["Images"]:
             raise ValueError(f"No Ubuntu 22.04 AMI found in region {self.region}")
