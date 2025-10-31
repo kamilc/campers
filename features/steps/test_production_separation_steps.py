@@ -107,7 +107,8 @@ def step_verify_function_lines(context: Context, line_count: str) -> None:
 
     if actual_lines >= max_lines:
         raise AssertionError(
-            f"Function has {actual_lines} lines of code, expected less than {max_lines}"
+            f"Function has {actual_lines} lines of code, expected less than {max_lines}. "
+            f"Lines: {context.ssh_func_lines}"
         )
 
 
@@ -222,6 +223,48 @@ def step_verify_specific_pattern(context: Context, pattern: str) -> None:
                 raise AssertionError(
                     f"Found pattern '{pattern}' in ec2.py at line {i}: {line.strip()}"
                 )
+
+
+@when("I verify CLI does not contain test-specific arguments")
+def step_verify_cli_args(context: Context) -> None:
+    """Verify CLI code does not contain test-specific arguments."""
+    main_file = Path(__file__).parent.parent.parent / "moondock" / "__main__.py"
+    content = main_file.read_text()
+
+    context.cli_content = content
+
+
+@then("no new test-mode command-line arguments are added")
+def step_verify_no_test_mode_args(context: Context) -> None:
+    """Verify no test mode arguments in CLI."""
+    if "MOONDOCK_TEST_MODE" in context.cli_content:
+        raise AssertionError(
+            "Test mode argument found in CLI code (should be removed)"
+        )
+
+    if "_run_test_mode" in context.cli_content:
+        raise AssertionError(
+            "Test mode execution method found in CLI code (should be removed)"
+        )
+
+
+@then("SSH connection functions are properly defined")
+def step_verify_ssh_functions(context: Context) -> None:
+    """Verify SSH connection functions are properly defined."""
+    ssh_file = Path(__file__).parent.parent.parent / "moondock" / "ssh.py"
+    content = ssh_file.read_text()
+
+    required_patterns = [
+        "def get_ssh_connection_info",
+        "public_ip",
+        "return",
+    ]
+
+    for pattern in required_patterns:
+        if pattern not in content:
+            raise AssertionError(
+                f"SSH file missing expected pattern: {pattern}"
+            )
 
 
 def find_pattern_in_code(search_path: Path, pattern: str) -> list[tuple[str, int, str]]:

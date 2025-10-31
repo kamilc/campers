@@ -23,7 +23,7 @@ Feature: Test-Production Code Separation
   @smoke
   Scenario: SSH connection logic is simplified
     When I examine the get_ssh_connection_details function in moondock/ssh.py
-    Then the function is less than 15 lines of code
+    Then the function is less than 10 lines of code
     And the function contains no LocalStack logic
     And the function contains no Docker container logic
 
@@ -40,3 +40,8 @@ Feature: Test-Production Code Separation
     When I search for LocalStack detection in moondock/ec2.py
     Then I find zero matches for "is_localstack_environment"
     And I find zero matches for "localstack" in moondock/ec2.py
+
+  Scenario: Production CLI behavior unchanged
+    When I verify CLI does not contain test-specific arguments
+    Then no new test-mode command-line arguments are added
+    And SSH connection functions are properly defined
