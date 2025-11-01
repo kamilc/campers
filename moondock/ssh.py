@@ -20,8 +20,9 @@ def get_ssh_connection_info(
 ) -> tuple[str, int, str]:
     """Determine SSH connection host, port, and key file.
 
-    Checks for environment-provided SSH configuration (used in testing/development
-    environments like LocalStack) before falling back to real EC2 public IP.
+    For LocalStack instances without public IPs, reads SSH connection details
+    from instance tags (MoondockSSHHost, MoondockSSHPort, MoondockSSHKeyFile).
+    For real AWS instances, uses the public IP address.
 
     Parameters
     ----------
@@ -40,21 +41,73 @@ def get_ssh_connection_info(
     Raises
     ------
     RuntimeError
-        If instance has no public IP address and no environment configuration
+        If instance has no public IP address and no SSH tags
     """
-    ssh_port_env = f"SSH_PORT_{instance_id}"
-    ssh_key_env = f"SSH_KEY_FILE_{instance_id}"
-
-    if ssh_port_env in os.environ and ssh_key_env in os.environ:
-        port = int(os.environ[ssh_port_env])
-        env_key_file = os.environ[ssh_key_env]
-        logger.info(
-            f"Using environment-provided SSH config for {instance_id}: "
-            f"localhost:{port}"
-        )
-        return "localhost", port, env_key_file
+    logger.info(
+        f"get_ssh_connection_info: instance_id={instance_id}, public_ip={public_ip!r}"
+    )
 
     if not public_ip:
+        import boto3
+        import time
+
+        logger.info(
+            f"Instance {instance_id} has no public IP, checking for SSH tags in LocalStack"
+        )
+
+        try:
+            ec2_client = boto3.client("ec2")
+            endpoint = ec2_client.meta.endpoint_url
+            logger.info(f"EC2 endpoint: {endpoint}")
+            is_localstack = endpoint and (
+                "localstack" in endpoint.lower() or ":4566" in endpoint
+            )
+            logger.info(f"Is LocalStack: {is_localstack}")
+
+            if is_localstack:
+                max_retries = 10
+                retry_delay = 0.5
+
+                for attempt in range(max_retries):
+                    response = ec2_client.describe_tags(
+                        Filters=[
+                            {"Name": "resource-id", "Values": [instance_id]},
+                            {
+                                "Name": "key",
+                                "Values": [
+                                    "MoondockSSHHost",
+                                    "MoondockSSHPort",
+                                    "MoondockSSHKeyFile",
+                                ],
+                            },
+                        ]
+                    )
+
+                    tags = {tag["Key"]: tag["Value"] for tag in response.get("Tags", [])}
+
+                    if (
+                        "MoondockSSHHost" in tags
+                        and "MoondockSSHPort" in tags
+                        and "MoondockSSHKeyFile" in tags
+                    ):
+                        host = tags["MoondockSSHHost"]
+                        port = int(tags["MoondockSSHPort"])
+                        tag_key_file = tags["MoondockSSHKeyFile"]
+                        logger.info(
+                            f"Using tag-based SSH config for {instance_id}: {host}:{port}"
+                        )
+                        return host, port, tag_key_file
+
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+
+                logger.warning(
+                    f"SSH tags not found for {instance_id} after {max_retries} attempts"
+                )
+
+        except Exception as e:
+            logger.warning(f"Failed to read SSH tags from instance {instance_id}: {e}")
+
         raise RuntimeError(
             f"Instance {instance_id} has no public IP address. "
             "SSH connection requires public networking configuration."

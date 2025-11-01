@@ -331,9 +331,13 @@ class EC2Manager:
             )
             instance.reload()
 
+            public_ip = instance.public_ip_address
+            if self._is_localstack_endpoint():
+                public_ip = None
+
             return {
                 "instance_id": instance_id,
-                "public_ip": instance.public_ip_address,
+                "public_ip": public_ip,
                 "state": instance.state["Name"],
                 "key_file": str(key_file),
                 "security_group_id": sg_id,

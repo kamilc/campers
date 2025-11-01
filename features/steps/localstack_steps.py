@@ -224,6 +224,25 @@ def monitor_localstack_instances(
                                         key_file
                                     )
                                     os.environ[f"SSH_READY_{instance_id}"] = "1"
+
+                                    ec2_client.create_tags(
+                                        Resources=[instance_id],
+                                        Tags=[
+                                            {
+                                                "Key": "MoondockSSHHost",
+                                                "Value": "localhost",
+                                            },
+                                            {"Key": "MoondockSSHPort", "Value": str(port)},
+                                            {
+                                                "Key": "MoondockSSHKeyFile",
+                                                "Value": str(key_file),
+                                            },
+                                        ],
+                                    )
+                                    logger.info(
+                                        f"Tagged instance {instance_id} with SSH connection info (localhost:{port})"
+                                    )
+
                                     seen_instances.add(instance_id)
 
                                     context.instance_id = instance_id
@@ -252,9 +271,25 @@ def monitor_localstack_instances(
                                         key_file
                                     )
                                     os.environ[f"SSH_READY_{instance_id}"] = "1"
+
+                                    ec2_client.create_tags(
+                                        Resources=[instance_id],
+                                        Tags=[
+                                            {
+                                                "Key": "MoondockSSHHost",
+                                                "Value": "blocked",
+                                            },
+                                            {"Key": "MoondockSSHPort", "Value": "65535"},
+                                            {
+                                                "Key": "MoondockSSHKeyFile",
+                                                "Value": str(key_file),
+                                            },
+                                        ],
+                                    )
+
                                     seen_instances.add(instance_id)
                                     logger.info(
-                                        f"Monitor thread: Container for {instance_id} created WITHOUT port mapping (blocked), setting SSH_PORT to 65535 (unreachable)"
+                                        f"Monitor thread: Container for {instance_id} created WITHOUT port mapping (blocked)"
                                     )
                             except Exception as e:
                                 logger.error(

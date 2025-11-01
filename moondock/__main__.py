@@ -1368,12 +1368,6 @@ class Moondock:
 
                 return instance_details
 
-            if instance_details["public_ip"] is None:
-                raise ValueError(
-                    "Instance does not have a public IP address. "
-                    "SSH connection requires public networking configuration."
-                )
-
             logging.info("Waiting for SSH to be ready...")
 
             ssh_host, ssh_port, ssh_key_file = get_ssh_connection_info(
