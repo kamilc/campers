@@ -98,6 +98,19 @@ class EC2Manager:
         self.ec2_client = self.boto3_client_factory("ec2", region_name=region)
         self.ec2_resource = self.boto3_resource_factory("ec2", region_name=region)
 
+    def _is_localstack_endpoint(self) -> bool:
+        """Detect if EC2 client is configured for LocalStack.
+
+        Returns
+        -------
+        bool
+            True if endpoint URL contains 'localstack' or ':4566' (default LocalStack port)
+        """
+        endpoint = self.ec2_client.meta.endpoint_url
+        return endpoint is not None and (
+            "localstack" in endpoint.lower() or ":4566" in endpoint
+        )
+
     def find_ubuntu_ami(self) -> str:
         """Find latest Ubuntu 22.04 LTS AMI in region.
 
@@ -116,10 +129,15 @@ class EC2Manager:
                 "Name": "name",
                 "Values": ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"],
             },
-            {"Name": "virtualization-type", "Values": ["hvm"]},
-            {"Name": "architecture", "Values": ["x86_64"]},
             {"Name": "state", "Values": ["available"]},
         ]
+
+        if not self._is_localstack_endpoint():
+            filters.extend([
+                {"Name": "virtualization-type", "Values": ["hvm"]},
+                {"Name": "architecture", "Values": ["x86_64"]},
+            ])
+
         response = self.ec2_client.describe_images(Filters=filters)
 
         if not response["Images"]:

@@ -18,7 +18,10 @@ MAX_COMMAND_LENGTH = 10000
 def get_ssh_connection_info(
     instance_id: str, public_ip: str, key_file: str
 ) -> tuple[str, int, str]:
-    """Determine SSH connection host, port, and key file for real EC2 instances.
+    """Determine SSH connection host, port, and key file.
+
+    Checks for environment-provided SSH configuration (used in testing/development
+    environments like LocalStack) before falling back to real EC2 public IP.
 
     Parameters
     ----------
@@ -37,8 +40,20 @@ def get_ssh_connection_info(
     Raises
     ------
     RuntimeError
-        If instance has no public IP address
+        If instance has no public IP address and no environment configuration
     """
+    ssh_port_env = f"SSH_PORT_{instance_id}"
+    ssh_key_env = f"SSH_KEY_FILE_{instance_id}"
+
+    if ssh_port_env in os.environ and ssh_key_env in os.environ:
+        port = int(os.environ[ssh_port_env])
+        env_key_file = os.environ[ssh_key_env]
+        logger.info(
+            f"Using environment-provided SSH config for {instance_id}: "
+            f"localhost:{port}"
+        )
+        return "localhost", port, env_key_file
+
     if not public_ip:
         raise RuntimeError(
             f"Instance {instance_id} has no public IP address. "
