@@ -91,6 +91,26 @@ class EC2ContainerManager:
 
         return False
 
+    def remove_existing_container(self, container_name: str) -> None:
+        """Remove existing container with the same name before creating a new one.
+
+        Parameters
+        ----------
+        container_name : str
+            Name of the container to remove if it exists
+        """
+        try:
+            existing_container = self.client.containers.get(container_name)
+            logger.info(
+                f"Found existing container {container_name}, removing it before creating new one"
+            )
+            existing_container.remove(force=True)
+            logger.debug(f"Successfully removed existing container {container_name}")
+        except docker.errors.NotFound:
+            logger.debug(f"No existing container found with name {container_name}")
+        except Exception as e:
+            logger.warning(f"Error removing existing container {container_name}: {e}")
+
     def generate_ssh_key(self, instance_id: str) -> Path:
         """Generate SSH key pair for container.
 
@@ -109,6 +129,7 @@ class EC2ContainerManager:
         RuntimeError
             If SSH key generation fails
         """
+        self.keys_dir.mkdir(parents=True, exist_ok=True)
         key_file = self.keys_dir / f"{instance_id}-test.pem"
         pub_key_file = Path(str(key_file) + ".pub")
 
@@ -198,6 +219,9 @@ class EC2ContainerManager:
         ssh_delay = int(os.environ.get("MOONDOCK_SSH_DELAY_SECONDS", "0"))
         block_ssh = os.environ.get("MOONDOCK_SSH_BLOCK_CONNECTIONS") == "1"
 
+        container_name = f"ssh-{instance_id}"
+        self.remove_existing_container(container_name)
+
         if block_ssh:
             ports = {}
             logger.info(
@@ -233,7 +257,7 @@ exec /init
                 )
                 container = self.client.containers.run(
                     SSH_CONTAINER_IMAGE,
-                    name=f"ssh-{instance_id}",
+                    name=container_name,
                     detach=True,
                     remove=True,
                     environment=environment,
@@ -254,7 +278,7 @@ exec /init
                 logger.debug(f"About to call containers.run() for {instance_id}")
                 container = self.client.containers.run(
                     SSH_CONTAINER_IMAGE,
-                    name=f"ssh-{instance_id}",
+                    name=container_name,
                     detach=True,
                     remove=True,
                     environment=environment,

@@ -1409,6 +1409,8 @@ class Moondock:
                 merged_config.get("env_filter")
             )
 
+            logging.info(f"Forwarding {len(env_vars)} environment variables")
+
             if merged_config.get("sync_paths"):
                 mutagen_session_name = f"moondock-{instance_details['unique_id']}"
                 mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)

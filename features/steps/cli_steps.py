@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -99,10 +100,25 @@ def create_cli_test_ssh_manager_factory():
         Factory function that returns mock SSHManager instances
     """
 
+    def filter_env_side_effect(env_filter: list[str] | None) -> dict[str, str]:
+        if not env_filter:
+            return {}
+
+        compiled_patterns = [re.compile(pattern) for pattern in env_filter]
+        filtered_vars = {}
+
+        for var_name, var_value in os.environ.items():
+            for regex in compiled_patterns:
+                if regex.match(var_name):
+                    filtered_vars[var_name] = var_value
+                    break
+
+        return filtered_vars
+
     def mock_ssh_manager(**kwargs):
         mock_mgr = MagicMock()
         mock_mgr.connect.return_value = None
-        mock_mgr.filter_environment_variables.return_value = {}
+        mock_mgr.filter_environment_variables.side_effect = filter_env_side_effect
         mock_mgr.build_command_with_env.return_value = "mock_command"
         mock_mgr.execute_command.return_value = 0
         mock_mgr.execute_command_raw.return_value = 0
