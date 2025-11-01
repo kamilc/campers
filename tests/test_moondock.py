@@ -75,7 +75,6 @@ def test_run_executes_setup_script_before_command(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.launch_instance.return_value = mock_instance_details
@@ -83,6 +82,7 @@ def test_run_executes_setup_script_before_command(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
 
         def track_execute_command(cmd: str) -> int:
@@ -90,7 +90,7 @@ def test_run_executes_setup_script_before_command(moondock_module) -> None:
             return 0
 
         mock_ssh_instance.execute_command.side_effect = track_execute_command
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         result = moondock_instance.run()
 
@@ -126,7 +126,6 @@ def test_run_setup_script_failure_prevents_command(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.launch_instance.return_value = mock_instance_details
@@ -134,9 +133,10 @@ def test_run_setup_script_failure_prevents_command(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command.return_value = 1
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         with pytest.raises(RuntimeError, match="Setup script failed with exit code: 1"):
             moondock_instance.run()
@@ -169,15 +169,17 @@ def test_run_skips_ssh_when_no_setup_script_or_command(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.launch_instance.return_value = mock_instance_details
         mock_ec2.return_value = mock_ec2_instance
 
+        mock_ssh_factory = MagicMock()
+        moondock_instance.ssh_manager_factory = mock_ssh_factory
+
         result = moondock_instance.run()
 
-        mock_ssh.assert_not_called()
+        mock_ssh_factory.assert_not_called()
         assert result["instance_id"] == "i-test123"
 
 
@@ -206,7 +208,6 @@ def test_run_only_setup_script_no_command(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.launch_instance.return_value = mock_instance_details
@@ -214,9 +215,10 @@ def test_run_only_setup_script_no_command(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         result = moondock_instance.run()
 
@@ -271,7 +273,6 @@ def test_run_with_sync_paths_creates_mutagen_session(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.MutagenManager") as mock_mutagen,
     ):
         mock_ec2_instance = MagicMock()
@@ -280,9 +281,10 @@ def test_run_with_sync_paths_creates_mutagen_session(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -323,7 +325,6 @@ def test_run_executes_command_from_synced_directory(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.MutagenManager") as mock_mutagen,
     ):
         mock_ec2_instance = MagicMock()
@@ -332,9 +333,10 @@ def test_run_executes_command_from_synced_directory(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -375,7 +377,6 @@ def test_run_executes_startup_script_from_synced_directory(moondock_module) -> N
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.MutagenManager") as mock_mutagen,
     ):
         mock_ec2_instance = MagicMock()
@@ -384,9 +385,10 @@ def test_run_executes_startup_script_from_synced_directory(moondock_module) -> N
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -468,7 +470,6 @@ def test_run_startup_script_failure_prevents_command(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.MutagenManager") as mock_mutagen,
     ):
         mock_ec2_instance = MagicMock()
@@ -477,9 +478,10 @@ def test_run_startup_script_failure_prevents_command(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 42
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -525,7 +527,6 @@ cd src"""
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.MutagenManager") as mock_mutagen,
     ):
         mock_ec2_instance = MagicMock()
@@ -534,9 +535,10 @@ cd src"""
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -576,7 +578,6 @@ def test_run_with_port_forwarding_creates_tunnels(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.PortForwardManager") as mock_portforward,
     ):
         mock_ec2_instance = MagicMock()
@@ -585,9 +586,10 @@ def test_run_with_port_forwarding_creates_tunnels(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_portforward_instance = MagicMock()
         mock_portforward.return_value = mock_portforward_instance
@@ -633,7 +635,6 @@ def test_run_port_forwarding_cleanup_order(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.PortForwardManager") as mock_portforward,
     ):
         mock_ec2_instance = MagicMock()
@@ -642,10 +643,11 @@ def test_run_port_forwarding_cleanup_order(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
         mock_ssh_instance.close.side_effect = lambda: cleanup_order.append("ssh_close")
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_portforward_instance = MagicMock()
         mock_portforward_instance.stop_all_tunnels.side_effect = (
@@ -685,7 +687,6 @@ def test_run_port_forwarding_error_triggers_cleanup(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.PortForwardManager") as mock_portforward,
     ):
         mock_ec2_instance = MagicMock()
@@ -694,8 +695,9 @@ def test_run_port_forwarding_error_triggers_cleanup(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_portforward_instance = MagicMock()
         mock_portforward_instance.create_tunnels.side_effect = RuntimeError(
@@ -737,7 +739,6 @@ def test_run_port_forwarding_with_sync_paths(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.MutagenManager") as mock_mutagen,
         patch("moondock_cli.PortForwardManager") as mock_portforward,
     ):
@@ -747,9 +748,10 @@ def test_run_port_forwarding_with_sync_paths(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -794,7 +796,6 @@ def test_run_port_forwarding_with_startup_script(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.MutagenManager") as mock_mutagen,
         patch("moondock_cli.PortForwardManager") as mock_portforward,
     ):
@@ -804,6 +805,7 @@ def test_run_port_forwarding_with_startup_script(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
 
         def track_execution(cmd: str) -> int:
@@ -814,7 +816,7 @@ def test_run_port_forwarding_with_startup_script(moondock_module) -> None:
             return 0
 
         mock_ssh_instance.execute_command_raw.side_effect = track_execution
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -891,7 +893,6 @@ def test_run_filters_environment_variables_after_ssh_connection(
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.launch_instance.return_value = mock_instance_details
@@ -905,7 +906,7 @@ def test_run_filters_environment_variables_after_ssh_connection(
             "export AWS_REGION='us-west-2' && aws s3 ls"
         )
         mock_ssh_instance.execute_command.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         moondock_instance.run()
 
@@ -942,7 +943,6 @@ def test_run_forwards_env_to_setup_script(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.launch_instance.return_value = mock_instance_details
@@ -956,7 +956,7 @@ def test_run_forwards_env_to_setup_script(moondock_module) -> None:
             "export AWS_REGION='us-west-2' && aws s3 cp s3://bucket/setup.sh ."
         )
         mock_ssh_instance.execute_command.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         result = moondock_instance.run()
 
@@ -993,7 +993,6 @@ def test_run_forwards_env_to_startup_script(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.MutagenManager") as mock_mutagen,
     ):
         mock_ec2_instance = MagicMock()
@@ -1006,7 +1005,7 @@ def test_run_forwards_env_to_startup_script(moondock_module) -> None:
         }
         mock_ssh_instance.build_command_with_env.return_value = "export HF_TOKEN='hf_test123' && cd ~/myproject && bash -c 'huggingface-cli login'"
         mock_ssh_instance.execute_command_raw.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -1044,7 +1043,6 @@ def test_run_forwards_env_to_main_command(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.launch_instance.return_value = mock_instance_details
@@ -1058,7 +1056,7 @@ def test_run_forwards_env_to_main_command(moondock_module) -> None:
             "export WANDB_API_KEY='test-key' && python train.py"
         )
         mock_ssh_instance.execute_command.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         result = moondock_instance.run()
 
@@ -1335,7 +1333,6 @@ def test_run_tracks_resources_incrementally(moondock_module) -> None:
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
         patch("moondock_cli.MutagenManager") as mock_mutagen,
         patch("moondock_cli.PortForwardManager") as mock_portforward,
     ):
@@ -1345,9 +1342,10 @@ def test_run_tracks_resources_incrementally(moondock_module) -> None:
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -1396,7 +1394,6 @@ def test_finally_block_calls_cleanup_if_not_already_done(moondock_module) -> Non
 
     with (
         patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.SSHManager") as mock_ssh,
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.launch_instance.return_value = mock_instance_details
@@ -1404,9 +1401,10 @@ def test_finally_block_calls_cleanup_if_not_already_done(moondock_module) -> Non
 
         mock_ssh_instance = MagicMock()
         mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command.return_value = 0
-        mock_ssh.return_value = mock_ssh_instance
+        moondock_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         moondock_instance.run()
 
@@ -1648,11 +1646,11 @@ def test_list_command_invalid_region(moondock_module, aws_credentials) -> None:
         ]
     }
 
-    with patch("boto3.client", return_value=mock_ec2_client):
-        with pytest.raises(
-            ValueError, match="Invalid AWS region: 'invalid-region-xyz'"
-        ):
-            moondock_instance.list(region="invalid-region-xyz")
+    moondock_instance.boto3_client_factory = MagicMock(return_value=mock_ec2_client)
+    with pytest.raises(
+        ValueError, match="Invalid AWS region: 'invalid-region-xyz'"
+    ):
+        moondock_instance.list(region="invalid-region-xyz")
 
 
 def test_truncate_name_short_name(moondock_module) -> None:
@@ -1689,7 +1687,7 @@ def test_truncate_name_exceeds_max_width(moondock_module) -> None:
 
 def test_validate_region_valid(moondock_module) -> None:
     """Test validate_region accepts valid AWS region."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     moondock_instance = moondock_module()
 
@@ -1701,13 +1699,13 @@ def test_validate_region_valid(moondock_module) -> None:
         ]
     }
 
-    with patch("boto3.client", return_value=mock_ec2_client):
-        moondock_instance._validate_region("us-east-1")
+    moondock_instance.boto3_client_factory = MagicMock(return_value=mock_ec2_client)
+    moondock_instance._validate_region("us-east-1")
 
 
 def test_validate_region_invalid(moondock_module) -> None:
     """Test validate_region raises ValueError for invalid region."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     moondock_instance = moondock_module()
 
@@ -1719,9 +1717,9 @@ def test_validate_region_invalid(moondock_module) -> None:
         ]
     }
 
-    with patch("boto3.client", return_value=mock_ec2_client):
-        with pytest.raises(ValueError, match="Invalid AWS region"):
-            moondock_instance._validate_region("invalid-region")
+    moondock_instance.boto3_client_factory = MagicMock(return_value=mock_ec2_client)
+    with pytest.raises(ValueError, match="Invalid AWS region"):
+        moondock_instance._validate_region("invalid-region")
 
 
 def test_validate_region_graceful_fallback(moondock_module, caplog) -> None:
@@ -1821,6 +1819,7 @@ def test_multiple_run_calls_work_correctly(moondock_module) -> None:
 
             mock_ssh_instance = MagicMock()
             mock_ssh_instance.filter_environment_variables.return_value = {}
+            mock_ssh_instance.connect.return_value = None
             mock_ssh_instance.build_command_with_env.side_effect = lambda c, e: c
             mock_ssh_instance.execute_command.return_value = 0
             mock_ssh_class.return_value = mock_ssh_instance
