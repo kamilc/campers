@@ -52,9 +52,8 @@ def execute_command_direct(
     old_handler = signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(timeout_seconds)
 
-    ec2_client = getattr(context, "patched_ec2_client", None)
-
     def mock_boto3_client_factory(service_name: str, region_name: str | None = None):
+        ec2_client = getattr(context, "patched_ec2_client", None)
         if service_name == "ec2" and ec2_client is not None:
             return ec2_client
         elif service_name == "sts":
@@ -72,6 +71,8 @@ def execute_command_direct(
             ssh_manager_factory=FakeSSHManager,
             boto3_client_factory=mock_boto3_client_factory,
         )
+
+        ec2_client = getattr(context, "patched_ec2_client", None)
 
         if command == "doctor":
             moondock.doctor(region=region, ec2_client=ec2_client)

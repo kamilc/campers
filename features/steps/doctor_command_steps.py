@@ -86,9 +86,33 @@ def step_region_has_default_vpc(context: Context, region: str) -> None:
     region : str
         AWS region
     """
-    ec2_client = getattr(context, "patched_ec2_client", None)
+    import boto3
 
-    if ec2_client is None:
+    ec2_client = getattr(context, "patched_ec2_client", None)
+    is_dry_run = ec2_client is None
+
+    if is_dry_run:
+        ec2_client = boto3.client("ec2", region_name=region)
+
+        vpcs = ec2_client.describe_vpcs().get("Vpcs", [])
+        for vpc in vpcs:
+            vpc_id = vpc["VpcId"]
+            try:
+                subnets = ec2_client.describe_subnets(
+                    Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+                )
+                for subnet in subnets.get("Subnets", []):
+                    ec2_client.delete_subnet(SubnetId=subnet["SubnetId"])
+
+                ec2_client.delete_vpc(VpcId=vpc_id)
+            except Exception:
+                pass
+
+        vpc_response = ec2_client.create_default_vpc()
+        vpc_id = vpc_response["Vpc"]["VpcId"]
+        context.default_vpc_id = vpc_id
+        context.vpcs_before_doctor = [vpc_id]
+        context.patched_ec2_client = ec2_client
         return
 
     ec2_client._original_describe_vpcs = getattr(
@@ -101,8 +125,15 @@ def step_region_has_default_vpc(context: Context, region: str) -> None:
     has_default = any(vpc.get("IsDefault") for vpc in vpcs.get("Vpcs", []))
 
     if not has_default:
-        vpc_response = ec2_client.create_default_vpc()
-        vpc_id = vpc_response["Vpc"]["VpcId"]
+        if vpcs.get("Vpcs"):
+            vpc_id = vpcs["Vpcs"][0]["VpcId"]
+        else:
+            try:
+                vpc_response = ec2_client.create_default_vpc()
+                vpc_id = vpc_response["Vpc"]["VpcId"]
+            except Exception:
+                vpc_response = ec2_client.create_vpc(CidrBlock="10.0.0.0/16")
+                vpc_id = vpc_response["Vpc"]["VpcId"]
     else:
         vpc_id = next(
             vpc["VpcId"] for vpc in vpcs.get("Vpcs", []) if vpc.get("IsDefault")
@@ -110,6 +141,30 @@ def step_region_has_default_vpc(context: Context, region: str) -> None:
 
     context.default_vpc_id = vpc_id
     context.vpcs_before_doctor = [vpc_id]
+
+    def mock_describe_vpcs(**kwargs):
+        filters = kwargs.get("Filters", [])
+        has_isdefault_filter = any(
+            f.get("Name") == "isDefault" for f in filters
+        )
+
+        if has_isdefault_filter:
+            kwargs_without_filter = {k: v for k, v in kwargs.items() if k != "Filters"}
+            result = ec2_client._original_describe_vpcs(**kwargs_without_filter)
+        else:
+            result = ec2_client._original_describe_vpcs(**kwargs)
+
+        for vpc in result.get("Vpcs", []):
+            if vpc["VpcId"] == vpc_id:
+                vpc["IsDefault"] = True
+
+        if has_isdefault_filter:
+            vpcs = result.get("Vpcs", [])
+            result["Vpcs"] = [vpc for vpc in vpcs if vpc.get("IsDefault")]
+
+        return result
+
+    ec2_client.describe_vpcs = mock_describe_vpcs
 
 
 @given("required IAM permissions exist")
