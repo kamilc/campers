@@ -1633,7 +1633,7 @@ def test_list_command_permission_error(moondock_module, aws_credentials) -> None
 
 def test_list_command_invalid_region(moondock_module, aws_credentials) -> None:
     """Test list command with invalid region parameter."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     moondock_instance = moondock_module()
 

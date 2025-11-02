@@ -36,6 +36,19 @@ def create_test_instance(
     """
     ec2_client = boto3.client("ec2", region_name=region)
 
+    vpcs = ec2_client.describe_vpcs()
+    vpc_id = None
+    if vpcs.get("Vpcs"):
+        vpc_id = vpcs["Vpcs"][0]["VpcId"]
+
+    subnet_id = None
+    if vpc_id:
+        subnets = ec2_client.describe_subnets(
+            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+        )
+        if subnets.get("Subnets"):
+            subnet_id = subnets["Subnets"][0]["SubnetId"]
+
     tag_specifications = [
         {
             "ResourceType": "instance",
@@ -43,13 +56,18 @@ def create_test_instance(
         }
     ]
 
-    response = ec2_client.run_instances(
-        ImageId=TEST_AMI_ID,
-        MinCount=1,
-        MaxCount=1,
-        InstanceType=instance_type,
-        TagSpecifications=tag_specifications,
-    )
+    run_instances_kwargs = {
+        "ImageId": TEST_AMI_ID,
+        "MinCount": 1,
+        "MaxCount": 1,
+        "InstanceType": instance_type,
+        "TagSpecifications": tag_specifications,
+    }
+
+    if subnet_id:
+        run_instances_kwargs["SubnetId"] = subnet_id
+
+    response = ec2_client.run_instances(**run_instances_kwargs)
 
     instance_id = response["Instances"][0]["InstanceId"]
     launch_time = response["Instances"][0]["LaunchTime"]
@@ -129,7 +147,7 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
         for patch_obj in context.region_patches:
             patch_obj.start()
 
-    moondock = context.mock_moondock
+    moondock = context.moondock_module.Moondock()
 
     captured_output = StringIO()
     original_stdout = sys.stdout
@@ -153,6 +171,13 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
         context.exit_code = 1
     finally:
         sys.stdout = original_stdout
+
+        if context.region_patches is not None and context.region_patches:
+            for patch_obj in context.region_patches:
+                try:
+                    patch_obj.stop()
+                except RuntimeError:
+                    pass
 
 
 @then('output displays "{text}"')

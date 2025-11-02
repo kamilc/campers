@@ -571,6 +571,16 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                     except Exception as e:
                         logger.debug(f"Could not delete VPC {vpc_id}: {e}")
 
+            vpc_response = ec2_client.create_vpc(CidrBlock="10.0.0.0/16")
+            vpc_id = vpc_response["Vpc"]["VpcId"]
+            logger.debug(f"Created test VPC: {vpc_id}")
+
+            subnet_response = ec2_client.create_subnet(
+                VpcId=vpc_id, CidrBlock="10.0.1.0/24"
+            )
+            subnet_id = subnet_response["Subnet"]["SubnetId"]
+            logger.debug(f"Created test subnet: {subnet_id}")
+
             ec2_client.register_image(
                 Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
                 Description="Ubuntu 22.04 LTS",

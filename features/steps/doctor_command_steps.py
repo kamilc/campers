@@ -72,7 +72,8 @@ def step_region_has_no_default_vpc(context: Context, region: str) -> None:
 
     ec2_client.describe_vpcs = mock_describe_vpcs
     ec2_client.create_default_vpc = mock_create_default_vpc
-    context.vpcs_before_doctor = []
+    actual_vpcs = ec2_client._original_describe_vpcs()
+    context.vpcs_before_doctor = [vpc["VpcId"] for vpc in actual_vpcs.get("Vpcs", [])]
 
 
 @given('region "{region}" has default VPC')
@@ -140,7 +141,6 @@ def step_region_has_default_vpc(context: Context, region: str) -> None:
         )
 
     context.default_vpc_id = vpc_id
-    context.vpcs_before_doctor = [vpc_id]
 
     def mock_describe_vpcs(**kwargs):
         filters = kwargs.get("Filters", [])
@@ -165,6 +165,8 @@ def step_region_has_default_vpc(context: Context, region: str) -> None:
         return result
 
     ec2_client.describe_vpcs = mock_describe_vpcs
+    actual_vpcs = ec2_client._original_describe_vpcs()
+    context.vpcs_before_doctor = [vpc["VpcId"] for vpc in actual_vpcs.get("Vpcs", [])]
 
 
 @given("required IAM permissions exist")
