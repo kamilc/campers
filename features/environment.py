@@ -780,8 +780,18 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     is_localstack_scenario = "localstack" in scenario.tags
 
     if is_localstack_scenario:
-        logger.info("Stopping LocalStack container after @localstack scenario")
-        stop_localstack_container()
+        try:
+            if hasattr(context, "monitor_stop_event") and context.monitor_stop_event:
+                logger.info("Stopping LocalStack instance monitor thread after scenario")
+                context.monitor_stop_event.set()
+
+                if hasattr(context, "monitor_thread") and context.monitor_thread:
+                    context.monitor_thread.join(timeout=5)
+                    logger.debug("Monitor thread stopped successfully")
+        except Exception as e:
+            logger.warning(f"Error stopping monitor thread: {e}")
+
+        logger.info("LocalStack container kept running for next @localstack scenario in feature")
 
     try:
         if "localstack" in scenario.tags and hasattr(context, "app_process"):
@@ -1027,6 +1037,27 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
             delattr(context, "saved_env")
     except Exception as e:
         logger.error(f"Error restoring environment: {e}", exc_info=True)
+
+
+def after_feature(context: Context, feature) -> None:
+    """Cleanup executed after all scenarios in a feature complete.
+
+    Parameters
+    ----------
+    context : Context
+        The Behave context object.
+    feature
+        The feature that just completed.
+    """
+    has_localstack_scenarios = any(
+        "localstack" in scenario.tags for scenario in feature.scenarios
+    )
+
+    if has_localstack_scenarios:
+        logger.info(
+            f"Feature '{feature.name}' had @localstack scenarios, stopping LocalStack container"
+        )
+        stop_localstack_container()
 
 
 def after_all(context: Context) -> None:

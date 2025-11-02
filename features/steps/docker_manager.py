@@ -4,6 +4,7 @@ import logging
 import os
 import socket
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -47,6 +48,8 @@ class EC2ContainerManager:
         Maps instance IDs to (container, port) tuples
     next_port : int
         Next available port for SSH container (starts at 2222)
+    ssh_key_lock : threading.Lock
+        Lock for synchronizing SSH key generation across threads
     """
 
     def __init__(self) -> None:
@@ -54,6 +57,7 @@ class EC2ContainerManager:
         self.client = docker.from_env()
         self.instance_map: dict[str, tuple] = {}
         self.next_port = 2222
+        self.ssh_key_lock = threading.Lock()
         moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
         self.keys_dir = Path(moondock_dir) / "keys"
         self.keys_dir.mkdir(parents=True, exist_ok=True)
@@ -129,71 +133,72 @@ class EC2ContainerManager:
         RuntimeError
             If SSH key generation fails
         """
-        self.keys_dir.mkdir(parents=True, exist_ok=True)
-        key_file = self.keys_dir / f"{instance_id}-test.pem"
-        pub_key_file = Path(str(key_file) + ".pub")
+        with self.ssh_key_lock:
+            self.keys_dir.mkdir(parents=True, exist_ok=True)
+            key_file = self.keys_dir / f"{instance_id}-test.pem"
+            pub_key_file = Path(str(key_file) + ".pub")
 
-        if key_file.exists() or pub_key_file.exists():
-            logger.warning(
-                f"Key files already exist for {instance_id}, cleaning up before regeneration"
+            if key_file.exists() or pub_key_file.exists():
+                logger.warning(
+                    f"Key files already exist for {instance_id}, cleaning up before regeneration"
+                )
+                if key_file.exists():
+                    key_file.unlink()
+                    logger.debug(f"Removed old private key: {key_file}")
+                if pub_key_file.exists():
+                    pub_key_file.unlink()
+                    logger.debug(f"Removed old public key: {pub_key_file}")
+
+            logger.info(f"Generating SSH key pair for {instance_id} at {key_file}")
+
+            try:
+                cmd = [
+                    "ssh-keygen",
+                    "-t",
+                    "rsa",
+                    "-b",
+                    "2048",
+                    "-f",
+                    str(key_file),
+                    "-N",
+                    "",
+                    "-C",
+                    f"test-key-{instance_id}",
+                ]
+                logger.debug(f"Running SSH key generation command: {' '.join(cmd)}")
+                result = subprocess.run(
+                    cmd,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                logger.debug(f"SSH key generation stdout: {result.stdout}")
+                logger.debug(f"SSH key generation stderr: {result.stderr}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"SSH key generation failed with exit code {e.returncode}")
+                logger.error(f"stdout: {e.stdout}")
+                logger.error(f"stderr: {e.stderr}")
+                logger.error(f"command: {e.cmd}")
+                raise RuntimeError(
+                    f"Failed to generate SSH key for {instance_id}: stdout={e.stdout}, stderr={e.stderr}"
+                ) from e
+            except FileNotFoundError as e:
+                logger.error("ssh-keygen command not found in PATH")
+                raise RuntimeError(
+                    "ssh-keygen command not found. Please ensure OpenSSH is installed."
+                ) from e
+
+            try:
+                key_file.chmod(0o600)
+                logger.debug(f"Set permissions 0600 on key file {key_file}")
+            except OSError as e:
+                logger.error(f"Failed to set permissions on key file {key_file}: {e}")
+                raise RuntimeError(f"Failed to set key file permissions: {e}") from e
+
+            logger.info(
+                f"SSH key generation completed: {key_file} (exists: {key_file.exists()})"
             )
-            if key_file.exists():
-                key_file.unlink()
-                logger.debug(f"Removed old private key: {key_file}")
-            if pub_key_file.exists():
-                pub_key_file.unlink()
-                logger.debug(f"Removed old public key: {pub_key_file}")
-
-        logger.info(f"Generating SSH key pair for {instance_id} at {key_file}")
-
-        try:
-            cmd = [
-                "ssh-keygen",
-                "-t",
-                "rsa",
-                "-b",
-                "2048",
-                "-f",
-                str(key_file),
-                "-N",
-                "",
-                "-C",
-                f"test-key-{instance_id}",
-            ]
-            logger.debug(f"Running SSH key generation command: {' '.join(cmd)}")
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            logger.debug(f"SSH key generation stdout: {result.stdout}")
-            logger.debug(f"SSH key generation stderr: {result.stderr}")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"SSH key generation failed with exit code {e.returncode}")
-            logger.error(f"stdout: {e.stdout}")
-            logger.error(f"stderr: {e.stderr}")
-            logger.error(f"command: {e.cmd}")
-            raise RuntimeError(
-                f"Failed to generate SSH key for {instance_id}: stdout={e.stdout}, stderr={e.stderr}"
-            ) from e
-        except FileNotFoundError as e:
-            logger.error("ssh-keygen command not found in PATH")
-            raise RuntimeError(
-                "ssh-keygen command not found. Please ensure OpenSSH is installed."
-            ) from e
-
-        try:
-            key_file.chmod(0o600)
-            logger.debug(f"Set permissions 0600 on key file {key_file}")
-        except OSError as e:
-            logger.error(f"Failed to set permissions on key file {key_file}: {e}")
-            raise RuntimeError(f"Failed to set key file permissions: {e}") from e
-
-        logger.info(
-            f"SSH key generation completed: {key_file} (exists: {key_file.exists()})"
-        )
-        return key_file
+            return key_file
 
     def create_instance_container(self, instance_id: str) -> tuple[int | None, Path]:
         """Spin up SSH container for EC2 instance.

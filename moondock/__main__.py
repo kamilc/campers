@@ -1368,6 +1368,16 @@ class Moondock:
 
                 return instance_details
 
+            skip_ssh = os.environ.get("MOONDOCK_SKIP_SSH_CONNECTION") == "1"
+            if skip_ssh:
+                with self._resources_lock:
+                    self._resources["instance_details"] = instance_details
+
+                while not self._cleanup_in_progress:
+                    time.sleep(0.1)
+
+                return instance_details
+
             logging.info("Waiting for SSH to be ready...")
 
             ssh_host, ssh_port, ssh_key_file = get_ssh_connection_info(

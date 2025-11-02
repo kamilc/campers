@@ -231,6 +231,10 @@ def step_instance_launch_in_progress(context: Context) -> None:
         os.environ["MOONDOCK_CONFIG"] = temp_file.name
         os.environ["MOONDOCK_TEST_MODE"] = "0"
 
+        scenario_name = context.scenario.name if hasattr(context, "scenario") else ""
+        if "only cleans created resources" in scenario_name:
+            os.environ["MOONDOCK_SKIP_SSH_CONNECTION"] = "1"
+
         context.app_process = subprocess.Popen(
             ["uv", "run", "moondock", "run", "test-box"],
             cwd=os.getcwd(),
@@ -263,16 +267,22 @@ def step_instance_launch_in_progress(context: Context) -> None:
 
 @given("SSH is not yet connected")
 def step_ssh_not_connected(context: Context) -> None:
-    """Remove SSH manager from resources to simulate not-yet-connected state.
+    """Simulate SSH not yet connected state.
+
+    For @localstack scenarios, this is handled by setting MOONDOCK_SKIP_SSH_CONNECTION
+    in the "instance launch is in progress" step.
+    For @dry_run scenarios, removes ssh_manager from mock resources.
 
     Parameters
     ----------
     context : Context
         Behave test context
     """
-
-    if "ssh_manager" in context.mock_moondock._resources:
-        del context.mock_moondock._resources["ssh_manager"]
+    if hasattr(context, "scenario") and "localstack" in context.scenario.tags:
+        pass
+    else:
+        if "ssh_manager" in context.mock_moondock._resources:
+            del context.mock_moondock._resources["ssh_manager"]
 
 
 @given("mutagen termination will fail")
