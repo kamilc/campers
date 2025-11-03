@@ -1647,9 +1647,7 @@ def test_list_command_invalid_region(moondock_module, aws_credentials) -> None:
     }
 
     moondock_instance.boto3_client_factory = MagicMock(return_value=mock_ec2_client)
-    with pytest.raises(
-        ValueError, match="Invalid AWS region: 'invalid-region-xyz'"
-    ):
+    with pytest.raises(ValueError, match="Invalid AWS region: 'invalid-region-xyz'"):
         moondock_instance.list(region="invalid-region-xyz")
 
 

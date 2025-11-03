@@ -214,7 +214,9 @@ def step_running_instance_with_unique_id(context: Context, unique_id: str) -> No
             ec2_client.create_default_vpc()
         except ClientError:
             pass
-        vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+        vpcs = ec2_client.describe_vpcs(
+            Filters=[{"Name": "isDefault", "Values": ["true"]}]
+        )
     vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
     sg_response = ec2_client.create_security_group(

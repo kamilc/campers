@@ -20,40 +20,18 @@ SCENARIO_TIMEOUT_SECONDS = 180
 
 
 class LogCapture(logging.Handler):
-    """Custom logging handler for capturing log records in tests.
-
-    Attributes
-    ----------
-    records : list[logging.LogRecord]
-        List of captured log records
-    """
+    """Custom logging handler for capturing log records in tests."""
 
     def __init__(self) -> None:
-        """Initialize LogCapture handler with empty records list."""
         super().__init__()
         self.records: list[logging.LogRecord] = []
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Capture log record.
-
-        Parameters
-        ----------
-        record : logging.LogRecord
-            Log record to capture
-        """
         self.records.append(record)
 
 
 def cleanup_env_var(var_name: str, logger: logging.Logger) -> None:
-    """Remove environment variable with error handling.
-
-    Parameters
-    ----------
-    var_name : str
-        Name of the environment variable to remove
-    logger : logging.Logger
-        Logger instance for error reporting
-    """
+    """Remove environment variable with error handling."""
     try:
         if var_name in os.environ:
             del os.environ[var_name]
@@ -69,24 +47,7 @@ def run_mutagen_command_with_retry(
     max_attempts: int = 3,
     text_output: bool = False,
 ) -> str | bool:
-    """Run mutagen command with retry logic.
-
-    Parameters
-    ----------
-    args : list[str]
-        Command arguments after 'mutagen'
-    timeout : int
-        Timeout in seconds for command execution
-    max_attempts : int
-        Maximum number of retry attempts
-    text_output : bool
-        If True, returns command output as string; if False, returns bool
-
-    Returns
-    -------
-    str | bool
-        Command output if text_output is True, success status otherwise
-    """
+    """Run mutagen command with retry logic."""
     import subprocess
     import time
 
@@ -122,20 +83,7 @@ def run_mutagen_command_with_retry(
 
 
 def terminate_mutagen_with_retry(session_name: str, max_attempts: int = 3) -> bool:
-    """Terminate Mutagen session with retry logic.
-
-    Parameters
-    ----------
-    session_name : str
-        Name of the Mutagen session to terminate
-    max_attempts : int
-        Maximum number of retry attempts
-
-    Returns
-    -------
-    bool
-        True if termination succeeded, False if all retries exhausted
-    """
+    """Terminate Mutagen session with retry logic."""
     result = run_mutagen_command_with_retry(
         ["sync", "terminate", session_name],
         timeout=10,
@@ -150,18 +98,7 @@ def terminate_mutagen_with_retry(session_name: str, max_attempts: int = 3) -> bo
 
 
 def list_mutagen_sessions_with_retry(max_attempts: int = 3) -> str:
-    """List Mutagen sessions with retry logic.
-
-    Parameters
-    ----------
-    max_attempts : int
-        Maximum number of retry attempts
-
-    Returns
-    -------
-    str
-        Output from mutagen sync list command, empty string if failed
-    """
+    """List Mutagen sessions with retry logic."""
     result = run_mutagen_command_with_retry(
         ["sync", "list"],
         timeout=10,
@@ -176,13 +113,7 @@ def list_mutagen_sessions_with_retry(max_attempts: int = 3) -> str:
 
 
 def check_mutagen_daemon_health() -> bool:
-    """Check if Mutagen daemon is responsive before scenario execution.
-
-    Returns
-    -------
-    bool
-        True if daemon is responsive, False otherwise
-    """
+    """Check if Mutagen daemon is responsive."""
     import subprocess
     import time
 
@@ -226,14 +157,60 @@ def check_mutagen_daemon_health() -> bool:
     return False
 
 
-def before_all(context: Context) -> None:
-    """Setup executed before all tests.
+SSH_BLOCK_START = "# MOONDOCK_TEST_BLOCK_START"
+SSH_BLOCK_END = "# MOONDOCK_TEST_BLOCK_END"
 
-    Parameters
-    ----------
-    context : Context
-        The Behave context object
-    """
+
+def get_localhost_config_block() -> str:
+    """Return SSH localhost config block with test markers."""
+    return (
+        f"\n{SSH_BLOCK_START}\n"
+        "Host localhost\n"
+        "    StrictHostKeyChecking no\n"
+        "    UserKnownHostsFile=/dev/null\n"
+        f"{SSH_BLOCK_END}\n"
+    )
+
+
+def remove_test_ssh_block(config_path: Path) -> None:
+    """Remove test markers and their content from SSH config."""
+    import re
+
+    if not config_path.exists():
+        return
+
+    config = config_path.read_text()
+    config = re.sub(
+        rf"\n?{SSH_BLOCK_START}.*?{SSH_BLOCK_END}\n?",
+        "",
+        config,
+        flags=re.DOTALL,
+    )
+    config_path.write_text(config)
+
+
+def append_test_ssh_block(config_path: Path) -> None:
+    """Idempotently add test SSH config block, removing any existing block first."""
+    import re
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if config_path.exists():
+        config = config_path.read_text()
+    else:
+        config = ""
+
+    config = re.sub(
+        rf"\n?{SSH_BLOCK_START}.*?{SSH_BLOCK_END}\n?",
+        "",
+        config,
+        flags=re.DOTALL,
+    )
+    config_path.write_text(config + get_localhost_config_block())
+
+
+def before_all(context: Context) -> None:
+    """Setup executed before all tests."""
     project_root = Path(__file__).parent.parent
     tmp_dir = project_root / "tmp" / "test-artifacts"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -289,15 +266,15 @@ def before_all(context: Context) -> None:
 
     logging.info("Moondock installed successfully in editable mode")
 
+    is_healthy = check_mutagen_daemon_health()
+    if not is_healthy:
+        logger.error("Mutagen daemon is not healthy - @localstack tests will fail")
+    else:
+        logger.info("Mutagen daemon is healthy")
+
 
 def start_localstack_container() -> bool:
-    """Start LocalStack Docker container if not already running.
-
-    Returns
-    -------
-    bool
-        True if LocalStack was started or is already running, False if startup failed
-    """
+    """Start LocalStack Docker container if not already running."""
     import subprocess
 
     container_name = "moondock-localstack"
@@ -344,7 +321,9 @@ def start_localstack_container() -> bool:
         )
 
         if result.returncode == 0:
-            logger.info(f"Successfully started LocalStack container: {result.stdout.strip()}")
+            logger.info(
+                f"Successfully started LocalStack container: {result.stdout.strip()}"
+            )
             return True
 
         error_msg = f"Failed to start LocalStack: {result.stderr}"
@@ -358,13 +337,7 @@ def start_localstack_container() -> bool:
 
 
 def stop_localstack_container() -> bool:
-    """Stop LocalStack Docker container.
-
-    Returns
-    -------
-    bool
-        True if container was stopped, False if operation failed
-    """
+    """Stop LocalStack Docker container."""
     container_name = "moondock-localstack"
 
     try:
@@ -387,15 +360,7 @@ def stop_localstack_container() -> bool:
 
 
 def before_scenario(context: Context, scenario: Scenario) -> None:
-    """Setup executed before each scenario.
-
-    Parameters
-    ----------
-    context : Context
-        The Behave context object.
-    scenario : Scenario
-        The scenario about to run.
-    """
+    """Setup executed before each scenario."""
     import boto3
 
     timeout_seconds = SCENARIO_TIMEOUT_SECONDS
@@ -486,9 +451,6 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         except Exception as e:
             logger.debug(f"Error during pre-scenario Docker cleanup: {e}")
 
-        if "localstack" in scenario.tags:
-            check_mutagen_daemon_health()
-
         try:
             known_hosts_path = Path.home() / ".ssh" / "known_hosts"
             if known_hosts_path.exists():
@@ -506,22 +468,9 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
             logger.debug(f"Error cleaning known_hosts: {e}")
 
         try:
-            ssh_dir = Path.home() / ".ssh"
-            ssh_dir.mkdir(parents=True, exist_ok=True)
-            ssh_config_path = ssh_dir / "config"
-            localhost_config = (
-                "\nHost localhost\n"
-                "    StrictHostKeyChecking no\n"
-                "    UserKnownHostsFile=/dev/null\n"
-            )
-            if ssh_config_path.exists():
-                config_content = ssh_config_path.read_text()
-                if "Host localhost" not in config_content:
-                    ssh_config_path.write_text(config_content + localhost_config)
-                    logger.debug("Added localhost SSH config")
-            else:
-                ssh_config_path.write_text(localhost_config)
-                logger.debug("Created SSH config with localhost entry")
+            ssh_config_path = Path.home() / ".ssh" / "config"
+            append_test_ssh_block(ssh_config_path)
+            logger.debug("SSH config block added idempotently")
         except Exception as e:
             logger.debug(f"Error setting up SSH config: {e}")
 
@@ -565,7 +514,9 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                                 )
                             except Exception as e:
                                 igw_id = igw["InternetGatewayId"]
-                                logger.debug(f"Could not delete internet gateway {igw_id}: {e}")
+                                logger.debug(
+                                    f"Could not delete internet gateway {igw_id}: {e}"
+                                )
 
                         ec2_client.delete_vpc(VpcId=vpc_id)
                     except Exception as e:
@@ -778,21 +729,15 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
 
 def after_scenario(context: Context, scenario: Scenario) -> None:
-    """Cleanup executed after each scenario.
-
-    Parameters
-    ----------
-    context : Context
-        The Behave context object.
-    scenario : Scenario
-        The scenario that just finished.
-    """
+    """Cleanup executed after each scenario."""
     is_localstack_scenario = "localstack" in scenario.tags
 
     if is_localstack_scenario:
         try:
             if hasattr(context, "monitor_stop_event") and context.monitor_stop_event:
-                logger.info("Stopping LocalStack instance monitor thread after scenario")
+                logger.info(
+                    "Stopping LocalStack instance monitor thread after scenario"
+                )
                 context.monitor_stop_event.set()
 
                 if hasattr(context, "monitor_thread") and context.monitor_thread:
@@ -801,7 +746,9 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         except Exception as e:
             logger.warning(f"Error stopping monitor thread: {e}")
 
-        logger.info("LocalStack container kept running for next @localstack scenario in feature")
+        logger.info(
+            "LocalStack container kept running for next @localstack scenario in feature"
+        )
 
     try:
         if "localstack" in scenario.tags and hasattr(context, "app_process"):
@@ -1050,15 +997,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
 
 def after_feature(context: Context, feature) -> None:
-    """Cleanup executed after all scenarios in a feature complete.
-
-    Parameters
-    ----------
-    context : Context
-        The Behave context object.
-    feature
-        The feature that just completed.
-    """
+    """Cleanup executed after all scenarios in a feature complete."""
     has_localstack_scenarios = any(
         "localstack" in scenario.tags for scenario in feature.scenarios
     )
@@ -1069,20 +1008,29 @@ def after_feature(context: Context, feature) -> None:
         )
         stop_localstack_container()
 
+        if hasattr(context, "container_manager"):
+            logger.info("Cleaning up SSH containers and keys")
+            try:
+                context.container_manager.cleanup_all()
+                logger.debug("SSH container cleanup completed successfully")
+            except Exception as e:
+                logger.warning(f"SSH container cleanup failed: {e}", exc_info=True)
+
 
 def after_all(context: Context) -> None:
-    """Cleanup executed after all tests.
-
-    Parameters
-    ----------
-    context : Context
-        The Behave context object.
-    """
+    """Cleanup executed after all tests."""
     if hasattr(context, "mock_aws_env") and context.mock_aws_env:
         try:
             context.mock_aws_env.stop()
         except RuntimeError:
             pass
+
+    try:
+        ssh_config_path = Path.home() / ".ssh" / "config"
+        remove_test_ssh_block(ssh_config_path)
+        logger.debug("Test SSH config block removed successfully")
+    except Exception as e:
+        logger.warning(f"Failed to remove test SSH config block: {e}")
 
     if hasattr(context, "project_root"):
         moondock_dir = context.project_root / "tmp" / "test-moondock"

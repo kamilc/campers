@@ -133,10 +133,12 @@ class EC2Manager:
         ]
 
         if not self._is_localstack_endpoint():
-            filters.extend([
-                {"Name": "virtualization-type", "Values": ["hvm"]},
-                {"Name": "architecture", "Values": ["x86_64"]},
-            ])
+            filters.extend(
+                [
+                    {"Name": "virtualization-type", "Values": ["hvm"]},
+                    {"Name": "architecture", "Values": ["x86_64"]},
+                ]
+            )
 
         response = self.ec2_client.describe_images(Filters=filters)
 

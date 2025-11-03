@@ -83,7 +83,9 @@ def get_ssh_connection_info(
                         ]
                     )
 
-                    tags = {tag["Key"]: tag["Value"] for tag in response.get("Tags", [])}
+                    tags = {
+                        tag["Key"]: tag["Value"] for tag in response.get("Tags", [])
+                    }
 
                     if (
                         "MoondockSSHHost" in tags

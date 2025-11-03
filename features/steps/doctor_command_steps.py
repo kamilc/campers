@@ -144,9 +144,7 @@ def step_region_has_default_vpc(context: Context, region: str) -> None:
 
     def mock_describe_vpcs(**kwargs):
         filters = kwargs.get("Filters", [])
-        has_isdefault_filter = any(
-            f.get("Name") == "isDefault" for f in filters
-        )
+        has_isdefault_filter = any(f.get("Name") == "isDefault" for f in filters)
 
         if has_isdefault_filter:
             kwargs_without_filter = {k: v for k, v in kwargs.items() if k != "Filters"}

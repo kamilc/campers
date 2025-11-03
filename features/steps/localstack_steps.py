@@ -232,7 +232,10 @@ def monitor_localstack_instances(
                                                 "Key": "MoondockSSHHost",
                                                 "Value": "localhost",
                                             },
-                                            {"Key": "MoondockSSHPort", "Value": str(port)},
+                                            {
+                                                "Key": "MoondockSSHPort",
+                                                "Value": str(port),
+                                            },
                                             {
                                                 "Key": "MoondockSSHKeyFile",
                                                 "Value": str(key_file),
@@ -279,7 +282,10 @@ def monitor_localstack_instances(
                                                 "Key": "MoondockSSHHost",
                                                 "Value": "blocked",
                                             },
-                                            {"Key": "MoondockSSHPort", "Value": "65535"},
+                                            {
+                                                "Key": "MoondockSSHPort",
+                                                "Value": "65535",
+                                            },
                                             {
                                                 "Key": "MoondockSSHKeyFile",
                                                 "Value": str(key_file),
