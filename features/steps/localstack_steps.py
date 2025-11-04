@@ -219,11 +219,24 @@ def monitor_localstack_instances(
                                 )
 
                                 if port is not None:
-                                    os.environ[f"SSH_PORT_{instance_id}"] = str(port)
-                                    os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
-                                        key_file
-                                    )
-                                    os.environ[f"SSH_READY_{instance_id}"] = "1"
+                                    if hasattr(context, "harness"):
+                                        context.harness.services.configuration_env.set(
+                                            f"SSH_PORT_{instance_id}", str(port)
+                                        )
+                                        context.harness.services.configuration_env.set(
+                                            f"SSH_KEY_FILE_{instance_id}", str(key_file)
+                                        )
+                                        context.harness.services.configuration_env.set(
+                                            f"SSH_READY_{instance_id}", "1"
+                                        )
+                                    else:
+                                        os.environ[f"SSH_PORT_{instance_id}"] = str(
+                                            port
+                                        )
+                                        os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
+                                            key_file
+                                        )
+                                        os.environ[f"SSH_READY_{instance_id}"] = "1"
 
                                     ec2_client.create_tags(
                                         Resources=[instance_id],
@@ -262,18 +275,34 @@ def monitor_localstack_instances(
                                         f"Monitor thread: HTTP servers started successfully for {instance_id}"
                                     )
 
-                                    os.environ[f"HTTP_SERVERS_READY_{instance_id}"] = (
-                                        "1"
-                                    )
+                                    if hasattr(context, "harness"):
+                                        context.harness.services.configuration_env.set(
+                                            f"HTTP_SERVERS_READY_{instance_id}", "1"
+                                        )
+                                    else:
+                                        os.environ[
+                                            f"HTTP_SERVERS_READY_{instance_id}"
+                                        ] = "1"
                                     logger.info(
                                         f"SSH container ready for {instance_id} (port={port}), HTTP servers started"
                                     )
                                 else:
-                                    os.environ[f"SSH_PORT_{instance_id}"] = "65535"
-                                    os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
-                                        key_file
-                                    )
-                                    os.environ[f"SSH_READY_{instance_id}"] = "1"
+                                    if hasattr(context, "harness"):
+                                        context.harness.services.configuration_env.set(
+                                            f"SSH_PORT_{instance_id}", "65535"
+                                        )
+                                        context.harness.services.configuration_env.set(
+                                            f"SSH_KEY_FILE_{instance_id}", str(key_file)
+                                        )
+                                        context.harness.services.configuration_env.set(
+                                            f"SSH_READY_{instance_id}", "1"
+                                        )
+                                    else:
+                                        os.environ[f"SSH_PORT_{instance_id}"] = "65535"
+                                        os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
+                                            key_file
+                                        )
+                                        os.environ[f"SSH_READY_{instance_id}"] = "1"
 
                                     ec2_client.create_tags(
                                         Resources=[instance_id],
@@ -305,7 +334,12 @@ def monitor_localstack_instances(
                                 logger.error(f"Instance state was: {state}")
                                 logger.error(f"Instance details: {instance}")
 
-                                os.environ[f"MONITOR_ERROR_{instance_id}"] = str(e)
+                                if hasattr(context, "harness"):
+                                    context.harness.services.configuration_env.set(
+                                        f"MONITOR_ERROR_{instance_id}", str(e)
+                                    )
+                                else:
+                                    os.environ[f"MONITOR_ERROR_{instance_id}"] = str(e)
                                 if hasattr(context, "monitor_error"):
                                     context.monitor_error = str(e)
         except Exception as e:
@@ -410,7 +444,12 @@ def step_localstack_is_healthy(context: Context) -> None:
     except Exception as e:
         logger.warning(f"Failed to clean LocalStack: {e}")
 
-    os.environ["MOONDOCK_TARGET_INSTANCE_IDS"] = ""
+    if hasattr(context, "harness"):
+        context.harness.services.configuration_env.set(
+            "MOONDOCK_TARGET_INSTANCE_IDS", ""
+        )
+    else:
+        os.environ["MOONDOCK_TARGET_INSTANCE_IDS"] = ""
     context.target_instance_ids = set()
     context.monitor_error = None
 
