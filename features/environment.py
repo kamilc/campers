@@ -363,14 +363,12 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     """Setup executed before each scenario."""
     import boto3
 
-    USE_NEW_HARNESS = os.getenv("MOONDOCK_NEW_HARNESS", "false").lower() == "true"
-
-    if USE_NEW_HARNESS and "dry_run" in scenario.tags:
+    if "dry_run" in scenario.tags:
         from tests.harness.dry_run import DryRunHarness
 
         context.harness = DryRunHarness(context, scenario)
         context.harness.setup()
-        logger.info(f"Initialized new harness for dry-run scenario: {scenario.name}")
+        logger.info(f"Initialized DryRunHarness for scenario: {scenario.name}")
 
     timeout_seconds = SCENARIO_TIMEOUT_SECONDS
     for tag in scenario.tags:
