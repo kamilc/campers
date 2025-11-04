@@ -100,7 +100,8 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
         test_dir.mkdir(parents=True, exist_ok=True)
 
         original_moondock_dir = os.environ.get("MOONDOCK_DIR")
-        os.environ["MOONDOCK_DIR"] = str(test_dir)
+
+        context.harness.services.configuration_env.set("MOONDOCK_DIR", str(test_dir))
 
         logger.info(f"Set isolated MOONDOCK_DIR: {test_dir}")
 
@@ -114,9 +115,11 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 logger.debug("Stopped timeout patcher")
 
             if original_moondock_dir:
-                os.environ["MOONDOCK_DIR"] = original_moondock_dir
+                context.harness.services.configuration_env.set(
+                    "MOONDOCK_DIR", original_moondock_dir
+                )
             else:
-                os.environ.pop("MOONDOCK_DIR", None)
+                context.harness.services.configuration_env.delete("MOONDOCK_DIR")
             logger.debug("Restored original MOONDOCK_DIR")
     else:
 

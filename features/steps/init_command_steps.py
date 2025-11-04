@@ -52,8 +52,7 @@ def step_file_does_not_exist(context, path: str) -> None:
 
 @given("MOONDOCK_CONFIG is not set")
 def step_moondock_config_not_set(context) -> None:
-    if "MOONDOCK_CONFIG" in os.environ:
-        del os.environ["MOONDOCK_CONFIG"]
+    context.harness.services.configuration_env.delete("MOONDOCK_CONFIG")
 
     context.init_config_path = str(context.tmp_dir / "moondock.yaml")
 

@@ -165,13 +165,17 @@ def derive_timeout_from_scenario(context: Context) -> int:
     return 90
 
 
-def setup_test_environment(config_path: str) -> dict[str, str | None]:
+def setup_test_environment(
+    config_path: str, behave_context: Context | None = None
+) -> dict[str, str | None]:
     """Set up environment variables for TUI testing.
 
     Parameters
     ----------
     config_path : str
         Path to the config file
+    behave_context : Context | None
+        Optional Behave context for harness access
 
     Returns
     -------
@@ -183,28 +187,36 @@ def setup_test_environment(config_path: str) -> dict[str, str | None]:
         "MOONDOCK_CONFIG": os.environ.get("MOONDOCK_CONFIG"),
         "AWS_ENDPOINT_URL": os.environ.get("AWS_ENDPOINT_URL"),
     }
-    os.environ["MOONDOCK_TEST_MODE"] = "0"
-    os.environ["MOONDOCK_CONFIG"] = config_path
 
+    behave_context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
+    behave_context.harness.services.configuration_env.set(
+        "MOONDOCK_CONFIG", config_path
+    )
     if original_values["AWS_ENDPOINT_URL"]:
-        os.environ["AWS_ENDPOINT_URL"] = original_values["AWS_ENDPOINT_URL"]
+        behave_context.harness.services.configuration_env.set(
+            "AWS_ENDPOINT_URL", original_values["AWS_ENDPOINT_URL"]
+        )
 
     return original_values
 
 
-def restore_environment(original_values: dict[str, str | None]) -> None:
+def restore_environment(
+    original_values: dict[str, str | None], behave_context: Context | None = None
+) -> None:
     """Restore original environment variables.
 
     Parameters
     ----------
     original_values : dict[str, str | None]
         Dictionary containing original environment variable values
+    behave_context : Context | None
+        Optional Behave context for harness access
     """
     for key, value in original_values.items():
         if value is not None:
-            os.environ[key] = value
+            behave_context.harness.services.configuration_env.set(key, value)
         else:
-            os.environ.pop(key, None)
+            behave_context.harness.services.configuration_env.delete(key)
 
 
 async def poll_tui_with_unified_timeout(
@@ -404,7 +416,7 @@ def run_tui_test_with_machine(
         logger.info(f"[TIMEOUT-ENFORCER] Starting test with {max_wait}s timeout")
         timer.start()
 
-        original_values = setup_test_environment(config_path)
+        original_values = setup_test_environment(config_path, behave_context)
 
         try:
             from contextlib import asynccontextmanager
@@ -495,7 +507,7 @@ def run_tui_test_with_machine(
         finally:
             test_completed.set()
             _tui_update_queue = None
-            restore_environment(original_values)
+            restore_environment(original_values, behave_context)
 
     try:
         test_result = run_async_test(run_tui_test)

@@ -178,13 +178,15 @@ def step_command_executing(context: Context) -> None:
 @given("port {port:d} tunnel creation fails")
 def step_port_tunnel_fails(context: Context, port: int) -> None:
     """Mark that tunnel creation will fail for specific port."""
-    os.environ["MOONDOCK_TUNNEL_FAIL_PORT"] = str(port)
+    context.harness.services.configuration_env.set(
+        "MOONDOCK_TUNNEL_FAIL_PORT", str(port)
+    )
 
 
 @given("local port {port:d} is already in use")
 def step_local_port_in_use(context: Context, port: int) -> None:
     """Mark that local port is already in use."""
-    os.environ["MOONDOCK_PORT_IN_USE"] = str(port)
+    context.harness.services.configuration_env.set("MOONDOCK_PORT_IN_USE", str(port))
 
 
 @then("SSH tunnel is created for port {port:d}")
@@ -362,7 +364,7 @@ def step_tunnel_fails_with_error(context: Context) -> None:
 @when("user interrupts with KeyboardInterrupt")
 def step_user_interrupts(context: Context) -> None:
     """Simulate KeyboardInterrupt."""
-    os.environ["MOONDOCK_SIMULATE_INTERRUPT"] = "1"
+    context.harness.services.configuration_env.set("MOONDOCK_SIMULATE_INTERRUPT", "1")
 
 
 @when("SSH tunnel is created for port {port:d}")

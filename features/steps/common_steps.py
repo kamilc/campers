@@ -201,7 +201,9 @@ def step_run_setup_with_input(context: Context, user_input: str) -> None:
     vpc_env_value = "true" if vpc_exists else "false"
 
     if hasattr(context, "harness"):
-        context.harness.services.configuration_env.set("MOONDOCK_TEST_VPC_EXISTS", vpc_env_value)
+        context.harness.services.configuration_env.set(
+            "MOONDOCK_TEST_VPC_EXISTS", vpc_env_value
+        )
     else:
         env["MOONDOCK_TEST_VPC_EXISTS"] = vpc_env_value
 
@@ -258,13 +260,17 @@ def step_run_simple_command(context: Context, command: str) -> None:
             vpc_env_value = "true" if vpc_exists else "false"
 
             if hasattr(context, "harness"):
-                context.harness.services.configuration_env.set("MOONDOCK_TEST_VPC_EXISTS", vpc_env_value)
+                context.harness.services.configuration_env.set(
+                    "MOONDOCK_TEST_VPC_EXISTS", vpc_env_value
+                )
             else:
                 env["MOONDOCK_TEST_VPC_EXISTS"] = vpc_env_value
         except Exception:
             vpc_env_value = "false"
             if hasattr(context, "harness"):
-                context.harness.services.configuration_env.set("MOONDOCK_TEST_VPC_EXISTS", vpc_env_value)
+                context.harness.services.configuration_env.set(
+                    "MOONDOCK_TEST_VPC_EXISTS", vpc_env_value
+                )
             else:
                 env["MOONDOCK_TEST_VPC_EXISTS"] = vpc_env_value
 

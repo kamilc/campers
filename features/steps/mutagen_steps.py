@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +38,9 @@ def ensure_defaults_section(context: Context) -> dict[str, Any]:
 @given("mutagen is not installed locally")
 def step_mutagen_not_installed(context: Context) -> None:
     """Mark that mutagen is not installed locally."""
-    os.environ["MOONDOCK_MUTAGEN_NOT_INSTALLED"] = "1"
+    context.harness.services.configuration_env.set(
+        "MOONDOCK_MUTAGEN_NOT_INSTALLED", "1"
+    )
     context.mutagen_not_installed = True
 
 
@@ -164,7 +165,7 @@ def step_mutagen_sync_completes(context: Context) -> None:
 @given("sync does not complete within timeout")
 def step_sync_timeout(context: Context) -> None:
     """Mark that sync will timeout."""
-    os.environ["MOONDOCK_SYNC_TIMEOUT"] = "1"
+    context.harness.services.configuration_env.set("MOONDOCK_SYNC_TIMEOUT", "1")
     context.mutagen_sync_timeout = True
 
 

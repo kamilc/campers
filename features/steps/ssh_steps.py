@@ -60,7 +60,10 @@ def step_ec2_no_ssh_access(context: Context) -> None:
 @given('MOONDOCK_TEST_MODE is "{value}"')
 def step_moondock_test_mode(context: Context, value: str) -> None:
     """Set MOONDOCK_TEST_MODE environment variable."""
-    os.environ["MOONDOCK_TEST_MODE"] = value
+    if hasattr(context, "harness"):
+        context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", value)
+    else:
+        os.environ["MOONDOCK_TEST_MODE"] = value
     context.test_mode_enabled = value == "1"
 
 
@@ -77,7 +80,10 @@ def step_machine_no_public_ip(context: Context, machine_name: str) -> None:
         context.config_data["machines"][machine_name] = {}
 
     context.no_public_ip = True
-    os.environ["MOONDOCK_NO_PUBLIC_IP"] = "1"
+    if hasattr(context, "harness"):
+        context.harness.services.configuration_env.set("MOONDOCK_NO_PUBLIC_IP", "1")
+    else:
+        os.environ["MOONDOCK_NO_PUBLIC_IP"] = "1"
 
 
 @when("SSH connection is attempted")
@@ -445,7 +451,12 @@ def step_ssh_container_delayed_startup(context: Context, seconds: int) -> None:
     seconds : int
         Number of seconds to delay SSH startup
     """
-    os.environ["MOONDOCK_SSH_DELAY_SECONDS"] = str(seconds)
+    if hasattr(context, "harness"):
+        context.harness.services.configuration_env.set(
+            "MOONDOCK_SSH_DELAY_SECONDS", str(seconds)
+        )
+    else:
+        os.environ["MOONDOCK_SSH_DELAY_SECONDS"] = str(seconds)
     logger.info(f"SSH container will delay startup by {seconds} seconds")
 
 
@@ -458,7 +469,12 @@ def step_ssh_container_not_accessible(context: Context) -> None:
     context : Context
         Behave context object
     """
-    os.environ["MOONDOCK_SSH_BLOCK_CONNECTIONS"] = "1"
+    if hasattr(context, "harness"):
+        context.harness.services.configuration_env.set(
+            "MOONDOCK_SSH_BLOCK_CONNECTIONS", "1"
+        )
+    else:
+        os.environ["MOONDOCK_SSH_BLOCK_CONNECTIONS"] = "1"
     logger.info("SSH container will be created without port mapping (blocked)")
 
 
