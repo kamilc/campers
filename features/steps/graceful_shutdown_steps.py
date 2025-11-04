@@ -143,8 +143,14 @@ def step_instance_running_with_all_resources(context: Context) -> None:
         temp_file.close()
         context.temp_config_file = temp_file.name
 
-        os.environ["MOONDOCK_CONFIG"] = temp_file.name
-        os.environ["MOONDOCK_TEST_MODE"] = "0"
+        if hasattr(context, "harness"):
+            context.harness.services.configuration_env.set(
+                "MOONDOCK_CONFIG", temp_file.name
+            )
+            context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
+        else:
+            os.environ["MOONDOCK_CONFIG"] = temp_file.name
+            os.environ["MOONDOCK_TEST_MODE"] = "0"
 
         context.app_process = subprocess.Popen(
             ["uv", "run", "moondock", "run", "test-box"],
@@ -228,12 +234,23 @@ def step_instance_launch_in_progress(context: Context) -> None:
         temp_file.close()
         context.temp_config_file = temp_file.name
 
-        os.environ["MOONDOCK_CONFIG"] = temp_file.name
-        os.environ["MOONDOCK_TEST_MODE"] = "0"
+        if hasattr(context, "harness"):
+            context.harness.services.configuration_env.set(
+                "MOONDOCK_CONFIG", temp_file.name
+            )
+            context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
+        else:
+            os.environ["MOONDOCK_CONFIG"] = temp_file.name
+            os.environ["MOONDOCK_TEST_MODE"] = "0"
 
         scenario_name = context.scenario.name if hasattr(context, "scenario") else ""
         if "only cleans created resources" in scenario_name:
-            os.environ["MOONDOCK_SKIP_SSH_CONNECTION"] = "1"
+            if hasattr(context, "harness"):
+                context.harness.services.configuration_env.set(
+                    "MOONDOCK_SKIP_SSH_CONNECTION", "1"
+                )
+            else:
+                os.environ["MOONDOCK_SKIP_SSH_CONNECTION"] = "1"
 
         context.app_process = subprocess.Popen(
             ["uv", "run", "moondock", "run", "test-box"],
