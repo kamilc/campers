@@ -1,6 +1,6 @@
 Feature: YAML Configuration Loader
 
-@smoke
+@smoke @dry_run
 Scenario: Load config with defaults only
   Given config file "moondock.yaml" with defaults section
   When I load configuration without machine name
@@ -8,7 +8,7 @@ Scenario: Load config with defaults only
   And config contains instance_type "t3.medium"
   And config contains disk_size 50
 
-@smoke
+@smoke @dry_run
 Scenario: Load config with machine override
   Given config file with defaults section
   And machine "jupyter-lab" with instance_type "m5.xlarge"
@@ -16,7 +16,7 @@ Scenario: Load config with machine override
   Then config contains instance_type "m5.xlarge"
   And config contains region from defaults
 
-@smoke
+@smoke @dry_run
 Scenario: Handle missing config file
   Given no config file exists
   When I load configuration

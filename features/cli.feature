@@ -1,6 +1,6 @@
 Feature: CLI Option Parsing and Config Merging
 
-@smoke
+@smoke @dry_run
 Scenario: Run with machine name only
   Given config file with machine "jupyter-lab" defined
   And machine "jupyter-lab" has instance_type "m5.xlarge"
@@ -8,7 +8,7 @@ Scenario: Run with machine name only
   Then final config contains instance_type "m5.xlarge"
   And final config contains defaults for unspecified fields
 
-@smoke
+@smoke @dry_run
 Scenario: Run with machine name and CLI overrides
   Given config file with machine "dev-workstation" defined
   And machine "dev-workstation" has instance_type "t3.large"
@@ -18,7 +18,7 @@ Scenario: Run with machine name and CLI overrides
   And final config contains region "us-west-2"
   And final config contains disk_size 100
 
-@smoke
+@smoke @dry_run
 Scenario: Run with defaults and CLI options
   Given config file with defaults section only
   When I run moondock command "run --instance-type t3.large --disk-size 200 --region us-east-2"
