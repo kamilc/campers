@@ -101,10 +101,20 @@ class EC2Manager:
     def _is_localstack_endpoint(self) -> bool:
         """Detect if EC2 client is configured for LocalStack.
 
+        This method enables high-fidelity BDD testing against LocalStack while
+        maintaining clean production code. Production AWS users never trigger this
+        code path because real AWS endpoints never contain "localstack" or ":4566".
+
+        The LocalStack detection is defensive: it checks the actual boto3 endpoint
+        URL configuration rather than environment variables or test mode flags.
+        This approach isolates test-specific behavior to clearly documented
+        locations while preserving standard AWS behavior for production users.
+
         Returns
         -------
         bool
-            True if endpoint URL contains 'localstack' or ':4566' (default LocalStack port)
+            True if endpoint URL contains 'localstack' or ':4566' (default
+            LocalStack port), False otherwise
         """
         endpoint = self.ec2_client.meta.endpoint_url
         return endpoint is not None and (
@@ -113,6 +123,12 @@ class EC2Manager:
 
     def find_ubuntu_ami(self) -> str:
         """Find latest Ubuntu 22.04 LTS AMI in region.
+
+        LocalStack compatibility: LocalStack's EC2 API doesn't support all filter
+        types that AWS does. When running against LocalStack (detected via
+        _is_localstack_endpoint), we omit filters for virtualization-type and
+        architecture to ensure queries succeed while maintaining standard AWS
+        behavior for production users.
 
         Returns
         -------

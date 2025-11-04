@@ -76,8 +76,8 @@ TUI_STATUS_UPDATE_PROCESSING_DELAY = 1.0
 
 This prevents a race condition where the TUI exits before rendering the final
 'terminating' status. The delay is 10x the TUI_UPDATE_INTERVAL to ensure at
-least ten update cycles complete before cleanup proceeds. Extended for LocalStack
-compatibility where container operations and event processing take longer.
+least ten update cycles complete before cleanup proceeds. Extended to accommodate
+container operations and event processing in integration testing scenarios.
 """
 
 CONFIG_TEMPLATE = """# Moondock Configuration File
