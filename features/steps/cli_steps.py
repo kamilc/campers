@@ -368,11 +368,23 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
     moondock_args : str
         Command-line arguments for moondock
     """
-    config_file = context.harness.services.artifacts.create_temp_file(
-        "moondock.yaml", content=yaml.dump(context.config_data)
-    )
-    context.harness.services.configuration_env.set("MOONDOCK_CONFIG", str(config_file))
-    context.temp_config_file = str(config_file)
+    harness_services = getattr(getattr(context, "harness", None), "services", None)
+    yaml_content = yaml.dump(context.config_data)
+
+    if harness_services is not None:
+        config_file = harness_services.artifacts.create_temp_file(
+            "moondock.yaml", content=yaml_content
+        )
+        harness_services.configuration_env.set("MOONDOCK_CONFIG", str(config_file))
+        context.temp_config_file = str(config_file)
+    else:
+        import tempfile
+
+        fd, path = tempfile.mkstemp(prefix="moondock-cli-", suffix=".yaml")
+        with os.fdopen(fd, "w") as tmp_file:
+            tmp_file.write(yaml_content)
+        context.temp_config_file = path
+        os.environ["MOONDOCK_CONFIG"] = path
 
     args = shlex.split(moondock_args)
 
