@@ -837,13 +837,26 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
     is_localstack_scenario = "localstack" in scenario.tags
 
-    if is_localstack_scenario and hasattr(context, "config_data"):
+    harness = getattr(context, "harness", None)
+    harness_managed = False
+    try:
+        from tests.harness.localstack import LocalStackHarness
+
+        harness_managed = isinstance(harness, LocalStackHarness)
+    except ImportError:
+        harness_managed = False
+
+    if (
+        is_localstack_scenario
+        and hasattr(context, "config_data")
+        and not harness_managed
+    ):
         try:
             import shutil
 
             config_data = getattr(context, "config_data", None) or {}
             if "sync_paths" in config_data.get("defaults", {}):
-                logger.debug("Cleaning up Mutagen sessions for @localstack test")
+                logger.debug("Cleaning up Mutagen sessions for test")
 
                 sessions_output = list_mutagen_sessions_with_retry(max_attempts=3)
                 if sessions_output:

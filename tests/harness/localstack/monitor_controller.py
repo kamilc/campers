@@ -432,6 +432,7 @@ class MonitorController:
         record_metadata = {
             "key_file": str(key_file) if key_file else None,
             "image_id": action.metadata.get("image_id"),
+            "host": "localhost",
         }
         self._ssh_pool.track_container(
             container_id=container_id,

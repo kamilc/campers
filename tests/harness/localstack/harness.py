@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import queue
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -29,6 +30,8 @@ from tests.harness.services.event_bus import Event, EventBus
 from tests.harness.services.mutagen_session_manager import (
     MutagenSessionManager,
     MutagenCommandResult,
+    MutagenError,
+    MutagenTimeoutError,
 )
 from tests.harness.services.resource_registry import ResourceRegistry
 from tests.harness.services.ssh_container_pool import SSHContainerPool
@@ -36,6 +39,7 @@ from tests.harness.services.timeout_manager import TimeoutManager
 from tests.harness.utils.port_allocator import PortAllocator
 
 from features.steps.docker_manager import EC2ContainerManager
+from moondock.sync import MutagenManager
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +150,8 @@ class LocalStackHarness(ScenarioHarness):
         self._event_unsubscribe: Callable[[], None] | None = None
         self._latest_instance_id: str | None = None
         self._event_cache: dict[str, dict[str, Event]] = {}
+        self._mutagen_manager = MutagenManager()
+        self._mutagen_sessions: dict[str, list[str]] = {}
         self._ensure_localstack_container_running()
         self._ensure_localstack_ready(timeout=LOCALSTACK_STARTUP_TIMEOUT)
 
@@ -182,7 +188,8 @@ class LocalStackHarness(ScenarioHarness):
             event_bus=event_bus,
             resource_registry=resource_registry,
             diagnostics_callback=diagnostics.record,
-            runner=self._run_mutagen_command,
+            runner=self._mutagen_runner,
+            terminator=self._mutagen_terminate,
         )
 
         monitor_controller = MonitorController(
@@ -243,6 +250,7 @@ class LocalStackHarness(ScenarioHarness):
             ("cli-terminate", self._teardown_terminate_cli_process),
             ("monitor-shutdown", self._teardown_shutdown_monitor),
             ("eventbus-drain", self._teardown_drain_event_bus),
+            ("resource-cleanup", self._teardown_resource_registry),
             ("mutagen-terminate", self._teardown_terminate_mutagen_sessions),
             ("ssh-cleanup", self._teardown_cleanup_ssh_resources),
             ("env-restore", self._teardown_restore_environment),
@@ -386,6 +394,10 @@ class LocalStackHarness(ScenarioHarness):
         events = sum(len(items) for items in drained.values())
         return {"channels": len(drained), "events_drained": events}
 
+    def _teardown_resource_registry(self) -> dict[str, Any]:
+        self.services.resource_registry.cleanup_all()
+        return {"resources_cleaned": True}
+
     def _teardown_terminate_mutagen_sessions(self) -> tuple[str, dict[str, Any]]:
         summary = self.services.mutagen_manager.terminate_all(timeout_sec=30)
         status = "success"
@@ -397,6 +409,7 @@ class LocalStackHarness(ScenarioHarness):
             status = "warning"
             details["error"] = "mutagen termination failures"
             details["failures_detail"] = summary.failures
+        self._mutagen_sessions.clear()
         return status, details
 
     def _teardown_cleanup_ssh_resources(self) -> dict[str, Any]:
@@ -539,6 +552,8 @@ class LocalStackHarness(ScenarioHarness):
             self._latest_instance_id = event.instance_id
             per_instance = self._event_cache.setdefault(event.instance_id, {})
             per_instance[event.type] = event
+            if event.type == "ssh-ready":
+                self._maybe_start_mutagen_sync(event.instance_id, event.data)
         if event.type == "monitor-error":
             setattr(self.context, "monitor_error", event.data.get("error"))
 
@@ -649,10 +664,46 @@ class LocalStackHarness(ScenarioHarness):
             metadata={key: value for key, value in metadata.items() if value is not None},
         )
 
-    def _run_mutagen_command(
+    def _mutagen_runner(
         self, arguments: list[str], timeout: float
     ) -> MutagenCommandResult:
-        """Execute a Mutagen CLI command with timeout enforcement."""
+        """Execute Mutagen operations via MutagenManager."""
+
+        if not arguments:
+            return MutagenCommandResult(exit_code=1, stdout="", stderr="no command")
+
+        command = arguments[0]
+
+        if command == "create" and len(arguments) > 1:
+            payload = json.loads(arguments[1])
+            session_name = payload["session_name"]
+            self._mutagen_manager.cleanup_orphaned_session(session_name)
+            self._mutagen_manager.create_sync_session(
+                session_name=session_name,
+                local_path=payload["local_path"],
+                remote_path=payload["remote_path"],
+                host=payload["host"],
+                key_file=payload["key_file"],
+                username=payload["username"],
+                ignore_patterns=payload.get("ignore_patterns", []),
+                include_vcs=payload.get("include_vcs", False),
+                ssh_wrapper_dir=payload.get("ssh_wrapper_dir"),
+                ssh_port=payload.get("ssh_port", 22),
+            )
+            return MutagenCommandResult(exit_code=0, stdout="", stderr="")
+
+        if command == "wait" and len(arguments) > 1:
+            payload = json.loads(arguments[1])
+            session_name = payload["session_name"]
+            timeout_budget = payload.get("timeout", timeout)
+            try:
+                self._mutagen_manager.wait_for_initial_sync(
+                    session_name=session_name,
+                    timeout=int(timeout_budget),
+                )
+                return MutagenCommandResult(exit_code=0, stdout="", stderr="")
+            except RuntimeError as exc:  # MutagenManager raises RuntimeError on timeout
+                return MutagenCommandResult(exit_code=1, stdout="", stderr=str(exc))
 
         cmd = ["mutagen", *arguments]
         try:
@@ -670,6 +721,173 @@ class LocalStackHarness(ScenarioHarness):
             )
         except subprocess.TimeoutExpired as exc:
             raise TimeoutError(f"Mutagen command timed out: {' '.join(cmd)}") from exc
+
+    def _mutagen_terminate(self, session_id: str) -> None:
+        """Terminate a Mutagen session via MutagenManager."""
+
+        try:
+            self._mutagen_manager.terminate_session(session_id)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Mutagen termination failed for %s: %s", session_id, exc)
+
+    def _maybe_start_mutagen_sync(
+        self, instance_id: str, metadata: dict[str, Any]
+    ) -> None:
+        """Start Mutagen synchronization if configured for the scenario."""
+
+        if self.services is None:
+            return
+
+        config_data = getattr(self.context, "config_data", None)
+        defaults = (config_data or {}).get("defaults", {})
+        sync_paths: list[dict[str, Any]] = defaults.get("sync_paths", [])
+
+        if not sync_paths:
+            return
+
+        ssh_port = metadata.get("port")
+        key_file = metadata.get("key_file")
+        host = metadata.get("host", "localhost")
+
+        if not ssh_port or not key_file:
+            logger.debug("Skipping Mutagen start due to missing SSH details")
+            return
+
+        if shutil.which("mutagen") is None:
+            message = "Mutagen executable not found"
+            self.services.event_bus.publish(
+                Event(
+                    type="mutagen-status",
+                    instance_id=instance_id,
+                    data={"status": "error", "error": message},
+                )
+            )
+            setattr(self.context, "mutagen_error", message)
+            return
+
+        test_mode = os.environ.get("MOONDOCK_TEST_MODE") == "1"
+        ignore_patterns = defaults.get("ignore", [])
+        include_vcs = defaults.get("include_vcs", False)
+        ssh_wrapper_dir = os.environ.get(
+            "MOONDOCK_DIR", str(Path.home() / ".moondock")
+        )
+
+        sessions_for_instance = self._mutagen_sessions.setdefault(instance_id, [])
+
+        for index, sync_config in enumerate(sync_paths):
+            session_id = f"moondock-{instance_id}-{index}"
+            if session_id in sessions_for_instance:
+                continue
+
+            local_path = sync_config.get("local")
+            remote_path = sync_config.get("remote")
+            if not local_path or not remote_path:
+                logger.warning(
+                    "Skipping Mutagen sync due to missing paths: local=%s remote=%s",
+                    local_path,
+                    remote_path,
+                )
+                continue
+
+            payload = {
+                "session_name": session_id,
+                "local_path": local_path,
+                "remote_path": remote_path,
+                "host": host,
+                "key_file": str(key_file),
+                "username": "ubuntu",
+                "ignore_patterns": ignore_patterns,
+                "include_vcs": include_vcs,
+                "ssh_wrapper_dir": ssh_wrapper_dir,
+                "ssh_port": int(ssh_port),
+            }
+
+            self.services.diagnostics.record(
+                "mutagen",
+                "create",
+                {"instance_id": instance_id, "session": session_id},
+            )
+
+            if test_mode:
+                self.services.event_bus.publish(
+                    Event(
+                        type="mutagen-status",
+                        instance_id=session_id,
+                        data={"status": "simulated", "instance_id": instance_id},
+                    )
+                )
+                sessions_for_instance.append(session_id)
+                continue
+
+            try:
+                self.services.mutagen_manager.create_session(
+                    session_id=session_id,
+                    instance_id=instance_id,
+                    arguments=["create", json.dumps(payload)],
+                    timeout_sec=60,
+                    metadata={"local_path": local_path, "remote_path": remote_path},
+                )
+                sessions_for_instance.append(session_id)
+                self.services.event_bus.publish(
+                    Event(
+                        type="mutagen-status",
+                        instance_id=session_id,
+                        data={"status": "starting"},
+                    )
+                )
+                self._wait_for_initial_sync(session_id)
+            except MutagenTimeoutError as exc:
+                self.services.event_bus.publish(
+                    Event(
+                        type="mutagen-status",
+                        instance_id=session_id,
+                        data={"status": "timeout", "error": str(exc)},
+                    )
+                )
+                setattr(self.context, "mutagen_error", str(exc))
+            except MutagenError as exc:
+                self.services.event_bus.publish(
+                    Event(
+                        type="mutagen-status",
+                        instance_id=session_id,
+                        data={"status": "error", "error": str(exc)},
+                    )
+                )
+                setattr(self.context, "mutagen_error", str(exc))
+            except Exception as exc:  # pylint: disable=broad-except
+                self.services.event_bus.publish(
+                    Event(
+                        type="mutagen-status",
+                        instance_id=session_id,
+                        data={"status": "error", "error": str(exc)},
+                    )
+                )
+                setattr(self.context, "mutagen_error", str(exc))
+
+    def _wait_for_initial_sync(self, session_id: str) -> None:
+        """Wait for Mutagen initial sync and publish status events."""
+
+        if os.environ.get("MOONDOCK_SYNC_TIMEOUT") == "1":
+            raise MutagenTimeoutError("Mutagen sync timed out after 1 seconds")
+
+        wait_result = self._mutagen_runner(
+            [
+                "wait",
+                json.dumps({"session_name": session_id, "timeout": 300}),
+            ],
+            timeout=300,
+        )
+
+        if wait_result.exit_code != 0:
+            raise MutagenError(wait_result.stderr or "mutagen wait failed")
+
+        self.services.event_bus.publish(
+            Event(
+                type="mutagen-status",
+                instance_id=session_id,
+                data={"status": "watching"},
+            )
+        )
 
     def _start_http_services(
         self, instance_id: str, metadata: dict[str, Any]
