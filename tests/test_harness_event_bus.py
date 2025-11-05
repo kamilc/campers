@@ -1,171 +1,150 @@
-"""Unit tests for EventBus service."""
+"""Unit tests for the enhanced EventBus service."""
 
-import queue
+import time
+from threading import Event as ThreadEvent
+from typing import Any
 
 import pytest
 
-from tests.harness.services.event_bus import EventBus
+from tests.harness.services.event_bus import (
+    Event,
+    EventBus,
+    EventBusTimeoutError,
+)
 
 
-class TestEventBusPublishSubscribe:
-    """Test publish/subscribe operations."""
+class TestEventBusPublishAndWait:
+    """Validate publish and wait semantics."""
 
-    def test_publish_and_subscribe_single_event(self) -> None:
-        """Test publishing and subscribing to an event."""
+    def test_wait_for_acknowledges_event(self) -> None:
+        """Test wait_for consumes a matching event and drains the queue."""
         bus = EventBus()
+        channel = bus.channel("ssh-ready")
+        channel.publish(instance_id="i-123", data={"port": 22})
 
-        bus.publish("test-channel", "event-data")
-        consumer = bus.subscribe("test-channel")
+        received = bus.wait_for("ssh-ready", instance_id="i-123", timeout_sec=1.0)
 
-        event = consumer.get_nowait()
-        assert event == "event-data"
+        assert isinstance(received, Event)
+        assert received.type == "ssh-ready"
+        assert received.instance_id == "i-123"
+        assert received.data == {"port": 22}
+        assert bus.drain_all() == {}
 
-    def test_publish_multiple_events(self) -> None:
-        """Test publishing multiple events to same channel."""
+    def test_wait_for_ignores_other_instances(self) -> None:
+        """Test wait_for skips events for other instance identifiers."""
         bus = EventBus()
+        channel = bus.channel("ssh-ready")
+        channel.publish(instance_id="i-111", data={})
+        channel.publish(instance_id="i-222", data={})
 
-        bus.publish("test-channel", "event1")
-        bus.publish("test-channel", "event2")
-        bus.publish("test-channel", "event3")
+        received = bus.wait_for("ssh-ready", instance_id="i-222", timeout_sec=1.0)
 
-        consumer = bus.subscribe("test-channel")
+        assert received.instance_id == "i-222"
+        drained = bus.drain_all()
+        assert "ssh-ready" in drained
+        assert drained["ssh-ready"][0].instance_id == "i-111"
 
-        assert consumer.get_nowait() == "event1"
-        assert consumer.get_nowait() == "event2"
-        assert consumer.get_nowait() == "event3"
-
-    def test_subscribe_multiple_channels(self) -> None:
-        """Test subscribing to multiple channels."""
+    def test_wait_for_times_out_with_diagnostics(self) -> None:
+        """Test timeout raises diagnostic-rich exception."""
         bus = EventBus()
+        channel = bus.channel("ssh-ready")
+        channel.publish(instance_id="i-000", data={})
 
-        bus.publish("channel1", "event1")
-        bus.publish("channel2", "event2")
-        bus.publish("channel3", "event3")
+        with pytest.raises(EventBusTimeoutError) as exc:
+            bus.wait_for("ssh-ready", instance_id="i-999", timeout_sec=0.1)
 
-        consumer1 = bus.subscribe("channel1")
-        consumer2 = bus.subscribe("channel2")
-        consumer3 = bus.subscribe("channel3")
+        error = exc.value
+        assert error.event_type == "ssh-ready"
+        assert error.instance_id == "i-999"
+        assert error.queue_depth >= 1
+        assert len(error.recent_events) >= 1
 
-        assert consumer1.get_nowait() == "event1"
-        assert consumer2.get_nowait() == "event2"
-        assert consumer3.get_nowait() == "event3"
 
-    def test_subscribe_empty_channel_returns_queue(self) -> None:
-        """Test subscribing to empty channel returns queue."""
+class TestEventBusSubscriptions:
+    """Validate callback subscription handling."""
+
+    def test_channel_subscription_receives_events(self) -> None:
+        """Test channel-scoped subscriptions receive published events."""
         bus = EventBus()
+        received: list[Event] = []
+        unsubscribe = bus.channel("monitor-error").subscribe(received.append)
 
-        consumer = bus.subscribe("nonexistent-channel")
-        assert isinstance(consumer, queue.Queue)
+        bus.publish(Event(type="monitor-error", instance_id=None, data={"message": "boom"}))
 
-        with pytest.raises(queue.Empty):
-            consumer.get_nowait()
+        assert len(received) == 1
+        assert received[0].data["message"] == "boom"
 
+        unsubscribe()
+        bus.publish(Event(type="monitor-error", instance_id=None, data={"message": "ignored"}))
+        assert len(received) == 1
 
-class TestEventBusDrain:
-    """Test drain operation."""
-
-    def test_drain_clears_all_events(self) -> None:
-        """Test drain clears all published events."""
+    def test_global_subscription_receives_all_events(self) -> None:
+        """Test global subscription observes events from every channel."""
         bus = EventBus()
+        observed: list[str] = []
+        bus.subscribe(lambda event: observed.append(event.type))
 
-        bus.publish("channel1", "event1")
-        bus.publish("channel2", "event2")
+        bus.publish(Event(type="instance-ready", instance_id="i-a", data={}))
+        bus.publish(Event(type="ssh-ready", instance_id="i-a", data={}))
 
-        bus.drain()
+        assert observed == ["instance-ready", "ssh-ready"]
 
-        consumer1 = bus.subscribe("channel1")
-        consumer2 = bus.subscribe("channel2")
-
-        with pytest.raises(queue.Empty):
-            consumer1.get_nowait()
-
-        with pytest.raises(queue.Empty):
-            consumer2.get_nowait()
-
-    def test_drain_empty_bus(self) -> None:
-        """Test drain on empty bus doesn't raise."""
+    def test_subscription_does_not_block_publish(self) -> None:
+        """Test slow subscriber does not block other subscribers indefinitely."""
         bus = EventBus()
-        bus.drain()
+        gate = ThreadEvent()
 
-    def test_drain_multiple_times(self) -> None:
-        """Test calling drain multiple times."""
+        def slow_callback(event: Event) -> None:
+            gate.wait(timeout=1.0)
+
+        bus.subscribe(slow_callback)
+        bus.subscribe(lambda event: gate.set())
+
+        bus.publish(Event(type="heartbeat", instance_id=None, data={}))
+        assert gate.wait(timeout=1.0)
+
+
+class TestEventBusDraining:
+    """Validate draining behaviour."""
+
+    def test_drain_all_returns_per_channel_events(self) -> None:
+        """Test drain_all returns channel-indexed events."""
         bus = EventBus()
+        bus.publish(Event(type="ssh-ready", instance_id="i-1", data={}))
+        bus.publish(Event(type="http-ready", instance_id="i-1", data={}))
 
-        bus.publish("channel", "event")
-        bus.drain()
-        bus.drain()
+        drained = bus.drain_all()
 
-        consumer = bus.subscribe("channel")
-        with pytest.raises(queue.Empty):
-            consumer.get_nowait()
+        assert set(drained.keys()) == {"ssh-ready", "http-ready"}
+        assert all(isinstance(evt, Event) for events in drained.values() for evt in events)
+        assert bus.drain_all() == {}
 
-
-class TestEventBusEventTypes:
-    """Test various event types."""
-
-    def test_publish_string_event(self) -> None:
-        """Test publishing string events."""
+    def test_metrics_snapshot_reflects_publish_consume_counts(self) -> None:
+        """Test metrics snapshot captures publish and consume counts."""
         bus = EventBus()
-        bus.publish("channel", "string-event")
-        consumer = bus.subscribe("channel")
-        assert consumer.get_nowait() == "string-event"
+        channel = bus.channel("instance-ready")
+        channel.publish(instance_id="i-12", data={})
+        bus.wait_for("instance-ready", instance_id="i-12", timeout_sec=1.0)
 
-    def test_publish_dict_event(self) -> None:
-        """Test publishing dict events."""
-        bus = EventBus()
-        event = {"type": "test", "data": "value"}
-        bus.publish("channel", event)
-        consumer = bus.subscribe("channel")
-        assert consumer.get_nowait() == event
+        metrics = bus.metrics_snapshot()["instance-ready"]
 
-    def test_publish_list_event(self) -> None:
-        """Test publishing list events."""
-        bus = EventBus()
-        event = [1, 2, 3]
-        bus.publish("channel", event)
-        consumer = bus.subscribe("channel")
-        assert consumer.get_nowait() == event
-
-    def test_publish_none_event(self) -> None:
-        """Test publishing None events."""
-        bus = EventBus()
-        bus.publish("channel", None)
-        consumer = bus.subscribe("channel")
-        assert consumer.get_nowait() is None
-
-    def test_publish_custom_object_event(self) -> None:
-        """Test publishing custom object events."""
-
-        class CustomEvent:
-            def __init__(self, value: str) -> None:
-                self.value = value
-
-        bus = EventBus()
-        event = CustomEvent("test")
-        bus.publish("channel", event)
-        consumer = bus.subscribe("channel")
-        result = consumer.get_nowait()
-        assert result.value == "test"
+        assert metrics.published_count == 1
+        assert metrics.consumed_count == 1
+        assert metrics.last_publish_timestamp is not None
+        assert metrics.last_consume_timestamp is not None
 
 
-class TestEventBusChannelIsolation:
-    """Test channel isolation."""
+class TestEventStructure:
+    """Validate event structure semantics."""
 
-    def test_channels_are_isolated(self) -> None:
-        """Test channels don't interfere with each other."""
-        bus = EventBus()
+    def test_event_timestamp_monotonicity(self) -> None:
+        """Test later events have increasing timestamps."""
+        first = Event(type="tui-update", instance_id=None, data={})
+        time.sleep(0.01)
+        second = Event(type="tui-update", instance_id=None, data={})
+        assert second.timestamp >= first.timestamp
 
-        bus.publish("channel1", "event1")
-        bus.publish("channel2", "event2")
-
-        consumer1 = bus.subscribe("channel1")
-        consumer2 = bus.subscribe("channel2")
-
-        event1 = consumer1.get_nowait()
-        assert event1 == "event1"
-
-        event2 = consumer2.get_nowait()
-        assert event2 == "event2"
-
-        with pytest.raises(queue.Empty):
-            consumer1.get_nowait()
+    def test_event_thread_id_defaults_to_current_thread(self) -> None:
+        """Test thread identifier recorded on publish."""
+        event = Event(type="heartbeat", instance_id=None, data={})
+        assert isinstance(event.thread_id, int)

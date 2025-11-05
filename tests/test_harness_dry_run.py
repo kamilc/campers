@@ -10,6 +10,7 @@ from behave.runner import Context
 
 from tests.harness.dry_run import DryRunHarness, ServiceContainer
 from tests.harness.exceptions import HarnessTimeoutError
+from tests.harness.services.event_bus import Event
 
 
 class TestServiceContainerCreation:
@@ -202,15 +203,13 @@ class TestDryRunHarnessCleanup:
         harness = DryRunHarness(context, scenario)
         harness.setup()
 
-        harness.services.event_bus.publish("test-channel", "event")
+        harness.services.event_bus.publish(
+            Event(type="test-channel", instance_id=None, data={"payload": "event"})
+        )
 
         harness.cleanup()
 
-        consumer = harness.services.event_bus.subscribe("test-channel")
-        import queue
-
-        with pytest.raises(queue.Empty):
-            consumer.get_nowait()
+        assert harness.services.event_bus.drain_all() == {}
 
     def test_cleanup_continues_on_resource_registry_error(self) -> None:
         """Test cleanup continues even if resource registry cleanup fails."""
@@ -328,7 +327,9 @@ class TestDryRunHarnessIntegration:
         assert harness.services is not None
 
         harness.services.signal_registry.publish("test-signal", "test-data")
-        harness.services.event_bus.publish("test-channel", "test-event")
+        harness.services.event_bus.publish(
+            Event(type="test-channel", instance_id=None, data={"payload": "event"})
+        )
 
         artifact_dir = harness.services.artifacts.scenario_dir
         assert artifact_dir.exists()
