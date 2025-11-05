@@ -23,7 +23,7 @@ from tests.harness.localstack.monitor_controller import (
 from tests.harness.services.artifacts import ArtifactManager
 from tests.harness.services.configuration_env import ConfigurationEnv
 from tests.harness.services.diagnostics import DiagnosticsCollector
-from tests.harness.services.event_bus import EventBus
+from tests.harness.services.event_bus import Event, EventBus
 from tests.harness.services.mutagen_session_manager import (
     MutagenSessionManager,
     MutagenCommandResult,
@@ -126,6 +126,9 @@ class LocalStackHarness(ScenarioHarness):
             endpoint_url=LOCALSTACK_ENDPOINT,
             region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
         )
+        self._event_unsubscribe: Callable[[], None] | None = None
+        self._latest_instance_id: str | None = None
+        self._event_cache: dict[str, dict[str, Event]] = {}
         self._ensure_localstack_ready(timeout=LOCALSTACK_STARTUP_TIMEOUT)
 
     def setup(self) -> None:
@@ -197,6 +200,10 @@ class LocalStackHarness(ScenarioHarness):
             "monitor", "starting", {"scenario": self.scenario.name}
         )
 
+        self._event_unsubscribe = event_bus.subscribe(self._record_event)
+        self.context.container_manager = container_manager
+        self.context.harness_event_bus = event_bus
+
         monitor_controller.start()
 
     def cleanup(self) -> CleanupSummary:
@@ -267,6 +274,16 @@ class LocalStackHarness(ScenarioHarness):
             logger.warning("Environment restoration failed: %s", exc, exc_info=True)
             summary.add_error(f"environment restoration failed: {exc}")
 
+        if self._event_unsubscribe is not None:
+            try:
+                self._event_unsubscribe()
+            except Exception:  # pragma: no cover - best effort
+                logger.debug("Error unsubscribing event listener", exc_info=True)
+            self._event_unsubscribe = None
+
+        if hasattr(self.context, "harness_event_bus"):
+            delattr(self.context, "harness_event_bus")
+
         self.services.diagnostics.record(
             "localstack-harness",
             "cleanup-complete",
@@ -296,6 +313,69 @@ class LocalStackHarness(ScenarioHarness):
         raise RuntimeError(
             f"LocalStack health check failed after {timeout} seconds"
         )
+
+    def wait_for_event(
+        self, event_type: str, instance_id: str | None, timeout_sec: float
+    ) -> Event:
+        """Wait for a typed event from the LocalStack event bus.
+
+        Parameters
+        ----------
+        event_type : str
+            Target event type to wait for (e.g., ``"ssh-ready"``).
+        instance_id : str | None
+            Optional instance identifier filter.
+        timeout_sec : float
+            Maximum time to wait for the event in seconds.
+
+        Returns
+        -------
+        Event
+            Event that satisfied the wait condition.
+        """
+        if self.services is None:
+            raise RuntimeError("Harness services not initialised")
+
+        event = self.services.event_bus.wait_for(
+            event_type=event_type,
+            instance_id=instance_id,
+            timeout_sec=timeout_sec,
+        )
+        return event
+
+    def current_instance_id(self) -> str | None:
+        """Return the most recently observed instance identifier."""
+
+        return self._latest_instance_id
+
+    def get_ssh_details(
+        self, instance_id: str
+    ) -> tuple[str | None, int | None, Path | None]:
+        """Retrieve SSH connection details for an instance.
+
+        Parameters
+        ----------
+        instance_id : str
+            Instance identifier whose SSH information is requested.
+
+        Returns
+        -------
+        tuple[str | None, int | None, Path | None]
+            Tuple of host, port, and key path if known.
+        """
+
+        if self.services is None:
+            raise RuntimeError("Harness services not initialised")
+
+        return self.services.container_manager.get_instance_ssh_config(instance_id)
+
+    def _record_event(self, event: Event) -> None:
+        """Track published events for quick lookup and diagnostics."""
+
+        if event.instance_id:
+            self._latest_instance_id = event.instance_id
+            per_instance = self._event_cache.setdefault(event.instance_id, {})
+            per_instance[event.type] = event
 
     def _describe_localstack_instances(self):
         """Describe running LocalStack EC2 instances and yield monitor actions."""

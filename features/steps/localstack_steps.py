@@ -13,6 +13,7 @@ from behave.runner import Context
 
 from features.steps.docker_manager import EC2ContainerManager
 from features.steps.pilot_steps import get_tui_update_queue
+from tests.harness.services.event_bus import EventBusTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,22 @@ def wait_for_ssh_container_ready(instance_id: str, timeout: int = 90) -> None:
     TimeoutError
         If SSH container is not ready after timeout
     """
+    behave_context = getattr(wait_for_ssh_container_ready, "_behave_context", None)
+    harness = getattr(behave_context, "harness", None)
+
+    if hasattr(harness, "wait_for_event"):
+        try:
+            harness.wait_for_event(
+                event_type="ssh-ready",
+                instance_id=instance_id,
+                timeout_sec=float(timeout),
+            )
+            return
+        except EventBusTimeoutError as error:
+            raise TimeoutError(
+                f"SSH container not ready for {instance_id} after {timeout}s"
+            ) from error
+
     start = time.time()
     port_env_var = f"SSH_PORT_{instance_id}"
     key_file_env_var = f"SSH_KEY_FILE_{instance_id}"
@@ -417,6 +434,7 @@ def step_localstack_is_healthy(context: Context) -> None:
 
     if harness_services is not None:
         context.container_manager = harness_services.container_manager
+        wait_for_ssh_container_ready._behave_context = context  # type: ignore[attr-defined]
     else:
         context.container_manager = EC2ContainerManager()
     ec2_client = create_localstack_ec2_client()
