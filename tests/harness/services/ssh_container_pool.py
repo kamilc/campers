@@ -257,3 +257,16 @@ class SSHContainerPool:
             except OSError:
                 return False
         return True
+
+    def cleanup_all(self) -> dict[str, Any]:
+        """Release all tracked ports and container records."""
+
+        with self._lock:
+            instance_count = len(self._allocated_ports)
+            container_count = len(self._containers)
+            self._allocated_ports.clear()
+            self._in_use_ports.clear()
+            self._recycled_ports.clear()
+            self._containers.clear()
+
+        return {"instances": instance_count, "containers": container_count}

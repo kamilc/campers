@@ -130,3 +130,46 @@ class TestMutagenSessionManager:
         event = event_bus.wait_for("mutagen-status", instance_id="sync-3", timeout_sec=1.0)
         assert event.data["status"] == "error"
         assert event.data["stderr"] == "boom"
+
+    def test_terminate_all_handles_multiple_sessions(self) -> None:
+        """Test terminate_all terminates all tracked sessions."""
+        timeout_manager = TimeoutManager(budget_seconds=5)
+        event_bus = EventBus()
+        diagnostics = DiagnosticsRecorder()
+        registry = ResourceRegistry()
+
+        def runner(arguments: list[str], timeout: float) -> MutagenCommandResult:
+            return MutagenCommandResult(exit_code=0, stdout="ok", stderr="")
+
+        terminated: list[str] = []
+
+        def terminator(session_id: str) -> None:
+            terminated.append(session_id)
+
+        manager = MutagenSessionManager(
+            timeout_manager=timeout_manager,
+            event_bus=event_bus,
+            resource_registry=registry,
+            diagnostics_callback=diagnostics,
+            runner=runner,
+            terminator=terminator,
+        )
+
+        manager.create_session(
+            session_id="sync-a",
+            instance_id="i-1",
+            arguments=["mutagen", "sync", "create"],
+            timeout_sec=1.0,
+        )
+        manager.create_session(
+            session_id="sync-b",
+            instance_id="i-2",
+            arguments=["mutagen", "sync", "create"],
+            timeout_sec=1.0,
+        )
+
+        summary = manager.terminate_all(timeout_sec=5.0)
+
+        assert set(summary.terminated) == {"sync-a", "sync-b"}
+        assert summary.failures == {}
+        assert set(terminated) == {"sync-a", "sync-b"}

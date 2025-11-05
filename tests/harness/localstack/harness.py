@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import queue
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -59,9 +60,12 @@ class CleanupSummary:
     ----------
     errors : list[str]
         Collected error messages produced during cleanup.
+    step_results : list[dict[str, Any]]
+        Per-step teardown diagnostics including status and duration.
     """
 
     errors: list[str] = field(default_factory=list)
+    step_results: list[dict[str, Any]] = field(default_factory=list)
 
     def add_error(self, message: str) -> None:
         """Record a cleanup error message.
@@ -72,6 +76,11 @@ class CleanupSummary:
             Human-readable error description.
         """
         self.errors.append(message)
+
+    def add_step_result(self, result: dict[str, Any]) -> None:
+        """Append step diagnostics to the summary."""
+
+        self.step_results.append(result)
 
     def success(self) -> bool:
         """Determine whether cleanup completed without errors."""
@@ -228,60 +237,21 @@ class LocalStackHarness(ScenarioHarness):
             {"scenario": self.scenario.name},
         )
 
-        try:
-            self.services.monitor_controller.pause()
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Monitor pause failed: %s", exc, exc_info=True)
-            summary.add_error(f"monitor pause failed: {exc}")
+        teardown_steps = [
+            ("monitor-pause", self._teardown_pause_monitor),
+            ("tui-signal", self._teardown_signal_tui),
+            ("cli-terminate", self._teardown_terminate_cli_process),
+            ("monitor-shutdown", self._teardown_shutdown_monitor),
+            ("eventbus-drain", self._teardown_drain_event_bus),
+            ("mutagen-terminate", self._teardown_terminate_mutagen_sessions),
+            ("ssh-cleanup", self._teardown_cleanup_ssh_resources),
+            ("env-restore", self._teardown_restore_environment),
+            ("artifact-cleanup", self._teardown_cleanup_artifacts),
+            ("diagnostics-export", lambda: self._teardown_export_diagnostics(summary)),
+        ]
 
-        shutdown_result = self.services.monitor_controller.shutdown(timeout_sec=10)
-        if not shutdown_result.success:
-            summary.add_error(
-                f"monitor shutdown timeout: {shutdown_result.error or 'unknown error'}"
-            )
-
-        try:
-            drained_events = self.services.event_bus.drain_all()
-            if drained_events:
-                logger.debug("Drained event bus events: %s", drained_events)
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Event bus drain failed: %s", exc, exc_info=True)
-            summary.add_error(f"event bus drain failed: {exc}")
-
-        try:
-            self.services.resource_registry.cleanup_all()
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Resource cleanup failed: %s", exc, exc_info=True)
-            summary.add_error(f"resource cleanup failed: {exc}")
-
-        try:
-            scenario_failed = self.scenario.status == "failed"
-            scenario_dir = self.services.artifacts.create_scenario_dir(
-                self.scenario.name
-            )
-            diagnostics_path = scenario_dir / "diagnostics.json"
-            diagnostics_payload = [
-                {
-                    "event_type": event.event_type,
-                    "description": event.description,
-                    "details": event.details,
-                    "timestamp": event.timestamp,
-                }
-                for event in self.services.diagnostics.events
-            ]
-            diagnostics_path.write_text(
-                json.dumps(diagnostics_payload, indent=2, default=str)
-            )
-            self.services.artifacts.cleanup(preserve_on_failure=scenario_failed)
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Artifact cleanup failed: %s", exc, exc_info=True)
-            summary.add_error(f"artifact cleanup failed: {exc}")
-
-        try:
-            self.services.configuration_env.exit()
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("Environment restoration failed: %s", exc, exc_info=True)
-            summary.add_error(f"environment restoration failed: {exc}")
+        for step_name, step_fn in teardown_steps:
+            self._run_teardown_step(summary, step_name, step_fn)
 
         if self._event_unsubscribe is not None:
             try:
@@ -311,6 +281,168 @@ class LocalStackHarness(ScenarioHarness):
         self.services = None
 
         return summary
+
+    def _run_teardown_step(
+        self,
+        summary: CleanupSummary,
+        step_name: str,
+        func: Callable[[], Any],
+    ) -> None:
+        """Execute a teardown step with diagnostics and error handling."""
+
+        start = time.perf_counter()
+        status = "success"
+        details: dict[str, Any] = {}
+
+        try:
+            result = func()
+            if isinstance(result, tuple) and len(result) == 2:
+                status_candidate, payload = result
+                if status_candidate:
+                    status = status_candidate
+                if isinstance(payload, dict):
+                    details = payload
+            elif isinstance(result, dict):
+                details = result
+            elif result is not None:
+                details = {"result": result}
+        except Exception as exc:  # pylint: disable=broad-except
+            status = "error"
+            details = {"error": str(exc)}
+            summary.add_error(f"{step_name} failed: {exc}")
+            logger.warning("Teardown step '%s' failed", step_name, exc_info=True)
+
+        if status == "warning" and "error" in details:
+            summary.add_error(f"{step_name} warning: {details['error']}")
+
+        duration = time.perf_counter() - start
+
+        step_result = {
+            "step": step_name,
+            "status": status,
+            "duration_sec": duration,
+            "details": details,
+        }
+        summary.add_step_result(step_result)
+
+        self.services.diagnostics.record(
+            "teardown",
+            step_name,
+            {"status": status, "duration_sec": duration, **details},
+        )
+
+    def _teardown_pause_monitor(self) -> dict[str, Any]:
+        self.services.monitor_controller.pause()
+        return {"paused": True}
+
+    def _teardown_signal_tui(self) -> dict[str, Any]:
+        try:
+            from features.steps.pilot_steps import get_tui_update_queue
+
+            update_queue = get_tui_update_queue()
+        except ImportError:
+            return {"signaled": False, "reason": "pilot-extension-missing"}
+        except Exception as exc:  # pylint: disable=broad-except
+            return {"signaled": False, "reason": f"access-error: {exc}"}
+
+        if update_queue is None:
+            return {"signaled": False, "reason": "queue-missing"}
+
+        try:
+            update_queue.put_nowait({"type": "harness-shutdown", "payload": {}})
+            return {"signaled": True}
+        except queue.Full:
+            return {"signaled": False, "reason": "queue-full"}
+
+    def _teardown_terminate_cli_process(self) -> dict[str, Any]:
+        proc = getattr(self.context, "app_process", None)
+        if proc is None:
+            return {"process_found": False}
+
+        details: dict[str, Any] = {"process_found": True}
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                    details["forced"] = True
+            details["returncode"] = proc.poll()
+        finally:
+            self.context.app_process = None
+
+        return details
+
+    def _teardown_shutdown_monitor(self) -> tuple[str, dict[str, Any]]:
+        result = self.services.monitor_controller.shutdown(timeout_sec=10)
+        if result.success:
+            return "success", {"shutdown": True}
+        return "error", {"error": result.error or "monitor shutdown timeout"}
+
+    def _teardown_drain_event_bus(self) -> dict[str, Any]:
+        drained = self.services.event_bus.drain_all()
+        events = sum(len(items) for items in drained.values())
+        return {"channels": len(drained), "events_drained": events}
+
+    def _teardown_terminate_mutagen_sessions(self) -> tuple[str, dict[str, Any]]:
+        summary = self.services.mutagen_manager.terminate_all(timeout_sec=30)
+        status = "success"
+        details: dict[str, Any] = {
+            "terminated": len(summary.terminated),
+            "failures": len(summary.failures),
+        }
+        if summary.failures:
+            status = "warning"
+            details["error"] = "mutagen termination failures"
+            details["failures_detail"] = summary.failures
+        return status, details
+
+    def _teardown_cleanup_ssh_resources(self) -> dict[str, Any]:
+        self.services.container_manager.cleanup_all()
+        pool_summary = self.services.ssh_pool.cleanup_all()
+        self.services.resource_registry.resources.clear()
+        return {
+            "containers_tracked": pool_summary.get("containers", 0),
+            "instances": pool_summary.get("instances", 0),
+        }
+
+    def _teardown_restore_environment(self) -> dict[str, Any]:
+        self.services.configuration_env.exit()
+        return {"restored": True}
+
+    def _teardown_cleanup_artifacts(self) -> dict[str, Any]:
+        scenario_failed = self.scenario.status == "failed"
+        self.services.artifacts.cleanup(preserve_on_failure=scenario_failed)
+        return {"preserved": scenario_failed}
+
+    def _teardown_export_diagnostics(self, summary: CleanupSummary) -> dict[str, Any]:
+        diagnostics_dir = self.services.artifacts.base_dir / "_diagnostics"
+        diagnostics_dir.mkdir(parents=True, exist_ok=True)
+        scenario_id = (
+            self.scenario.name.lower().replace(" ", "-").replace("/", "-")
+        )
+        diagnostics_path = diagnostics_dir / f"{scenario_id}.json"
+
+        payload = {
+            "scenario": self.scenario.name,
+            "status": self.scenario.status,
+            "errors": summary.errors,
+            "steps": summary.step_results,
+            "events": [
+                {
+                    "event_type": event.event_type,
+                    "description": event.description,
+                    "details": event.details,
+                    "timestamp": event.timestamp,
+                }
+                for event in self.services.diagnostics.events
+            ],
+        }
+
+        diagnostics_path.write_text(json.dumps(payload, indent=2, default=str))
+        return {"path": str(diagnostics_path)}
 
     @classmethod
     def stop_localstack_container(cls) -> bool:

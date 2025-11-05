@@ -65,6 +65,14 @@ RunnerCallable = Callable[[List[str], float], MutagenCommandResult]
 TerminatorCallable = Callable[[str], None]
 
 
+@dataclass
+class MutagenTerminationSummary:
+    """Summary of terminated Mutagen sessions."""
+
+    terminated: list[str] = field(default_factory=list)
+    failures: dict[str, str] = field(default_factory=dict)
+
+
 class MutagenSessionManager:
     """Manage Mutagen session lifecycle with timeout enforcement.
 
@@ -228,6 +236,48 @@ class MutagenSessionManager:
             status="terminated",
             details={},
         )
+
+    def terminate_all(self, timeout_sec: float | None = None) -> MutagenTerminationSummary:
+        """Terminate all tracked Mutagen sessions.
+
+        Parameters
+        ----------
+        timeout_sec : float | None, optional
+            Maximum time in seconds to allocate for all terminations.
+
+        Returns
+        -------
+        MutagenTerminationSummary
+            Summary describing terminated sessions and failures.
+        """
+
+        summary = MutagenTerminationSummary()
+
+        with self._lock:
+            remaining_sessions = list(self._sessions.keys())
+
+        if not remaining_sessions:
+            return summary
+
+        if timeout_sec is not None and timeout_sec > 0:
+            per_session_budget = max(timeout_sec / len(remaining_sessions), 0.1)
+        else:
+            per_session_budget = 5.0
+
+        for session_id in remaining_sessions:
+            budget = per_session_budget
+
+            try:
+                with self._timeout_manager.sub_budget(
+                    name=f"mutagen-terminate-{session_id}",
+                    max_seconds=budget,
+                ):
+                    self.terminate_session(session_id)
+                    summary.terminated.append(session_id)
+            except Exception as exc:  # pylint: disable=broad-except
+                summary.failures[session_id] = str(exc)
+
+        return summary
 
     def list_sessions(self) -> list[MutagenSession]:
         """Return tracked sessions for diagnostics.
