@@ -133,9 +133,8 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
     logger.info(f"TUI log length: {len(result.get('log_text', ''))} characters")
 
     logger.info(
-        "NOTE: HTTP servers are now started in monitor_localstack_instances() via "
-        "start_http_servers_for_all_configured_ports() BEFORE TUI launches. "
-        "DO NOT start HTTP servers here - TUI has already terminated and tunnels are closed."
+        "NOTE: HTTP servers are started by LocalStackHarness before the TUI launches. "
+        "Avoid starting HTTP servers in TUI steps because tunnels are managed by the harness."
     )
 
 

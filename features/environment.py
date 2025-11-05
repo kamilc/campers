@@ -652,19 +652,6 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     is_localstack_scenario = "localstack" in scenario.tags
 
     if is_localstack_scenario:
-        try:
-            if hasattr(context, "monitor_stop_event") and context.monitor_stop_event:
-                logger.info(
-                    "Stopping LocalStack instance monitor thread after scenario"
-                )
-                context.monitor_stop_event.set()
-
-                if hasattr(context, "monitor_thread") and context.monitor_thread:
-                    context.monitor_thread.join(timeout=5)
-                    logger.debug("Monitor thread stopped successfully")
-        except Exception as e:
-            logger.warning(f"Error stopping monitor thread: {e}")
-
         logger.info(
             "LocalStack container kept running for next @localstack scenario in feature"
         )

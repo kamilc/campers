@@ -296,6 +296,9 @@ class LocalStackHarness(ScenarioHarness):
         if hasattr(self.context, "container_manager"):
             delattr(self.context, "container_manager")
 
+        if hasattr(self.context, "monitor_error"):
+            delattr(self.context, "monitor_error")
+
         self.services.diagnostics.record(
             "localstack-harness",
             "cleanup-complete",
@@ -312,6 +315,10 @@ class LocalStackHarness(ScenarioHarness):
     @classmethod
     def stop_localstack_container(cls) -> bool:
         """Stop the shared LocalStack container if running."""
+
+        if not cls._container_started:
+            logger.debug("LocalStack container stop skipped; not started by harness")
+            return True
 
         try:
             cls._stop_localstack_container()
@@ -400,6 +407,8 @@ class LocalStackHarness(ScenarioHarness):
             self._latest_instance_id = event.instance_id
             per_instance = self._event_cache.setdefault(event.instance_id, {})
             per_instance[event.type] = event
+        if event.type == "monitor-error":
+            setattr(self.context, "monitor_error", event.data.get("error"))
 
     def _ensure_localstack_container_running(self) -> None:
         """Ensure LocalStack container is running for the scenario."""

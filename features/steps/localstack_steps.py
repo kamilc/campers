@@ -2,22 +2,37 @@
 
 import logging
 import os
-import queue
-import threading
 import time
+from typing import Any
 
 import boto3
 import requests
 from behave import given, then
 from behave.runner import Context
 
-from features.steps.docker_manager import EC2ContainerManager
-from features.steps.pilot_steps import get_tui_update_queue
 from tests.harness.services.event_bus import EventBusTimeoutError
 
 logger = logging.getLogger(__name__)
 
-LOCALSTACK_MONITOR_POLL_INTERVAL = 0.5
+def get_localstack_services(context: Context) -> Any:
+    """Return LocalStack harness services for the current scenario.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context containing the harness reference.
+
+    Returns
+    -------
+    Any
+        LocalStack service container from the harness.
+    """
+
+    harness = getattr(context, "harness", None)
+    services = getattr(harness, "services", None)
+    if services is None:
+        raise RuntimeError("LocalStack harness services not initialised")
+    return services
 
 
 def wait_for_ssh_container_ready(instance_id: str, timeout: int = 90) -> None:
@@ -120,259 +135,6 @@ def wait_for_localstack_health(timeout: int = 60, interval: int = 5) -> None:
     raise TimeoutError(f"LocalStack health check failed after {timeout} seconds")
 
 
-def monitor_localstack_instances(
-    container_manager: EC2ContainerManager,
-    stop_event: threading.Event,
-    context: Context,
-    update_queue: queue.Queue | None = None,
-) -> None:
-    """Monitor LocalStack for new EC2 instances and create SSH containers.
-
-    This monitor continuously polls LocalStack EC2 API for instances. It supports
-    two detection modes:
-    1. Target-specific: When instance IDs are registered via queue or environment
-       variable (MOONDOCK_TARGET_INSTANCE_IDS), only those instances are monitored.
-    2. Universal: When no target IDs are available, ALL instances in LocalStack
-       are detected (since LocalStack is cleaned before each test).
-
-    When an instance reaches 'pending' or 'running' state, it provisions a
-    corresponding SSH container.
-
-    Parameters
-    ----------
-    container_manager : EC2ContainerManager
-        Container manager instance for creating Docker containers
-    stop_event : threading.Event
-        Event to signal thread should stop
-    context : Context
-        Behave context object for error reporting
-    update_queue : queue.Queue | None
-        Optional queue for receiving instance registrations from TUI (default: None)
-    """
-    logger.info("Monitor thread started and beginning to poll")
-    ec2_client = create_localstack_ec2_client()
-    seen_instances = set()
-    target_instance_ids_from_queue = set()
-
-    while not stop_event.is_set():
-        try:
-            if update_queue is not None:
-                try:
-                    while True:
-                        msg = update_queue.get_nowait()
-                        if msg.get("type") == "instance_registered":
-                            instance_id = msg["payload"]["instance_id"]
-                            target_instance_ids_from_queue.add(instance_id)
-                            logger.info(
-                                f"Monitor: Received instance {instance_id} from queue"
-                            )
-                except queue.Empty:
-                    pass
-
-            target_ids_env = os.environ.get("MOONDOCK_TARGET_INSTANCE_IDS", "")
-            target_instance_ids = {
-                id.strip() for id in target_ids_env.split(",") if id.strip()
-            }
-            target_instance_ids.update(target_instance_ids_from_queue)
-
-            if target_instance_ids:
-                logger.debug(
-                    f"Monitor thread: Target IDs from env: '{target_ids_env}' -> parsed: {target_instance_ids}"
-                )
-
-            try:
-                if target_instance_ids:
-                    paginator = ec2_client.get_paginator("describe_instances")
-                    page_iterator = paginator.paginate(
-                        InstanceIds=list(target_instance_ids)
-                    )
-                else:
-                    paginator = ec2_client.get_paginator("describe_instances")
-                    page_iterator = paginator.paginate(
-                        Filters=[
-                            {
-                                "Name": "instance-state-name",
-                                "Values": ["pending", "running"],
-                            }
-                        ]
-                    )
-            except Exception as e:
-                if "InvalidInstanceID.NotFound" in str(e):
-                    time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
-                    continue
-                else:
-                    logger.error(
-                        f"Error querying instances: {e}",
-                        exc_info=True,
-                    )
-                    time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
-                    continue
-
-            for page in page_iterator:
-                for reservation in page.get("Reservations", []):
-                    for instance in reservation.get("Instances", []):
-                        instance_id = instance["InstanceId"]
-                        state = instance["State"]["Name"]
-
-                        if (
-                            target_instance_ids
-                            and instance_id not in target_instance_ids
-                        ):
-                            continue
-
-                        if instance_id not in seen_instances and state in [
-                            "pending",
-                            "running",
-                        ]:
-                            logger.info(
-                                f"Detected new instance {instance_id} (state: {state}), creating SSH container"
-                            )
-
-                            try:
-                                port, key_file = (
-                                    container_manager.create_instance_container(
-                                        instance_id
-                                    )
-                                )
-
-                                if port is not None:
-                                    if hasattr(context, "harness"):
-                                        context.harness.services.configuration_env.set(
-                                            f"SSH_PORT_{instance_id}", str(port)
-                                        )
-                                        context.harness.services.configuration_env.set(
-                                            f"SSH_KEY_FILE_{instance_id}", str(key_file)
-                                        )
-                                        context.harness.services.configuration_env.set(
-                                            f"SSH_READY_{instance_id}", "1"
-                                        )
-                                    else:
-                                        os.environ[f"SSH_PORT_{instance_id}"] = str(
-                                            port
-                                        )
-                                        os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
-                                            key_file
-                                        )
-                                        os.environ[f"SSH_READY_{instance_id}"] = "1"
-
-                                    ec2_client.create_tags(
-                                        Resources=[instance_id],
-                                        Tags=[
-                                            {
-                                                "Key": "MoondockSSHHost",
-                                                "Value": "localhost",
-                                            },
-                                            {
-                                                "Key": "MoondockSSHPort",
-                                                "Value": str(port),
-                                            },
-                                            {
-                                                "Key": "MoondockSSHKeyFile",
-                                                "Value": str(key_file),
-                                            },
-                                        ],
-                                    )
-                                    logger.info(
-                                        f"Tagged instance {instance_id} with SSH connection info (localhost:{port})"
-                                    )
-
-                                    seen_instances.add(instance_id)
-
-                                    context.instance_id = instance_id
-
-                                    from features.steps.port_forwarding_steps import (
-                                        start_http_servers_for_all_configured_ports,
-                                    )
-
-                                    logger.info(
-                                        f"Monitor thread: Starting HTTP servers for all configured ports for {instance_id}"
-                                    )
-                                    start_http_servers_for_all_configured_ports(context)
-                                    logger.info(
-                                        f"Monitor thread: HTTP servers started successfully for {instance_id}"
-                                    )
-
-                                    if hasattr(context, "harness"):
-                                        context.harness.services.configuration_env.set(
-                                            f"HTTP_SERVERS_READY_{instance_id}", "1"
-                                        )
-                                    else:
-                                        os.environ[
-                                            f"HTTP_SERVERS_READY_{instance_id}"
-                                        ] = "1"
-                                    logger.info(
-                                        f"SSH container ready for {instance_id} (port={port}), HTTP servers started"
-                                    )
-                                else:
-                                    if hasattr(context, "harness"):
-                                        context.harness.services.configuration_env.set(
-                                            f"SSH_PORT_{instance_id}", "65535"
-                                        )
-                                        context.harness.services.configuration_env.set(
-                                            f"SSH_KEY_FILE_{instance_id}", str(key_file)
-                                        )
-                                        context.harness.services.configuration_env.set(
-                                            f"SSH_READY_{instance_id}", "1"
-                                        )
-                                    else:
-                                        os.environ[f"SSH_PORT_{instance_id}"] = "65535"
-                                        os.environ[f"SSH_KEY_FILE_{instance_id}"] = str(
-                                            key_file
-                                        )
-                                        os.environ[f"SSH_READY_{instance_id}"] = "1"
-
-                                    ec2_client.create_tags(
-                                        Resources=[instance_id],
-                                        Tags=[
-                                            {
-                                                "Key": "MoondockSSHHost",
-                                                "Value": "blocked",
-                                            },
-                                            {
-                                                "Key": "MoondockSSHPort",
-                                                "Value": "65535",
-                                            },
-                                            {
-                                                "Key": "MoondockSSHKeyFile",
-                                                "Value": str(key_file),
-                                            },
-                                        ],
-                                    )
-
-                                    seen_instances.add(instance_id)
-                                    logger.info(
-                                        f"Monitor thread: Container for {instance_id} created WITHOUT port mapping (blocked)"
-                                    )
-                            except Exception as e:
-                                logger.error(
-                                    f"Monitor thread: Failed to create container for {instance_id}: {e}",
-                                    exc_info=True,
-                                )
-                                logger.error(f"Instance state was: {state}")
-                                logger.error(f"Instance details: {instance}")
-
-                                if hasattr(context, "harness"):
-                                    context.harness.services.configuration_env.set(
-                                        f"MONITOR_ERROR_{instance_id}", str(e)
-                                    )
-                                else:
-                                    os.environ[f"MONITOR_ERROR_{instance_id}"] = str(e)
-                                if hasattr(context, "monitor_error"):
-                                    context.monitor_error = str(e)
-        except Exception as e:
-            logger.error(f"Exception in monitor loop: {e}", exc_info=True)
-            import traceback
-
-            logger.error(f"Full traceback:\n{traceback.format_exc()}")
-
-            if hasattr(context, "monitor_error"):
-                context.monitor_error = str(e)
-
-        time.sleep(LOCALSTACK_MONITOR_POLL_INTERVAL)
-
-    logger.info("Monitor thread stopped")
-
-
 def wait_for_ssh_ready(host: str, port: int, timeout: int = 30) -> bool:
     """Verify SSH daemon is accepting connections.
 
@@ -420,23 +182,11 @@ def step_localstack_is_healthy(context: Context) -> None:
     context : Context
         Behave context object
     """
-    harness_services = getattr(getattr(context, "harness", None), "services", None)
+    services = get_localstack_services(context)
 
     wait_for_localstack_health()
-
-    if harness_services is None:
-        ssh_port = 2222
-        if not wait_for_ssh_ready("localhost", ssh_port, timeout=30):
-            logger.warning(
-                f"LocalStack SSH daemon not ready on port {ssh_port} after 30s - "
-                f"tests may fail due to SSH connection timeouts"
-            )
-
-    if harness_services is not None:
-        context.container_manager = harness_services.container_manager
-        wait_for_ssh_container_ready._behave_context = context  # type: ignore[attr-defined]
-    else:
-        context.container_manager = EC2ContainerManager()
+    context.container_manager = services.container_manager
+    wait_for_ssh_container_ready._behave_context = context  # type: ignore[attr-defined]
     ec2_client = create_localstack_ec2_client()
 
     try:
@@ -468,13 +218,6 @@ def step_localstack_is_healthy(context: Context) -> None:
     except Exception as e:
         logger.warning(f"Failed to clean LocalStack: {e}")
 
-    if harness_services is not None:
-        harness_services.configuration_env.set("MOONDOCK_TARGET_INSTANCE_IDS", "")
-    else:
-        os.environ["MOONDOCK_TARGET_INSTANCE_IDS"] = ""
-    context.target_instance_ids = set()
-    context.monitor_error = None
-
     ec2_client.register_image(
         Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
         Description="Ubuntu 22.04 LTS (test image for LocalStack)",
@@ -483,27 +226,7 @@ def step_localstack_is_healthy(context: Context) -> None:
         VirtualizationType="hvm",
     )
     logger.info("Registered test Ubuntu AMI in LocalStack")
-
-    if harness_services is not None:
-        context.monitor_thread = None
-        context.monitor_stop_event = None
-        logger.info("LocalStackHarness monitor controller active; skipping legacy monitor thread")
-    else:
-        stop_event = threading.Event()
-
-        tui_queue = get_tui_update_queue()
-        if tui_queue is not None:
-            logger.info("Found TUI update queue, will use for instance registration")
-
-        monitor_thread = threading.Thread(
-            target=monitor_localstack_instances,
-            args=(context.container_manager, stop_event, context, tui_queue),
-            daemon=True,
-        )
-        monitor_thread.start()
-        context.monitor_thread = monitor_thread
-        context.monitor_stop_event = stop_event
-        logger.info("Started LocalStack instance monitor thread")
+    logger.info("LocalStackHarness monitor controller active; legacy monitor disabled")
 
 
 @then(
