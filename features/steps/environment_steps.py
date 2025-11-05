@@ -21,22 +21,13 @@ def step_setup_two_env_vars(context, var1, var2):
         Second environment variable name
     """
     context.saved_env = dict(os.environ)
-
-    if hasattr(context, "harness"):
-        context.harness.services.configuration_env.clear()
-        env = context.harness.services.configuration_env
-        env.set("PATH", context.saved_env.get("PATH", ""))
-        env.set("HOME", context.saved_env.get("HOME", ""))
-        env.set("MOONDOCK_DIR", context.saved_env.get("MOONDOCK_DIR", ""))
-        env.set("MOONDOCK_TEST_MODE", "1")
-        env.set("MOONDOCK_CONFIG", context.saved_env.get("MOONDOCK_CONFIG", ""))
-    else:
-        os.environ.clear()
-        os.environ["PATH"] = context.saved_env.get("PATH", "")
-        os.environ["HOME"] = context.saved_env.get("HOME", "")
-        os.environ["MOONDOCK_DIR"] = context.saved_env.get("MOONDOCK_DIR", "")
-        os.environ["MOONDOCK_TEST_MODE"] = "1"
-        os.environ["MOONDOCK_CONFIG"] = context.saved_env.get("MOONDOCK_CONFIG", "")
+    context.harness.services.configuration_env.clear()
+    env = context.harness.services.configuration_env
+    env.set("PATH", context.saved_env.get("PATH", ""))
+    env.set("HOME", context.saved_env.get("HOME", ""))
+    env.set("MOONDOCK_DIR", context.saved_env.get("MOONDOCK_DIR", ""))
+    env.set("MOONDOCK_TEST_MODE", "1")
+    env.set("MOONDOCK_CONFIG", context.saved_env.get("MOONDOCK_CONFIG", ""))
 
     context.env_vars = {
         var1: f"mock-{var1.lower()}",
@@ -44,10 +35,7 @@ def step_setup_two_env_vars(context, var1, var2):
     }
 
     for name, value in context.env_vars.items():
-        if hasattr(context, "harness"):
-            context.harness.services.configuration_env.set(name, value)
-        else:
-            os.environ[name] = value
+        context.harness.services.configuration_env.set(name, value)
 
 
 @given("local environment has {var1}, {var2}, {var3}")
@@ -66,22 +54,13 @@ def step_setup_three_env_vars(context, var1, var2, var3):
         Third environment variable name
     """
     context.saved_env = dict(os.environ)
-
-    if hasattr(context, "harness"):
-        context.harness.services.configuration_env.clear()
-        env = context.harness.services.configuration_env
-        env.set("PATH", context.saved_env.get("PATH", ""))
-        env.set("HOME", context.saved_env.get("HOME", ""))
-        env.set("MOONDOCK_DIR", context.saved_env.get("MOONDOCK_DIR", ""))
-        env.set("MOONDOCK_TEST_MODE", "1")
-        env.set("MOONDOCK_CONFIG", context.saved_env.get("MOONDOCK_CONFIG", ""))
-    else:
-        os.environ.clear()
-        os.environ["PATH"] = context.saved_env.get("PATH", "")
-        os.environ["HOME"] = context.saved_env.get("HOME", "")
-        os.environ["MOONDOCK_DIR"] = context.saved_env.get("MOONDOCK_DIR", "")
-        os.environ["MOONDOCK_TEST_MODE"] = "1"
-        os.environ["MOONDOCK_CONFIG"] = context.saved_env.get("MOONDOCK_CONFIG", "")
+    context.harness.services.configuration_env.clear()
+    env = context.harness.services.configuration_env
+    env.set("PATH", context.saved_env.get("PATH", ""))
+    env.set("HOME", context.saved_env.get("HOME", ""))
+    env.set("MOONDOCK_DIR", context.saved_env.get("MOONDOCK_DIR", ""))
+    env.set("MOONDOCK_TEST_MODE", "1")
+    env.set("MOONDOCK_CONFIG", context.saved_env.get("MOONDOCK_CONFIG", ""))
 
     context.env_vars = {
         var1: f"mock-{var1.lower()}",
@@ -90,10 +69,7 @@ def step_setup_three_env_vars(context, var1, var2, var3):
     }
 
     for name, value in context.env_vars.items():
-        if hasattr(context, "harness"):
-            context.harness.services.configuration_env.set(name, value)
-        else:
-            os.environ[name] = value
+        context.harness.services.configuration_env.set(name, value)
 
 
 @given('local environment has {var_name} with value "{var_value}"')
@@ -110,10 +86,7 @@ def step_setup_env_var_with_value(context, var_name, var_value):
         Environment variable value
     """
     context.env_vars = {var_name: var_value}
-    if hasattr(context, "harness"):
-        context.harness.services.configuration_env.set(var_name, var_value)
-    else:
-        os.environ[var_name] = var_value
+    context.harness.services.configuration_env.set(var_name, var_value)
 
 
 @given("config has env_filter {patterns}")
@@ -163,10 +136,7 @@ def step_execute_moondock_run(context):
     context : behave.runner.Context
         Behave context object
     """
-    if hasattr(context, "harness"):
-        context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "1")
-    else:
-        os.environ["MOONDOCK_TEST_MODE"] = "1"
+    context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "1")
     context.command_executed = True
 
 

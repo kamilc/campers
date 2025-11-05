@@ -54,6 +54,20 @@ class ConfigurationEnv:
         if key in os.environ:
             del os.environ[key]
 
+    def delete(self, key: str) -> None:
+        """Delete environment variable from the current context.
+
+        Parameters
+        ----------
+        key : str
+            Environment variable name to remove
+        """
+        self.unset(key)
+
+    def clear(self) -> None:
+        """Clear all environment variables within the current context."""
+        os.environ.clear()
+
     def enter(self) -> None:
         """Enter configuration scope, saving current environment state.
 

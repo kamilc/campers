@@ -1,4 +1,3 @@
-import tempfile
 from pathlib import Path
 
 import yaml
@@ -43,16 +42,10 @@ def step_machine_with_instance_type(
 
 @when("I load configuration without machine name")
 def step_load_config_without_machine(context) -> None:
-    if hasattr(context, "harness"):
-        config_file = context.harness.services.artifacts.create_temp_file(
-            "moondock.yaml", content=yaml.dump(context.config_data)
-        )
-        context.temp_config_file = str(config_file)
-    else:
-        temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
-        temp_file.write(yaml.dump(context.config_data))
-        temp_file.close()
-        context.temp_config_file = temp_file.name
+    config_file = context.harness.services.artifacts.create_temp_file(
+        "moondock.yaml", content=yaml.dump(context.config_data)
+    )
+    context.temp_config_file = str(config_file)
 
     loader = ConfigLoader()
     context.yaml_config = loader.load_config(context.temp_config_file)
@@ -61,16 +54,10 @@ def step_load_config_without_machine(context) -> None:
 
 @when('I load configuration for machine "{machine_name}"')
 def step_load_config_for_machine(context, machine_name: str) -> None:
-    if hasattr(context, "harness"):
-        config_file = context.harness.services.artifacts.create_temp_file(
-            "moondock.yaml", content=yaml.dump(context.config_data)
-        )
-        context.temp_config_file = str(config_file)
-    else:
-        temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
-        temp_file.write(yaml.dump(context.config_data))
-        temp_file.close()
-        context.temp_config_file = temp_file.name
+    config_file = context.harness.services.artifacts.create_temp_file(
+        "moondock.yaml", content=yaml.dump(context.config_data)
+    )
+    context.temp_config_file = str(config_file)
 
     loader = ConfigLoader()
     context.yaml_config = loader.load_config(context.temp_config_file)
@@ -223,14 +210,9 @@ def step_config_file_exists_at(context, path: str) -> None:
 
 @when("I load configuration without path")
 def step_load_configuration_without_path(context) -> None:
-    import os
-
-    if hasattr(context, "harness"):
-        context.harness.services.configuration_env.set(
-            "MOONDOCK_CONFIG", context.env_config_path
-        )
-    else:
-        os.environ["MOONDOCK_CONFIG"] = context.env_config_path
+    context.harness.services.configuration_env.set(
+        "MOONDOCK_CONFIG", context.env_config_path
+    )
 
     loader = ConfigLoader()
     context.yaml_config = loader.load_config()

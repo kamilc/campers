@@ -26,20 +26,13 @@ def setup_moto_environment(context: Context) -> None:
         context.mock_aws_env = mock_aws()
         context.mock_aws_env.start()
 
-        if hasattr(context, "harness"):
-            context.harness.services.configuration_env.set(
-                "AWS_ACCESS_KEY_ID", "testing"
-            )
-            context.harness.services.configuration_env.set(
-                "AWS_SECRET_ACCESS_KEY", "testing"
-            )
-            context.harness.services.configuration_env.set(
-                "AWS_DEFAULT_REGION", "us-east-1"
-            )
-        else:
-            os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-            os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-            os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+        context.harness.services.configuration_env.set("AWS_ACCESS_KEY_ID", "testing")
+        context.harness.services.configuration_env.set(
+            "AWS_SECRET_ACCESS_KEY", "testing"
+        )
+        context.harness.services.configuration_env.set(
+            "AWS_DEFAULT_REGION", "us-east-1"
+        )
 
 
 def patch_ec2_manager_for_canonical_owner(ec2_manager: EC2Manager) -> None:

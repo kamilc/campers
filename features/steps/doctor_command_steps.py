@@ -90,7 +90,7 @@ def step_region_has_default_vpc(context: Context, region: str) -> None:
     import boto3
 
     ec2_client = getattr(context, "patched_ec2_client", None)
-    is_dry_run = ec2_client is None or hasattr(context, "harness")
+    is_dry_run = ec2_client is None
 
     if is_dry_run:
         ec2_client = boto3.client("ec2", region_name=region)
