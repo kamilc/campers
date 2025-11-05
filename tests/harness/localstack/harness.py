@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import boto3
 import requests
@@ -43,6 +44,11 @@ LOCALSTACK_STARTUP_TIMEOUT = 30
 DEFAULT_TIMEOUT_BUDGET = 600
 SSH_PORT_BASE = 49152
 MAX_CONTAINERS_PER_INSTANCE = 5
+LOCALSTACK_CONTAINER_NAME = "moondock-localstack"
+LOCALSTACK_IMAGE = os.environ.get(
+    "LOCALSTACK_IMAGE",
+    "localstack/localstack:latest",
+)
 
 
 @dataclass
@@ -118,6 +124,8 @@ class LocalStackServiceContainer:
 class LocalStackHarness(ScenarioHarness):
     """Harness orchestrating LocalStack-backed scenarios."""
 
+    _container_started: bool = False
+
     def __init__(self, context: Context, scenario: Scenario) -> None:
         super().__init__(context, scenario)
         self.services: LocalStackServiceContainer | None = None
@@ -129,6 +137,7 @@ class LocalStackHarness(ScenarioHarness):
         self._event_unsubscribe: Callable[[], None] | None = None
         self._latest_instance_id: str | None = None
         self._event_cache: dict[str, dict[str, Event]] = {}
+        self._ensure_localstack_container_running()
         self._ensure_localstack_ready(timeout=LOCALSTACK_STARTUP_TIMEOUT)
 
     def setup(self) -> None:
@@ -284,6 +293,9 @@ class LocalStackHarness(ScenarioHarness):
         if hasattr(self.context, "harness_event_bus"):
             delattr(self.context, "harness_event_bus")
 
+        if hasattr(self.context, "container_manager"):
+            delattr(self.context, "container_manager")
+
         self.services.diagnostics.record(
             "localstack-harness",
             "cleanup-complete",
@@ -296,6 +308,18 @@ class LocalStackHarness(ScenarioHarness):
         self.services = None
 
         return summary
+
+    @classmethod
+    def stop_localstack_container(cls) -> bool:
+        """Stop the shared LocalStack container if running."""
+
+        try:
+            cls._stop_localstack_container()
+            cls._container_started = False
+            return True
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Failed to stop LocalStack container: %s", exc)
+            return False
 
     def _ensure_localstack_ready(self, timeout: int) -> None:
         """Wait for LocalStack health endpoint to report readiness."""
@@ -376,6 +400,88 @@ class LocalStackHarness(ScenarioHarness):
             self._latest_instance_id = event.instance_id
             per_instance = self._event_cache.setdefault(event.instance_id, {})
             per_instance[event.type] = event
+
+    def _ensure_localstack_container_running(self) -> None:
+        """Ensure LocalStack container is running for the scenario."""
+
+        try:
+            started = self._start_localstack_container()
+            if started:
+                logger.info("LocalStack container started by harness")
+            else:
+                logger.debug("LocalStack container already running")
+        except Exception as exc:  # pylint: disable=broad-except
+            raise RuntimeError(f"Failed to start LocalStack container: {exc}") from exc
+
+    @classmethod
+    def _start_localstack_container(cls) -> bool:
+        """Start LocalStack container if not already running."""
+
+        try:
+            import docker
+
+            docker_client = docker.from_env()
+
+            try:
+                container = docker_client.containers.get(LOCALSTACK_CONTAINER_NAME)
+                container.reload()
+                if container.status != "running":
+                    container.start()
+                    cls._container_started = True
+                    return True
+                cls._container_started = True
+                return False
+            except docker.errors.NotFound:
+                pass
+
+            cmd = [
+                "docker",
+                "run",
+                "-d",
+                "--rm",
+                "--name",
+                LOCALSTACK_CONTAINER_NAME,
+                "-p",
+                "4566:4566",
+                "-p",
+                "4510-4559:4510-4559",
+                "-v",
+                "/var/run/docker.sock:/var/run/docker.sock",
+                LOCALSTACK_IMAGE,
+            ]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.strip())
+
+            cls._container_started = True
+            return True
+
+        except Exception:
+            raise
+
+    @classmethod
+    def _stop_localstack_container(cls) -> None:
+        """Stop LocalStack container if running."""
+
+        try:
+            import docker
+
+            docker_client = docker.from_env()
+            try:
+                container = docker_client.containers.get(LOCALSTACK_CONTAINER_NAME)
+            except docker.errors.NotFound:
+                return
+
+            container.stop(timeout=10)
+        except Exception:
+            raise
 
     def _describe_localstack_instances(self):
         """Describe running LocalStack EC2 instances and yield monitor actions."""

@@ -273,92 +273,6 @@ def before_all(context: Context) -> None:
         logger.info("Mutagen daemon is healthy")
 
 
-def start_localstack_container() -> bool:
-    """Start LocalStack Docker container if not already running."""
-    import subprocess
-
-    container_name = "moondock-localstack"
-
-    try:
-        import docker
-
-        docker_client = docker.from_env()
-
-        try:
-            existing_container = docker_client.containers.get(container_name)
-            logger.info(f"LocalStack container '{container_name}' already exists")
-
-            if existing_container.status == "running":
-                logger.info("LocalStack container is already running")
-                return True
-
-            logger.info("Found stopped LocalStack container, attempting to start it")
-            existing_container.start()
-            logger.info("Successfully started existing LocalStack container")
-            return True
-        except docker.errors.NotFound:
-            logger.info("No existing LocalStack container found, starting new one")
-
-        result = subprocess.run(
-            [
-                "docker",
-                "run",
-                "-d",
-                "--rm",
-                "--name",
-                container_name,
-                "-p",
-                "4566:4566",
-                "-p",
-                "4510-4559:4510-4559",
-                "-v",
-                "/var/run/docker.sock:/var/run/docker.sock",
-                "localstack/localstack:latest",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-
-        if result.returncode == 0:
-            logger.info(
-                f"Successfully started LocalStack container: {result.stdout.strip()}"
-            )
-            return True
-
-        error_msg = f"Failed to start LocalStack: {result.stderr}"
-        logger.error(error_msg)
-        return False
-
-    except Exception as e:
-        error_msg = f"Exception while starting LocalStack: {e}"
-        logger.error(error_msg)
-        return False
-
-
-def stop_localstack_container() -> bool:
-    """Stop LocalStack Docker container."""
-    container_name = "moondock-localstack"
-
-    try:
-        import docker
-
-        docker_client = docker.from_env()
-
-        try:
-            container = docker_client.containers.get(container_name)
-            container.stop(timeout=10)
-            logger.info("Successfully stopped LocalStack container")
-            return True
-        except docker.errors.NotFound:
-            logger.debug("No LocalStack container found to stop")
-            return True
-
-    except Exception as e:
-        logger.warning(f"Error stopping LocalStack container: {e}")
-        return False
-
-
 def before_scenario(context: Context, scenario: Scenario) -> None:
     """Setup executed before each scenario."""
     import boto3
@@ -386,12 +300,6 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     is_dry_run = "dry_run" in scenario.tags
 
     if is_localstack_scenario:
-        logger.info("Starting LocalStack container for @localstack scenario")
-        if not start_localstack_container():
-            raise RuntimeError(
-                "Failed to start LocalStack container. Please ensure Docker is running."
-            )
-
         from tests.harness.localstack import LocalStackHarness
 
         context.harness = LocalStackHarness(context, scenario)
@@ -1017,15 +925,9 @@ def after_feature(context: Context, feature) -> None:
         logger.info(
             f"Feature '{feature.name}' had @localstack scenarios, stopping LocalStack container"
         )
-        stop_localstack_container()
+        from tests.harness.localstack import LocalStackHarness
 
-        if hasattr(context, "container_manager"):
-            logger.info("Cleaning up SSH containers and keys")
-            try:
-                context.container_manager.cleanup_all()
-                logger.debug("SSH container cleanup completed successfully")
-            except Exception as e:
-                logger.warning(f"SSH container cleanup failed: {e}", exc_info=True)
+        LocalStackHarness.stop_localstack_container()
 
 
 def after_all(context: Context) -> None:
