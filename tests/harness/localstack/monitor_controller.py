@@ -6,13 +6,17 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterable, List
+from pathlib import Path
+from typing import Any, Callable, Iterable
 
 from tests.harness.exceptions import HarnessTimeoutError
 from tests.harness.services.diagnostics import DiagnosticsCollector
 from tests.harness.services.event_bus import Event, EventBus
 from tests.harness.services.resource_registry import ResourceRegistry
-from tests.harness.services.ssh_container_pool import SSHContainerPool
+from tests.harness.services.ssh_container_pool import (
+    PortExhaustedError,
+    SSHContainerPool,
+)
 from tests.harness.services.timeout_manager import TimeoutManager
 
 logger = logging.getLogger(__name__)
@@ -123,6 +127,7 @@ class MonitorController:
         timeout_manager: TimeoutManager,
         diagnostics: DiagnosticsCollector,
         ssh_pool: SSHContainerPool,
+        ec2_client: Any,
         container_manager: Any,
         action_provider: ActionProvider,
         poll_interval_sec: float = 0.5,
@@ -144,6 +149,8 @@ class MonitorController:
             Diagnostics collector for telemetry.
         ssh_pool : SSHContainerPool
             Pool managing SSH container allocations.
+        ec2_client : Any
+            Boto3 EC2 client used for tagging instances.
         container_manager : Any
             Manager responsible for provisioning SSH containers.
         action_provider : ActionProvider
@@ -162,6 +169,7 @@ class MonitorController:
         self._timeout_manager = timeout_manager
         self._diagnostics = diagnostics
         self._ssh_pool = ssh_pool
+        self._ec2_client = ec2_client
         self._container_manager = container_manager
         self._action_provider = action_provider
         self._poll_interval_sec = poll_interval_sec
@@ -208,9 +216,7 @@ class MonitorController:
         Polling remains paused until :meth:`resume` is called.
         """
         self._pause_event.clear()
-        self._diagnostics.record(
-            "monitor", "paused", {"thread": threading.get_ident()}
-        )
+        self._diagnostics.record("monitor", "paused", {"thread": threading.get_ident()})
 
     def resume(self) -> None:
         """Resume polling iterations.
@@ -441,6 +447,9 @@ class MonitorController:
             metadata={k: v for k, v in record_metadata.items() if v is not None},
         )
 
+        if port is not None and key_file is not None:
+            self._tag_instance(action.instance_id, port, key_file)
+
         metadata: dict[str, Any] = {
             **action.metadata,
             "port": port,
@@ -448,6 +457,25 @@ class MonitorController:
             "container_id": container_id,
         }
         return metadata
+
+    def _tag_instance(self, instance_id: str, port: int, key_file: Path) -> None:
+        """Apply SSH connection details as instance tags."""
+
+        try:
+            self._ec2_client.create_tags(
+                Resources=[instance_id],
+                Tags=[
+                    {"Key": "MoondockSSHHost", "Value": "localhost"},
+                    {"Key": "MoondockSSHPort", "Value": str(port)},
+                    {"Key": "MoondockSSHKeyFile", "Value": str(key_file)},
+                ],
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            self._diagnostics.record(
+                "monitor",
+                "tag-error",
+                {"instance_id": instance_id, "error": str(exc)},
+            )
 
     def _publish_event(
         self, event_type: str, instance_id: str, data: dict[str, Any]

@@ -8,7 +8,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Deque, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Deque, Dict, List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,9 @@ class EventBusChannel:
         self._name = name
         self._bus = bus
 
-    def publish(self, instance_id: str | None, data: dict[str, Any] | None = None) -> Event:
+    def publish(
+        self, instance_id: str | None, data: dict[str, Any] | None = None
+    ) -> Event:
         """Publish an event on the bound channel.
 
         Parameters
@@ -365,7 +367,10 @@ class EventBus:
             Copy of channel metrics keyed by channel.
         """
         with self._lock:
-            return {channel: ChannelMetrics(**vars(metrics)) for channel, metrics in self._metrics.items()}
+            return {
+                channel: ChannelMetrics(**vars(metrics))
+                for channel, metrics in self._metrics.items()
+            }
 
     def _ensure_channel(self, name: str) -> queue.Queue[Event]:
         if name not in self._queues:
@@ -386,17 +391,19 @@ class EventBus:
                 "event_type": event.type,
                 "instance_id": event.instance_id,
                 "latency_sec": latency,
-                "queue_depth": self._queues[event.type].qsize() + len(self._backlogs[event.type]),
+                "queue_depth": self._queues[event.type].qsize()
+                + len(self._backlogs[event.type]),
             },
         )
 
-    def _timeout_error(self, event_type: str, instance_id: str | None) -> EventBusTimeoutError:
+    def _timeout_error(
+        self, event_type: str, instance_id: str | None
+    ) -> EventBusTimeoutError:
         with self._lock:
             depth = self._queues[event_type].qsize() + len(self._backlogs[event_type])
             recent_events = list(self._history)[-5:]
-        message = (
-            f"Timed out waiting for event '{event_type}'"
-            + (f" for '{instance_id}'" if instance_id is not None else "")
+        message = f"Timed out waiting for event '{event_type}'" + (
+            f" for '{instance_id}'" if instance_id is not None else ""
         )
         return EventBusTimeoutError(
             message=message,
@@ -405,4 +412,3 @@ class EventBus:
             queue_depth=depth,
             recent_events=recent_events,
         )
-

@@ -2,7 +2,6 @@
 
 import time
 from threading import Event as ThreadEvent
-from typing import Any
 
 import pytest
 
@@ -69,13 +68,17 @@ class TestEventBusSubscriptions:
         received: list[Event] = []
         unsubscribe = bus.channel("monitor-error").subscribe(received.append)
 
-        bus.publish(Event(type="monitor-error", instance_id=None, data={"message": "boom"}))
+        bus.publish(
+            Event(type="monitor-error", instance_id=None, data={"message": "boom"})
+        )
 
         assert len(received) == 1
         assert received[0].data["message"] == "boom"
 
         unsubscribe()
-        bus.publish(Event(type="monitor-error", instance_id=None, data={"message": "ignored"}))
+        bus.publish(
+            Event(type="monitor-error", instance_id=None, data={"message": "ignored"})
+        )
         assert len(received) == 1
 
     def test_global_subscription_receives_all_events(self) -> None:
@@ -116,7 +119,9 @@ class TestEventBusDraining:
         drained = bus.drain_all()
 
         assert set(drained.keys()) == {"ssh-ready", "http-ready"}
-        assert all(isinstance(evt, Event) for events in drained.values() for evt in events)
+        assert all(
+            isinstance(evt, Event) for events in drained.values() for evt in events
+        )
         assert bus.drain_all() == {}
 
     def test_metrics_snapshot_reflects_publish_consume_counts(self) -> None:

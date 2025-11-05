@@ -55,7 +55,9 @@ class TestMutagenSessionManager:
                 timeout_sec=1.0,
             )
 
-        status = event_bus.wait_for("mutagen-status", instance_id="sync-1", timeout_sec=1.0)
+        status = event_bus.wait_for(
+            "mutagen-status", instance_id="sync-1", timeout_sec=1.0
+        )
         assert status.data["status"] == "timeout"
         assert "error" in status.data
         assert diagnostics.calls[0][1] == "timeout"
@@ -93,12 +95,16 @@ class TestMutagenSessionManager:
 
         assert session.session_id == "sync-2"
         assert manager.list_sessions()[0].session_id == "sync-2"
-        created_event = event_bus.wait_for("mutagen-status", instance_id="sync-2", timeout_sec=1.0)
+        created_event = event_bus.wait_for(
+            "mutagen-status", instance_id="sync-2", timeout_sec=1.0
+        )
         assert created_event.data["status"] == "created"
         registry.cleanup_all()
         assert terminator_calls == ["sync-2"]
 
-        terminated_event = event_bus.wait_for("mutagen-status", instance_id="sync-2", timeout_sec=1.0)
+        terminated_event = event_bus.wait_for(
+            "mutagen-status", instance_id="sync-2", timeout_sec=1.0
+        )
         assert terminated_event.data["status"] == "terminated"
 
     def test_create_session_failure_raises(self) -> None:
@@ -108,7 +114,9 @@ class TestMutagenSessionManager:
         diagnostics = DiagnosticsRecorder()
         registry = ResourceRegistry()
 
-        def failing_runner(arguments: list[str], timeout: float) -> MutagenCommandResult:
+        def failing_runner(
+            arguments: list[str], timeout: float
+        ) -> MutagenCommandResult:
             return MutagenCommandResult(exit_code=1, stdout="", stderr="boom")
 
         manager = MutagenSessionManager(
@@ -127,7 +135,9 @@ class TestMutagenSessionManager:
                 timeout_sec=1.5,
             )
 
-        event = event_bus.wait_for("mutagen-status", instance_id="sync-3", timeout_sec=1.0)
+        event = event_bus.wait_for(
+            "mutagen-status", instance_id="sync-3", timeout_sec=1.0
+        )
         assert event.data["status"] == "error"
         assert event.data["stderr"] == "boom"
 

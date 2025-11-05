@@ -251,9 +251,7 @@ class EC2ContainerManager:
             else:
                 port = self.next_port
                 self.next_port += 1
-                logger.info(
-                    f"Creating SSH container for {instance_id} on port {port}"
-                )
+                logger.info(f"Creating SSH container for {instance_id} on port {port}")
             ports = {"2222/tcp": port}
 
         key_file = self.generate_ssh_key(instance_id)

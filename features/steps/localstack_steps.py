@@ -14,6 +14,7 @@ from tests.harness.services.event_bus import EventBusTimeoutError
 
 logger = logging.getLogger(__name__)
 
+
 def get_localstack_services(context: Context) -> Any:
     """Return LocalStack harness services for the current scenario.
 

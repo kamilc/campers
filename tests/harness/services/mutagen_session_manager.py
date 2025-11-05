@@ -237,7 +237,9 @@ class MutagenSessionManager:
             details={},
         )
 
-    def terminate_all(self, timeout_sec: float | None = None) -> MutagenTerminationSummary:
+    def terminate_all(
+        self, timeout_sec: float | None = None
+    ) -> MutagenTerminationSummary:
         """Terminate all tracked Mutagen sessions.
 
         Parameters

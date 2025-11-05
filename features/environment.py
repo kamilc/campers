@@ -304,9 +304,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
         context.harness = LocalStackHarness(context, scenario)
         context.harness.setup()
-        logger.info(
-            f"Initialized LocalStackHarness for scenario: {scenario.name}"
-        )
+        logger.info(f"Initialized LocalStackHarness for scenario: {scenario.name}")
 
     elif is_dry_run:
         from tests.harness.dry_run import DryRunHarness

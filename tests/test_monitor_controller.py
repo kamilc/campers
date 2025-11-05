@@ -5,8 +5,6 @@ import time
 from collections import deque
 from pathlib import Path
 
-import pytest
-
 from tests.harness.localstack.monitor_controller import (
     MonitorAction,
     MonitorController,
@@ -42,7 +40,9 @@ class TestMonitorControllerLifecycle:
 
         class DummyContainerManager:
             def __init__(self) -> None:
-                self.instance_map: dict[str, tuple[DummyContainer, int | None, Path]] = {}
+                self.instance_map: dict[
+                    str, tuple[DummyContainer, int | None, Path]
+                ] = {}
 
             def create_instance_container(
                 self, instance_id: str, host_port: int | None = None
@@ -54,6 +54,15 @@ class TestMonitorControllerLifecycle:
                 return host_port, key_path
 
         container_manager = DummyContainerManager()
+
+        class DummyEC2Client:
+            def __init__(self) -> None:
+                self.tags: list[dict[str, str]] = []
+
+            def create_tags(self, Resources, Tags):  # noqa: N803 - boto style
+                self.tags.append({"resource": Resources[0], "tags": Tags})
+
+        ec2_client = DummyEC2Client()
         http_calls: list[tuple[str, dict]] = []
 
         def http_callback(instance_id: str, metadata: dict[str, object]) -> None:
@@ -71,16 +80,25 @@ class TestMonitorControllerLifecycle:
             timeout_manager=timeout_manager,
             diagnostics=diagnostics,
             ssh_pool=ssh_pool,
+            ec2_client=ec2_client,
             container_manager=container_manager,
             action_provider=provider,
             poll_interval_sec=0.05,
             http_ready_callback=http_callback,
         )
 
-        actions.append([MonitorAction(instance_id="i-1", state="running", metadata={"ami": "ami-123"})])
+        actions.append(
+            [
+                MonitorAction(
+                    instance_id="i-1", state="running", metadata={"ami": "ami-123"}
+                )
+            ]
+        )
         controller.start()
 
-        instance_event = bus.wait_for("instance-ready", instance_id="i-1", timeout_sec=1.0)
+        instance_event = bus.wait_for(
+            "instance-ready", instance_id="i-1", timeout_sec=1.0
+        )
         assert instance_event.data["state"] == "running"
         ssh_event = bus.wait_for("ssh-ready", instance_id="i-1", timeout_sec=1.0)
         assert ssh_event.data["ami"] == "ami-123"
@@ -88,6 +106,7 @@ class TestMonitorControllerLifecycle:
         http_event = bus.wait_for("http-ready", instance_id="i-1", timeout_sec=1.0)
         assert http_event.data["container_id"].startswith("container-i-1")
         assert http_calls and http_calls[0][0] == "i-1"
+        assert any(tag_entry["resource"] == "i-1" for tag_entry in ec2_client.tags)
         heartbeat = bus.wait_for("monitor-heartbeat", instance_id=None, timeout_sec=1.0)
         assert heartbeat.data["iteration"] >= 1
 
@@ -100,13 +119,17 @@ class TestMonitorControllerLifecycle:
         )
 
         controller.resume()
-        new_instance = bus.wait_for("instance-ready", instance_id="i-2", timeout_sec=1.0)
+        new_instance = bus.wait_for(
+            "instance-ready", instance_id="i-2", timeout_sec=1.0
+        )
         assert new_instance.instance_id == "i-2"
         ssh_second = bus.wait_for("ssh-ready", instance_id="i-2", timeout_sec=1.0)
         assert ssh_second.data["port"] == 61001
 
         result = controller.shutdown(timeout_sec=1.0)
         assert result.success
-        shutdown_event = bus.wait_for("monitor-shutdown", instance_id=None, timeout_sec=1.0)
+        shutdown_event = bus.wait_for(
+            "monitor-shutdown", instance_id=None, timeout_sec=1.0
+        )
         assert shutdown_event.type == "monitor-shutdown"
         assert len(registry.resources) >= 1

@@ -19,10 +19,7 @@ from behave.runner import Context
 from behave.model import Scenario
 
 from tests.harness.base import ScenarioHarness
-from tests.harness.localstack.monitor_controller import (
-    MonitorController,
-    MonitorShutdownResult,
-)
+from tests.harness.localstack.monitor_controller import MonitorAction, MonitorController
 from tests.harness.services.artifacts import ArtifactManager
 from tests.harness.services.configuration_env import ConfigurationEnv
 from tests.harness.services.diagnostics import DiagnosticsCollector
@@ -169,6 +166,7 @@ class LocalStackHarness(ScenarioHarness):
         event_bus = EventBus()
         diagnostics = DiagnosticsCollector(verbose=False)
         artifacts = ArtifactManager()
+        artifacts.create_scenario_dir(self.scenario.name)
         ssh_pool = SSHContainerPool(
             base_port=SSH_PORT_BASE,
             max_containers_per_instance=MAX_CONTAINERS_PER_INSTANCE,
@@ -198,6 +196,7 @@ class LocalStackHarness(ScenarioHarness):
             timeout_manager=timeout_manager,
             diagnostics=diagnostics,
             ssh_pool=ssh_pool,
+            ec2_client=self._ec2_client,
             container_manager=container_manager,
             action_provider=self._describe_localstack_instances,
             http_ready_callback=self._start_http_services,
@@ -221,9 +220,7 @@ class LocalStackHarness(ScenarioHarness):
             "localstack-harness", "ready", {"scenario": self.scenario.name}
         )
 
-        diagnostics.record(
-            "monitor", "starting", {"scenario": self.scenario.name}
-        )
+        diagnostics.record("monitor", "starting", {"scenario": self.scenario.name})
 
         self._event_unsubscribe = event_bus.subscribe(self._record_event)
         self.context.container_manager = container_manager
@@ -433,9 +430,7 @@ class LocalStackHarness(ScenarioHarness):
     def _teardown_export_diagnostics(self, summary: CleanupSummary) -> dict[str, Any]:
         diagnostics_dir = self.services.artifacts.base_dir / "_diagnostics"
         diagnostics_dir.mkdir(parents=True, exist_ok=True)
-        scenario_id = (
-            self.scenario.name.lower().replace(" ", "-").replace("/", "-")
-        )
+        scenario_id = self.scenario.name.lower().replace(" ", "-").replace("/", "-")
         diagnostics_path = diagnostics_dir / f"{scenario_id}.json"
 
         payload = {
@@ -486,9 +481,7 @@ class LocalStackHarness(ScenarioHarness):
             except requests.RequestException:
                 time.sleep(1)
 
-        raise RuntimeError(
-            f"LocalStack health check failed after {timeout} seconds"
-        )
+        raise RuntimeError(f"LocalStack health check failed after {timeout} seconds")
 
     def wait_for_event(
         self, event_type: str, instance_id: str | None, timeout_sec: float
@@ -661,7 +654,9 @@ class LocalStackHarness(ScenarioHarness):
         return MonitorAction(
             instance_id=instance["InstanceId"],
             state=instance["State"]["Name"],
-            metadata={key: value for key, value in metadata.items() if value is not None},
+            metadata={
+                key: value for key, value in metadata.items() if value is not None
+            },
         )
 
     def _mutagen_runner(
@@ -768,9 +763,7 @@ class LocalStackHarness(ScenarioHarness):
         test_mode = os.environ.get("MOONDOCK_TEST_MODE") == "1"
         ignore_patterns = defaults.get("ignore", [])
         include_vcs = defaults.get("include_vcs", False)
-        ssh_wrapper_dir = os.environ.get(
-            "MOONDOCK_DIR", str(Path.home() / ".moondock")
-        )
+        ssh_wrapper_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
 
         sessions_for_instance = self._mutagen_sessions.setdefault(instance_id, [])
 
@@ -889,9 +882,7 @@ class LocalStackHarness(ScenarioHarness):
             )
         )
 
-    def _start_http_services(
-        self, instance_id: str, metadata: dict[str, Any]
-    ) -> None:
+    def _start_http_services(self, instance_id: str, metadata: dict[str, Any]) -> None:
         """Start HTTP port-forwarding services for the instance."""
         if self.services is None:
             return
