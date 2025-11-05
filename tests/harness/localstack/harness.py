@@ -649,23 +649,27 @@ class LocalStackHarness(ScenarioHarness):
             metadata={key: value for key, value in metadata.items() if value is not None},
         )
 
-    def _run_mutagen_command(self, arguments, timeout: float) -> MutagenCommandResult:
-        """Execute a Mutagen CLI command.
+    def _run_mutagen_command(
+        self, arguments: list[str], timeout: float
+    ) -> MutagenCommandResult:
+        """Execute a Mutagen CLI command with timeout enforcement."""
 
-        Parameters
-        ----------
-        arguments : list[str]
-            CLI arguments for the Mutagen invocation.
-        timeout : float
-            Timeout budget supplied by the timeout manager.
-
-        Returns
-        -------
-        MutagenCommandResult
-            Captured command result.
-        """
-        del arguments, timeout
-        return MutagenCommandResult(exit_code=0, stdout="", stderr="")
+        cmd = ["mutagen", *arguments]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+            return MutagenCommandResult(
+                exit_code=result.returncode,
+                stdout=result.stdout,
+                stderr=result.stderr,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise TimeoutError(f"Mutagen command timed out: {' '.join(cmd)}") from exc
 
     def _start_http_services(
         self, instance_id: str, metadata: dict[str, Any]
