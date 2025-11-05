@@ -90,6 +90,8 @@ class MonitorController:
         Diagnostics sink for telemetry events.
     _ssh_pool : SSHContainerPool
         Pool handling SSH container port allocations.
+    _container_manager : Any
+        Manager responsible for provisioning SSH containers.
     _action_provider : ActionProvider
         Callable supplying discovered instance actions.
     _poll_interval_sec : float
@@ -98,6 +100,8 @@ class MonitorController:
         Maximum allowed duration per poll iteration.
     _force_terminate : Callable[[], None] | None
         Optional callback invoked when forced termination required.
+    _http_ready_callback : Callable[[str, dict[str, Any]], None] | None
+        Optional callback for HTTP readiness handling.
     _thread : threading.Thread | None
         Worker thread executing monitor loop.
     _stop_event : threading.Event
@@ -119,10 +123,12 @@ class MonitorController:
         timeout_manager: TimeoutManager,
         diagnostics: DiagnosticsCollector,
         ssh_pool: SSHContainerPool,
+        container_manager: Any,
         action_provider: ActionProvider,
         poll_interval_sec: float = 0.5,
         watchdog_budget_sec: float = 10.0,
         force_terminate: Callable[[], None] | None = None,
+        http_ready_callback: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> None:
         """Initialize controller dependencies.
 
@@ -138,6 +144,8 @@ class MonitorController:
             Diagnostics collector for telemetry.
         ssh_pool : SSHContainerPool
             Pool managing SSH container allocations.
+        container_manager : Any
+            Manager responsible for provisioning SSH containers.
         action_provider : ActionProvider
             Callable returning discovered instance actions.
         poll_interval_sec : float, optional
@@ -146,16 +154,20 @@ class MonitorController:
             Maximum allowed duration per poll iteration.
         force_terminate : Callable[[], None] | None, optional
             Callback invoked if shutdown exceeds timeout.
+        http_ready_callback : Callable[[str, dict[str, Any]], None] | None, optional
+            Optional callback invoked when HTTP services should be initialised.
         """
         self._event_bus = event_bus
         self._resource_registry = resource_registry
         self._timeout_manager = timeout_manager
         self._diagnostics = diagnostics
         self._ssh_pool = ssh_pool
+        self._container_manager = container_manager
         self._action_provider = action_provider
         self._poll_interval_sec = poll_interval_sec
         self._watchdog_budget_sec = watchdog_budget_sec
         self._force_terminate = force_terminate
+        self._http_ready_callback = http_ready_callback
 
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -313,8 +325,28 @@ class MonitorController:
             if action.instance_id in self._seen_instances:
                 continue
 
+            self._diagnostics.record(
+                "monitor",
+                "instance-detected",
+                {"instance_id": action.instance_id, **action.metadata},
+            )
+            self._publish_event(
+                "instance-ready",
+                action.instance_id,
+                {"state": action.state, **action.metadata},
+            )
+
             try:
-                port = self._ssh_pool.allocate_port(action.instance_id)
+                metadata = self._provision_instance(action)
+            except PortExhaustedError as exc:
+                self._statistics.provisioning_failures += 1
+                self._diagnostics.record(
+                    "monitor",
+                    "port-exhausted",
+                    {"instance_id": action.instance_id, "error": str(exc)},
+                )
+                self._publish_error(action.instance_id, exc)
+                continue
             except Exception as exc:  # pylint: disable=broad-except
                 self._statistics.provisioning_failures += 1
                 self._diagnostics.record(
@@ -322,18 +354,11 @@ class MonitorController:
                     "provision-error",
                     {"instance_id": action.instance_id, "error": str(exc)},
                 )
-                self._event_bus.publish(
-                    Event(
-                        type="monitor-error",
-                        instance_id=action.instance_id,
-                        data={"error": str(exc)},
-                    )
-                )
+                self._publish_error(action.instance_id, exc)
                 continue
 
             self._seen_instances.add(action.instance_id)
             self._statistics.instances_detected += 1
-            metadata = {"port": port, **action.metadata}
             self._emit_sequence(action.instance_id, metadata)
 
     def _emit_sequence(self, instance_id: str, metadata: dict[str, Any]) -> None:
@@ -346,24 +371,98 @@ class MonitorController:
         metadata : dict[str, Any]
             Event payload metadata.
         """
-        self._event_bus.publish(
-            Event(
-                type="instance-ready",
-                instance_id=instance_id,
-                data=metadata,
+        ssh_metadata = dict(metadata)
+        ssh_metadata.setdefault("ssh_ready_ts", time.time())
+        self._publish_event("ssh-ready", instance_id, ssh_metadata)
+
+        http_metadata = dict(ssh_metadata)
+        if self._http_ready_callback is not None:
+            try:
+                self._http_ready_callback(instance_id, http_metadata)
+            except Exception as exc:  # pylint: disable=broad-except
+                self._diagnostics.record(
+                    "monitor",
+                    "http-start-error",
+                    {"instance_id": instance_id, "error": str(exc)},
+                )
+                self._publish_error(instance_id, exc)
+                return
+
+        http_metadata.setdefault("http_ready_ts", time.time())
+        self._publish_event("http-ready", instance_id, http_metadata)
+
+    def _provision_instance(self, action: MonitorAction) -> dict[str, Any]:
+        """Provision SSH container and return metadata for events."""
+        port: int | None = None
+        allocated = False
+        try:
+            port = self._ssh_pool.allocate_port(action.instance_id)
+            allocated = True
+        except PortExhaustedError:
+            raise
+
+        key_file: Path | None = None
+        try:
+            port_result, key_file = self._container_manager.create_instance_container(
+                action.instance_id,
+                host_port=port,
             )
+        except Exception:
+            if allocated and port is not None:
+                try:
+                    self._ssh_pool.release_port(action.instance_id, port)
+                except Exception:  # pragma: no cover - defensive cleanup
+                    logger.debug("Failed to release port after provisioning error")
+            raise
+
+        if port_result is None and allocated and port is not None:
+            try:
+                self._ssh_pool.release_port(action.instance_id, port)
+            except Exception:  # pragma: no cover
+                logger.debug("Failed to release unused port")
+        else:
+            port = port_result
+
+        container, _, _ = self._container_manager.instance_map.get(
+            action.instance_id,
+            (None, None, None),
         )
+        container_id = getattr(container, "id", action.instance_id)
+
+        record_metadata = {
+            "key_file": str(key_file) if key_file else None,
+            "image_id": action.metadata.get("image_id"),
+        }
+        self._ssh_pool.track_container(
+            container_id=container_id,
+            instance_id=action.instance_id,
+            port=port,
+            metadata={k: v for k, v in record_metadata.items() if v is not None},
+        )
+
+        metadata: dict[str, Any] = {
+            **action.metadata,
+            "port": port,
+            "key_file": str(key_file) if key_file else None,
+            "container_id": container_id,
+        }
+        return metadata
+
+    def _publish_event(
+        self, event_type: str, instance_id: str, data: dict[str, Any]
+    ) -> None:
+        """Publish typed event with diagnostics side effects."""
+        event = Event(type=event_type, instance_id=instance_id, data=data)
+        self._event_bus.publish(event)
+        diag_payload = {"instance_id": instance_id, **data}
+        self._diagnostics.record("monitor-event", event_type, diag_payload)
+
+    def _publish_error(self, instance_id: str, exc: Exception) -> None:
+        """Publish monitor-error event for a failure."""
         self._event_bus.publish(
             Event(
-                type="ssh-ready",
+                type="monitor-error",
                 instance_id=instance_id,
-                data=metadata,
-            )
-        )
-        self._event_bus.publish(
-            Event(
-                type="http-ready",
-                instance_id=instance_id,
-                data=metadata,
+                data={"error": str(exc)},
             )
         )

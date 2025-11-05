@@ -403,16 +403,22 @@ def step_localstack_is_healthy(context: Context) -> None:
     context : Context
         Behave context object
     """
+    harness_services = getattr(getattr(context, "harness", None), "services", None)
+
     wait_for_localstack_health()
 
-    ssh_port = 2222
-    if not wait_for_ssh_ready("localhost", ssh_port, timeout=30):
-        logger.warning(
-            f"LocalStack SSH daemon not ready on port {ssh_port} after 30s - "
-            f"tests may fail due to SSH connection timeouts"
-        )
+    if harness_services is None:
+        ssh_port = 2222
+        if not wait_for_ssh_ready("localhost", ssh_port, timeout=30):
+            logger.warning(
+                f"LocalStack SSH daemon not ready on port {ssh_port} after 30s - "
+                f"tests may fail due to SSH connection timeouts"
+            )
 
-    context.container_manager = EC2ContainerManager()
+    if harness_services is not None:
+        context.container_manager = harness_services.container_manager
+    else:
+        context.container_manager = EC2ContainerManager()
     ec2_client = create_localstack_ec2_client()
 
     try:
@@ -444,10 +450,8 @@ def step_localstack_is_healthy(context: Context) -> None:
     except Exception as e:
         logger.warning(f"Failed to clean LocalStack: {e}")
 
-    if hasattr(context, "harness"):
-        context.harness.services.configuration_env.set(
-            "MOONDOCK_TARGET_INSTANCE_IDS", ""
-        )
+    if harness_services is not None:
+        harness_services.configuration_env.set("MOONDOCK_TARGET_INSTANCE_IDS", "")
     else:
         os.environ["MOONDOCK_TARGET_INSTANCE_IDS"] = ""
     context.target_instance_ids = set()
@@ -462,21 +466,26 @@ def step_localstack_is_healthy(context: Context) -> None:
     )
     logger.info("Registered test Ubuntu AMI in LocalStack")
 
-    stop_event = threading.Event()
+    if harness_services is not None:
+        context.monitor_thread = None
+        context.monitor_stop_event = None
+        logger.info("LocalStackHarness monitor controller active; skipping legacy monitor thread")
+    else:
+        stop_event = threading.Event()
 
-    tui_queue = get_tui_update_queue()
-    if tui_queue is not None:
-        logger.info("Found TUI update queue, will use for instance registration")
+        tui_queue = get_tui_update_queue()
+        if tui_queue is not None:
+            logger.info("Found TUI update queue, will use for instance registration")
 
-    monitor_thread = threading.Thread(
-        target=monitor_localstack_instances,
-        args=(context.container_manager, stop_event, context, tui_queue),
-        daemon=True,
-    )
-    monitor_thread.start()
-    context.monitor_thread = monitor_thread
-    context.monitor_stop_event = stop_event
-    logger.info("Started LocalStack instance monitor thread")
+        monitor_thread = threading.Thread(
+            target=monitor_localstack_instances,
+            args=(context.container_manager, stop_event, context, tui_queue),
+            daemon=True,
+        )
+        monitor_thread.start()
+        context.monitor_thread = monitor_thread
+        context.monitor_stop_event = stop_event
+        logger.info("Started LocalStack instance monitor thread")
 
 
 @then(

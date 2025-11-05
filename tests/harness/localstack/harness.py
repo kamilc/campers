@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -31,6 +32,8 @@ from tests.harness.services.resource_registry import ResourceRegistry
 from tests.harness.services.ssh_container_pool import SSHContainerPool
 from tests.harness.services.timeout_manager import TimeoutManager
 from tests.harness.utils.port_allocator import PortAllocator
+
+from features.steps.docker_manager import EC2ContainerManager
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +98,8 @@ class LocalStackServiceContainer:
         Instance monitor controller.
     port_allocator : PortAllocator
         General purpose port allocator for auxiliary services.
+    container_manager : EC2ContainerManager
+        Docker container manager responsible for SSH containers.
     """
 
     configuration_env: ConfigurationEnv
@@ -107,6 +112,7 @@ class LocalStackServiceContainer:
     mutagen_manager: MutagenSessionManager
     monitor_controller: MonitorController
     port_allocator: PortAllocator
+    container_manager: EC2ContainerManager
 
 
 class LocalStackHarness(ScenarioHarness):
@@ -141,6 +147,14 @@ class LocalStackHarness(ScenarioHarness):
             max_containers_per_instance=MAX_CONTAINERS_PER_INSTANCE,
         )
         port_allocator = PortAllocator()
+        container_manager = EC2ContainerManager()
+
+        resource_registry.register(
+            kind="ssh-container-manager",
+            handle=container_manager,
+            dispose_fn=lambda manager: manager.cleanup_all(),
+            label="ssh-container-manager",
+        )
 
         mutagen_manager = MutagenSessionManager(
             timeout_manager=timeout_manager,
@@ -156,7 +170,9 @@ class LocalStackHarness(ScenarioHarness):
             timeout_manager=timeout_manager,
             diagnostics=diagnostics,
             ssh_pool=ssh_pool,
+            container_manager=container_manager,
             action_provider=self._describe_localstack_instances,
+            http_ready_callback=self._start_http_services,
         )
 
         self.services = LocalStackServiceContainer(
@@ -170,10 +186,15 @@ class LocalStackHarness(ScenarioHarness):
             mutagen_manager=mutagen_manager,
             monitor_controller=monitor_controller,
             port_allocator=port_allocator,
+            container_manager=container_manager,
         )
 
         diagnostics.record(
             "localstack-harness", "ready", {"scenario": self.scenario.name}
+        )
+
+        diagnostics.record(
+            "monitor", "starting", {"scenario": self.scenario.name}
         )
 
         monitor_controller.start()
@@ -184,6 +205,12 @@ class LocalStackHarness(ScenarioHarness):
             return CleanupSummary()
 
         summary = CleanupSummary()
+
+        self.services.diagnostics.record(
+            "localstack-harness",
+            "cleanup-start",
+            {"scenario": self.scenario.name},
+        )
 
         try:
             self.services.monitor_controller.pause()
@@ -217,7 +244,18 @@ class LocalStackHarness(ScenarioHarness):
                 self.scenario.name
             )
             diagnostics_path = scenario_dir / "diagnostics.json"
-            diagnostics_path.write_text(str(self.services.diagnostics.events))
+            diagnostics_payload = [
+                {
+                    "event_type": event.event_type,
+                    "description": event.description,
+                    "details": event.details,
+                    "timestamp": event.timestamp,
+                }
+                for event in self.services.diagnostics.events
+            ]
+            diagnostics_path.write_text(
+                json.dumps(diagnostics_payload, indent=2, default=str)
+            )
             self.services.artifacts.cleanup(preserve_on_failure=scenario_failed)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("Artifact cleanup failed: %s", exc, exc_info=True)
@@ -228,6 +266,17 @@ class LocalStackHarness(ScenarioHarness):
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("Environment restoration failed: %s", exc, exc_info=True)
             summary.add_error(f"environment restoration failed: {exc}")
+
+        self.services.diagnostics.record(
+            "localstack-harness",
+            "cleanup-complete",
+            {
+                "scenario": self.scenario.name,
+                "errors": len(summary.errors),
+            },
+        )
+
+        self.services = None
 
         return summary
 
@@ -290,3 +339,41 @@ class LocalStackHarness(ScenarioHarness):
         """
         del arguments, timeout
         return MutagenCommandResult(exit_code=0, stdout="", stderr="")
+
+    def _start_http_services(
+        self, instance_id: str, metadata: dict[str, Any]
+    ) -> None:
+        """Start HTTP port-forwarding services for the instance."""
+        if self.services is None:
+            return
+
+        self.services.diagnostics.record(
+            "localstack-http",
+            "starting",
+            {"instance_id": instance_id},
+        )
+
+        try:
+            from features.steps.port_forwarding_steps import (
+                start_http_servers_for_all_configured_ports,
+            )
+        except ImportError:
+            logger.debug("Port forwarding steps not available for HTTP startup")
+            return
+
+        try:
+            start_http_servers_for_all_configured_ports(self.context)
+            metadata.setdefault("http_ready", True)
+            metadata.setdefault("http_host", "localhost")
+            self.services.diagnostics.record(
+                "localstack-http",
+                "ready",
+                {"instance_id": instance_id},
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            self.services.diagnostics.record(
+                "localstack-http",
+                "error",
+                {"instance_id": instance_id, "error": str(exc)},
+            )
+            raise

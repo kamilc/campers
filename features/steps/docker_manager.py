@@ -200,13 +200,23 @@ class EC2ContainerManager:
             )
             return key_file
 
-    def create_instance_container(self, instance_id: str) -> tuple[int | None, Path]:
+    def create_instance_container(
+        self, instance_id: str, host_port: int | None = None
+    ) -> tuple[int | None, Path]:
         """Spin up SSH container for EC2 instance.
 
         Parameters
         ----------
         instance_id : str
             EC2 instance ID from LocalStack
+
+        Parameters
+        ----------
+        instance_id : str
+            EC2 instance ID from LocalStack
+        host_port : int | None, optional
+            Preferred host port for SSH. When ``None`` the manager allocates the
+            next sequential port.
 
         Returns
         -------
@@ -233,10 +243,18 @@ class EC2ContainerManager:
                 f"Creating SSH container for {instance_id} WITHOUT port mapping (blocked)"
             )
         else:
-            port = self.next_port
-            self.next_port += 1
+            if host_port is not None:
+                port = host_port
+                logger.info(
+                    f"Creating SSH container for {instance_id} using provided port {port}"
+                )
+            else:
+                port = self.next_port
+                self.next_port += 1
+                logger.info(
+                    f"Creating SSH container for {instance_id} on port {port}"
+                )
             ports = {"2222/tcp": port}
-            logger.info(f"Creating SSH container for {instance_id} on port {port}")
 
         key_file = self.generate_ssh_key(instance_id)
         pub_key_file = Path(str(key_file) + ".pub")

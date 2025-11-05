@@ -363,13 +363,6 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     """Setup executed before each scenario."""
     import boto3
 
-    if "dry_run" in scenario.tags:
-        from tests.harness.dry_run import DryRunHarness
-
-        context.harness = DryRunHarness(context, scenario)
-        context.harness.setup()
-        logger.info(f"Initialized DryRunHarness for scenario: {scenario.name}")
-
     timeout_seconds = SCENARIO_TIMEOUT_SECONDS
     for tag in scenario.tags:
         if tag.startswith("timeout_"):
@@ -399,13 +392,20 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                 "Failed to start LocalStack container. Please ensure Docker is running."
             )
 
-        from features.steps.localstack_steps import wait_for_localstack_health
+        from tests.harness.localstack import LocalStackHarness
 
-        try:
-            wait_for_localstack_health(timeout=60, interval=2)
-            logger.info("LocalStack health check passed, scenario can proceed")
-        except TimeoutError as e:
-            raise RuntimeError(f"LocalStack failed health check: {e}")
+        context.harness = LocalStackHarness(context, scenario)
+        context.harness.setup()
+        logger.info(
+            f"Initialized LocalStackHarness for scenario: {scenario.name}"
+        )
+
+    elif is_dry_run:
+        from tests.harness.dry_run import DryRunHarness
+
+        context.harness = DryRunHarness(context, scenario)
+        context.harness.setup()
+        logger.info(f"Initialized DryRunHarness for scenario: {scenario.name}")
 
     if is_dry_run and not is_localstack_scenario:
         context.use_direct_instantiation = True

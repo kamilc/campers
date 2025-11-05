@@ -23,8 +23,8 @@ class SSHContainerRecord:
         EC2 instance identifier associated with the container.
     container_id : str
         Docker container identifier.
-    port : int
-        Forwarded SSH port on the host machine.
+    port : int | None
+        Forwarded SSH port on the host machine (``None`` when SSH is blocked).
     created_at : float
         Creation timestamp in seconds since the epoch.
     metadata : dict[str, Any]
@@ -33,7 +33,7 @@ class SSHContainerRecord:
 
     instance_id: str
     container_id: str
-    port: int
+    port: int | None
     created_at: float = field(default_factory=time.time)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -150,7 +150,7 @@ class SSHContainerPool:
         self,
         container_id: str,
         instance_id: str,
-        port: int,
+        port: int | None,
         metadata: dict[str, Any] | None = None,
     ) -> SSHContainerRecord:
         """Track container metadata for diagnostics and cleanup.
@@ -193,7 +193,8 @@ class SSHContainerPool:
             record = self._containers.pop(container_id, None)
             if record is None:
                 return
-            self.release_port(record.instance_id, record.port)
+            if record.port is not None:
+                self.release_port(record.instance_id, record.port)
 
     def list_containers(self) -> list[SSHContainerRecord]:
         """Return a snapshot of tracked container metadata.
