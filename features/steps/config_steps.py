@@ -1,3 +1,5 @@
+import os
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -31,6 +33,26 @@ def step_config_file_with_defaults_no_path(context) -> None:
     }
 
 
+def _write_temp_config(context) -> str:
+    """Create a temporary config file using harness artifacts when available."""
+
+    harness_services = getattr(getattr(context, "harness", None), "services", None)
+    yaml_content = yaml.dump(context.config_data)
+
+    if harness_services is not None:
+        config_file = harness_services.artifacts.create_temp_file(
+            "moondock.yaml", content=yaml_content
+        )
+        harness_services.configuration_env.set("MOONDOCK_CONFIG", str(config_file))
+        return str(config_file)
+
+    fd, path = tempfile.mkstemp(prefix="moondock-config-", suffix=".yaml")
+    with os.fdopen(fd, "w") as tmp_file:
+        tmp_file.write(yaml_content)
+    os.environ["MOONDOCK_CONFIG"] = path
+    return path
+
+
 @given('machine "{machine_name}" with instance_type "{instance_type}"')
 def step_machine_with_instance_type(
     context, machine_name: str, instance_type: str
@@ -42,25 +64,21 @@ def step_machine_with_instance_type(
 
 @when("I load configuration without machine name")
 def step_load_config_without_machine(context) -> None:
-    config_file = context.harness.services.artifacts.create_temp_file(
-        "moondock.yaml", content=yaml.dump(context.config_data)
-    )
-    context.temp_config_file = str(config_file)
+    config_path = _write_temp_config(context)
+    context.temp_config_file = config_path
 
     loader = ConfigLoader()
-    context.yaml_config = loader.load_config(context.temp_config_file)
+    context.yaml_config = loader.load_config(config_path)
     context.merged_config = loader.get_machine_config(context.yaml_config)
 
 
 @when('I load configuration for machine "{machine_name}"')
 def step_load_config_for_machine(context, machine_name: str) -> None:
-    config_file = context.harness.services.artifacts.create_temp_file(
-        "moondock.yaml", content=yaml.dump(context.config_data)
-    )
-    context.temp_config_file = str(config_file)
+    config_path = _write_temp_config(context)
+    context.temp_config_file = config_path
 
     loader = ConfigLoader()
-    context.yaml_config = loader.load_config(context.temp_config_file)
+    context.yaml_config = loader.load_config(config_path)
     context.merged_config = loader.get_machine_config(context.yaml_config, machine_name)
 
 
@@ -210,9 +228,14 @@ def step_config_file_exists_at(context, path: str) -> None:
 
 @when("I load configuration without path")
 def step_load_configuration_without_path(context) -> None:
-    context.harness.services.configuration_env.set(
-        "MOONDOCK_CONFIG", context.env_config_path
-    )
+    harness_services = getattr(getattr(context, "harness", None), "services", None)
+
+    if harness_services is not None:
+        harness_services.configuration_env.set(
+            "MOONDOCK_CONFIG", context.env_config_path
+        )
+    else:
+        os.environ["MOONDOCK_CONFIG"] = context.env_config_path
 
     loader = ConfigLoader()
     context.yaml_config = loader.load_config()
