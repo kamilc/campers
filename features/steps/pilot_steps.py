@@ -399,12 +399,19 @@ def run_tui_test_with_machine(
     """
     timeout_triggered = threading.Event()
     test_completed = threading.Event()
+    loop_holder: dict[str, asyncio.AbstractEventLoop] = {}
+    app_holder: dict[str, MoondockTUI] = {}
 
     def timeout_handler():
         timeout_triggered.set()
         logger.error(
             f"[TIMEOUT-ENFORCER] Test exceeded {max_wait}s timeout - marking as failed"
         )
+        loop = loop_holder.get("loop")
+        app = app_holder.get("app")
+
+        if loop and app:
+            loop.call_soon_threadsafe(app.exit)
 
     timer = threading.Timer(max_wait, timeout_handler)
 
@@ -413,6 +420,7 @@ def run_tui_test_with_machine(
 
         logger.info("=== TUI TEST START === (machine: %s)", machine_name)
         logger.info(f"[TIMEOUT-ENFORCER] Starting test with {max_wait}s timeout")
+        loop_holder["loop"] = asyncio.get_running_loop()
         timer.start()
 
         original_values = setup_test_environment(config_path, behave_context)
@@ -445,6 +453,7 @@ def run_tui_test_with_machine(
                         run_kwargs={"machine_name": machine_name, "json_output": False},
                         update_queue=update_queue,
                     )
+                    app_holder["app"] = app
 
                     try:
                         async with asyncio.timeout(max_wait):
@@ -507,6 +516,8 @@ def run_tui_test_with_machine(
             test_completed.set()
             _tui_update_queue = None
             restore_environment(original_values, behave_context)
+            app_holder.pop("app", None)
+            loop_holder.pop("loop", None)
 
     try:
         test_result = run_async_test(run_tui_test)

@@ -10,6 +10,7 @@ from unittest.mock import patch
 from behave.runner import Context
 
 from features.steps.docker_helpers import create_synced_directories
+from moondock.portforward import PortForwardManager
 
 logger = logging.getLogger(__name__)
 
@@ -352,6 +353,27 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
         try:
             from moondock.sync import MutagenManager
 
+            def mock_validate_key_file(self, key_file: str) -> None:
+                logger.debug("Mocked: validate_key_file skipped for %s", key_file)
+
+            def mock_create_tunnels(
+                self,
+                ports: list[int],
+                host: str,
+                key_file: str,
+                username: str = "ubuntu",
+                ssh_port: int = 22,
+            ) -> None:
+                for port in ports:
+                    logging.info("Creating SSH tunnel for port %s...", port)
+                    logging.info(
+                        "SSH tunnel established: localhost:%s -> remote:%s", port, port
+                    )
+
+            def mock_stop_all_tunnels(self) -> None:
+                for port in getattr(self, "ports", []):
+                    logging.info("Stopping SSH tunnel for port %s...", port)
+
             with (
                 patch.object(
                     MutagenManager, "check_mutagen_installed", mock_check_mutagen
@@ -364,6 +386,15 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 ),
                 patch.object(
                     MutagenManager, "wait_for_initial_sync", mock_wait_for_sync
+                ),
+                patch.object(
+                    PortForwardManager, "validate_key_file", mock_validate_key_file
+                ),
+                patch.object(
+                    PortForwardManager, "create_tunnels", mock_create_tunnels
+                ),
+                patch.object(
+                    PortForwardManager, "stop_all_tunnels", mock_stop_all_tunnels
                 ),
             ):
                 yield
