@@ -10,6 +10,7 @@ from pathlib import Path
 from behave.model import Scenario
 from behave.runner import Context
 from moto import mock_aws
+from features.steps.diagnostics_utils import collect_diagnostics
 
 logger = logging.getLogger(__name__)
 
@@ -275,6 +276,7 @@ def before_all(context: Context) -> None:
 
 def before_scenario(context: Context, scenario: Scenario) -> None:
     """Setup executed before each scenario."""
+    context.diagnostic_artifacts = []
     import boto3
 
     timeout_seconds = SCENARIO_TIMEOUT_SECONDS
@@ -643,6 +645,22 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
 def after_scenario(context: Context, scenario: Scenario) -> None:
     """Cleanup executed after each scenario."""
+    diagnostics_paths = getattr(context, "diagnostic_artifacts", [])
+
+    if scenario.status == "failed":
+        if not diagnostics_paths:
+            collect_diagnostics(context, reason="scenario-failure")
+            diagnostics_paths = getattr(context, "diagnostic_artifacts", [])
+
+        for artifact_path in diagnostics_paths:
+            logger.info(
+                "Diagnostics collected for failed scenario '%s': %s",
+                scenario.name,
+                artifact_path,
+            )
+
+    context.diagnostic_artifacts = []
+
     if hasattr(context, "harness"):
         context.harness.cleanup()
         logger.info(f"Cleaned up new harness for scenario: {scenario.name}")
