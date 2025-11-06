@@ -26,6 +26,8 @@ class ArtifactManager:
             base_dir = Path.cwd() / "tmp" / "behave"
         self.base_dir = Path(base_dir)
         self.scenario_dir: Path | None = None
+        self.scenario_slug: str | None = None
+        self.run_id: str | None = None
 
     def create_scenario_dir(self, scenario_name: str) -> Path:
         """Create a scenario-specific artifact directory.
@@ -40,9 +42,20 @@ class ArtifactManager:
         Path
             Path to created scenario directory
         """
+        from datetime import datetime, timezone
+
         scenario_id = scenario_name.lower().replace(" ", "-").replace("/", "-")
-        self.scenario_dir = self.base_dir / scenario_id
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+
+        root_dir = self.base_dir / scenario_id
+        root_dir.mkdir(parents=True, exist_ok=True)
+
+        self.scenario_dir = root_dir / run_id
         self.scenario_dir.mkdir(parents=True, exist_ok=True)
+
+        self.scenario_slug = scenario_id
+        self.run_id = run_id
+
         logger.debug(f"Created artifact directory: {self.scenario_dir}")
         return self.scenario_dir
 

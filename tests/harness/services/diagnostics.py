@@ -1,6 +1,9 @@
 """Diagnostics collection for debugging test scenarios."""
 
 import logging
+import json
+from pathlib import Path
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -33,7 +36,9 @@ class DiagnosticsCollector:
     """Captures structured events for post-scenario analysis.
 
     Stores diagnostic events in-memory and optionally outputs to console
-    for debugging.
+    for debugging. When a log path is provided, events are appended to disk
+    immediately so that diagnostics remain available even if the scenario
+    terminates unexpectedly.
 
     Attributes
     ----------
@@ -43,9 +48,13 @@ class DiagnosticsCollector:
         Whether to output to console during collection
     """
 
-    def __init__(self, verbose: bool = False) -> None:
+    def __init__(
+        self, verbose: bool = False, log_path: Path | None = None
+    ) -> None:
         self.events: list[DiagnosticEvent] = []
         self.verbose = verbose
+        self._log_path = Path(log_path) if log_path else None
+        self._log_lock = threading.Lock()
 
     def record(
         self, event_type: str, description: str, details: dict[str, Any] | None = None
@@ -71,6 +80,19 @@ class DiagnosticsCollector:
         if self.verbose:
             logger.debug(f"[{event_type}] {description} | details: {event.details}")
 
+        if self._log_path is not None:
+            payload = {
+                "event_type": event.event_type,
+                "description": event.description,
+                "details": event.details,
+                "timestamp": event.timestamp,
+            }
+            line = json.dumps(payload, default=str)
+            with self._log_lock:
+                self._log_path.parent.mkdir(parents=True, exist_ok=True)
+                with self._log_path.open("a", encoding="utf-8") as log_file:
+                    log_file.write(line + "\n")
+
     def clear(self) -> None:
         """Clear all recorded events."""
         self.events.clear()
@@ -89,3 +111,7 @@ class DiagnosticsCollector:
             Matching events
         """
         return [e for e in self.events if e.event_type == event_type]
+
+    def set_log_path(self, log_path: Path | None) -> None:
+        """Update the on-disk log path used for streaming diagnostics."""
+        self._log_path = Path(log_path) if log_path else None

@@ -39,21 +39,22 @@ class TestArtifactManagerScenarioDir:
         scenario_dir = manager.create_scenario_dir("test scenario")
 
         assert scenario_dir.exists()
-        assert scenario_dir.parent == temp_base_dir
+        assert scenario_dir.parent.parent == temp_base_dir
+        assert scenario_dir.parent.name == "test-scenario"
 
     def test_scenario_dir_sanitized(self, temp_base_dir: Path) -> None:
         """Test scenario name is sanitized."""
         manager = ArtifactManager(base_dir=temp_base_dir)
         scenario_dir = manager.create_scenario_dir("test scenario name")
 
-        assert scenario_dir.name == "test-scenario-name"
+        assert scenario_dir.parent.name == "test-scenario-name"
 
     def test_scenario_dir_normalized(self, temp_base_dir: Path) -> None:
         """Test scenario name with slashes is normalized."""
         manager = ArtifactManager(base_dir=temp_base_dir)
         scenario_dir = manager.create_scenario_dir("feature/test scenario")
 
-        assert "/" not in scenario_dir.name
+        assert "/" not in scenario_dir.parent.name
 
     def test_scenario_dir_stored(self, temp_base_dir: Path) -> None:
         """Test scenario directory is stored in manager."""
@@ -118,6 +119,8 @@ class TestArtifactManagerCleanup:
         manager.cleanup(preserve_on_failure=True)
 
         assert scenario_dir.exists()
+        assert manager.run_id is not None
+        assert manager.scenario_slug == "test-scenario"
 
     def test_cleanup_deletes_on_success(self, temp_base_dir: Path) -> None:
         """Test cleanup deletes artifacts when preserve_on_failure=False."""

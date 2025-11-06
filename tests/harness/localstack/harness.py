@@ -164,9 +164,12 @@ class LocalStackHarness(ScenarioHarness):
         resource_registry = ResourceRegistry()
         timeout_manager = TimeoutManager(budget_seconds=DEFAULT_TIMEOUT_BUDGET)
         event_bus = EventBus()
-        diagnostics = DiagnosticsCollector(verbose=False)
         artifacts = ArtifactManager()
-        artifacts.create_scenario_dir(self.scenario.name)
+        scenario_dir = artifacts.create_scenario_dir(self.scenario.name)
+        diagnostics_log_path = scenario_dir / "diagnostics.log"
+        diagnostics = DiagnosticsCollector(
+            verbose=False, log_path=diagnostics_log_path
+        )
         ssh_pool = SSHContainerPool(
             base_port=SSH_PORT_BASE,
             max_containers_per_instance=MAX_CONTAINERS_PER_INSTANCE,
@@ -428,10 +431,21 @@ class LocalStackHarness(ScenarioHarness):
         return {"preserved": scenario_failed}
 
     def _teardown_export_diagnostics(self, summary: CleanupSummary) -> dict[str, Any]:
-        diagnostics_dir = self.services.artifacts.base_dir / "_diagnostics"
+        from datetime import datetime, timezone
+
+        artifacts = self.services.artifacts
+        scenario_slug = getattr(artifacts, "scenario_slug", None) or self.scenario.name.lower().replace(" ", "-").replace("/", "-")
+        run_id = getattr(artifacts, "run_id", None) or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+
+        diagnostics_dir = artifacts.base_dir / "_diagnostics" / scenario_slug
         diagnostics_dir.mkdir(parents=True, exist_ok=True)
-        scenario_id = self.scenario.name.lower().replace(" ", "-").replace("/", "-")
-        diagnostics_path = diagnostics_dir / f"{scenario_id}.json"
+
+        diagnostics_path = diagnostics_dir / f"{run_id}.json"
+        live_log_path = None
+        if artifacts.scenario_dir is not None:
+            candidate = artifacts.scenario_dir / "diagnostics.log"
+            if candidate.exists():
+                live_log_path = str(candidate)
 
         payload = {
             "scenario": self.scenario.name,
@@ -448,6 +462,9 @@ class LocalStackHarness(ScenarioHarness):
                 for event in self.services.diagnostics.events
             ],
         }
+
+        if live_log_path:
+            payload["event_log_path"] = live_log_path
 
         diagnostics_path.write_text(json.dumps(payload, indent=2, default=str))
         return {"path": str(diagnostics_path)}
