@@ -198,7 +198,7 @@ def create_synced_directories(context: Context) -> None:
     logger.debug(
         f"create_synced_directories called - has instance_id: {hasattr(context, 'instance_id')}"
     )
-    if not hasattr(context, "instance_id"):
+    if not hasattr(context, "instance_id") or context.instance_id in (None, ""):
         logger.debug("No instance_id - skipping directory creation")
         return
 

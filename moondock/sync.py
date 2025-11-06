@@ -260,12 +260,34 @@ Host {host}
                 "ssh not found. Please install OpenSSH or add it to your PATH."
             )
 
-        add_host_cmd = [ssh_path, f"{username}@{host}", "echo", "SSH_OK"]
+        add_host_cmd = [
+            ssh_path,
+            "-F",
+            str(moondock_config_path),
+            "-o",
+            "IdentitiesOnly=yes",
+            "-i",
+            str(temp_key_path.resolve()),
+            f"{username}@{host}",
+            "echo",
+            "SSH_OK",
+        ]
         logger.debug("Testing SSH connection: %s", " ".join(add_host_cmd))
+
+        ssh_env = os.environ.copy()
+        ssh_env.pop("SSH_AUTH_SOCK", None)
+        ssh_env["MUTAGEN_SSH_CONFIG"] = str(moondock_config_path)
+        ssh_env["MUTAGEN_SSH_ARGS"] = (
+            f"-oIdentitiesOnly=yes -i {str(temp_key_path.resolve())}"
+        )
 
         try:
             host_result = subprocess.run(
-                add_host_cmd, capture_output=True, text=True, timeout=35
+                add_host_cmd,
+                capture_output=True,
+                text=True,
+                timeout=35,
+                env=ssh_env,
             )
             logger.debug("SSH test exit code: %d", host_result.returncode)
 
@@ -283,7 +305,13 @@ Host {host}
         logger.debug("Mutagen create command: %s", " ".join(cmd))
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=ssh_env,
+            )
         except subprocess.TimeoutExpired as e:
             logger.error("Mutagen sync create timed out after 120 seconds")
             if hasattr(e, "stdout") and e.stdout:

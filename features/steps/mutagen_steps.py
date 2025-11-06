@@ -195,6 +195,10 @@ def step_orphaned_session_exists(context: Context, session_name: str) -> None:
     if "localstack" not in context.tags:
         return
 
+    if getattr(context, "mutagen_sync_timeout", False):
+        logger.debug("Skipping mutagen CLI check due to timeout mock")
+        return
+
     import subprocess
     import tempfile
     import time

@@ -48,17 +48,63 @@ def apply_timeout_mock_if_needed(context: Context) -> list:
         try:
             from moondock.sync import MutagenManager
 
+            original_create = MutagenManager.create_sync_session
+            original_terminate = MutagenManager.terminate_session
+
+            def mock_create(  # type: ignore[override]
+                self,
+                session_name: str,
+                local_path: str,
+                remote_path: str,
+                host: str,
+                key_file: str,
+                username: str,
+                ignore_patterns: list[str] | None = None,
+                include_vcs: bool = False,
+                ssh_wrapper_dir: str | None = None,
+                ssh_port: int = 22,
+            ) -> dict[str, str]:
+                context.mock_session_name = session_name
+                logger.debug(
+                    "Timeout mock: skipping real mutagen create for %s",
+                    session_name,
+                )
+                return {"session_id": session_name, "status": "starting"}
+
+            def mock_terminate(  # type: ignore[override]
+                self,
+                session_name: str,
+                ssh_wrapper_dir: str | None = None,
+                host: str | None = None,
+            ) -> None:
+                context.mutagen_session_terminated = True
+                logger.debug(
+                    "Timeout mock: skipping real mutagen terminate for %s",
+                    session_name,
+                )
+
             patcher = patch.object(
                 MutagenManager, "wait_for_initial_sync", mock_wait_for_initial_sync
             )
+            create_patcher = patch.object(
+                MutagenManager, "create_sync_session", mock_create
+            )
+            terminate_patcher = patch.object(
+                MutagenManager, "terminate_session", mock_terminate
+            )
+
             patcher.start()
+            create_patcher.start()
+            terminate_patcher.start()
 
             if not hasattr(context, "mutagen_patchers"):
                 context.mutagen_patchers = []
-            context.mutagen_patchers.append(patcher)
+            context.mutagen_patchers.extend(
+                [patcher, create_patcher, terminate_patcher]
+            )
 
             logger.debug("Timeout mock applied successfully")
-            return [patcher]
+            return [patcher, create_patcher, terminate_patcher]
         except ImportError as e:
             logger.error(f"Failed to import MutagenManager for timeout mock: {e}")
             return []
@@ -124,9 +170,23 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
     else:
 
         def mock_check_mutagen(self) -> None:
+            if getattr(context, "mutagen_not_installed", False):
+                raise RuntimeError(
+                    "Mutagen is not installed locally.\n"
+                    "Please install Mutagen to use moondock file synchronization.\n"
+                    "Visit: https://github.com/mutagen-io/mutagen"
+                )
+
             logger.debug("Mocked: Mutagen installation check skipped")
 
         def mock_create_sync_session(self, *args: Any, **kwargs: Any) -> dict[str, str]:
+            if getattr(context, "mutagen_not_installed", False):
+                raise RuntimeError(
+                    "Mutagen is not installed locally.\n"
+                    "Please install Mutagen to use moondock file synchronization.\n"
+                    "Visit: https://github.com/mutagen-io/mutagen"
+                )
+
             logger.info("Creating Mutagen sync session")
             ssh_port = kwargs.get("ssh_port", 22)
             ssh_username = kwargs.get("username", "ubuntu")

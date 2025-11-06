@@ -375,11 +375,13 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                 filtered_lines = [
                     line
                     for line in lines
-                    if not line.startswith("[localhost]:2222") and line.strip()
+                    if line.strip() and not line.startswith("[localhost]:")
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
-                    logger.debug("Cleaned up localhost:2222 from ~/.ssh/known_hosts")
+                    logger.debug(
+                        "Cleaned up localhost entries from ~/.ssh/known_hosts"
+                    )
         except Exception as e:
             logger.debug(f"Error cleaning known_hosts: {e}")
 
@@ -914,11 +916,13 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                 filtered_lines = [
                     line
                     for line in lines
-                    if not line.startswith("[localhost]:2222") and line.strip()
+                    if line.strip() and not line.startswith("[localhost]:")
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
-                    msg = "Cleaned up localhost:2222 entries from ~/.ssh/known_hosts after scenario"
+                    msg = (
+                        "Cleaned up localhost entries from ~/.ssh/known_hosts after scenario"
+                    )
                     logger.debug(msg)
         except Exception as e:
             logger.debug(f"Error cleaning known_hosts after scenario: {e}")
