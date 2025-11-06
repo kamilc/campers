@@ -80,7 +80,12 @@ def execute_command_direct(
 
         elif command == "setup":
             user_input = getattr(context, "setup_user_input", "n")
-            with unittest.mock.patch("builtins.input", return_value=user_input):
+
+            def mocked_input(prompt: str = "") -> str:
+                print(prompt, end="")
+                return user_input
+
+            with unittest.mock.patch("builtins.input", side_effect=mocked_input):
                 moondock.setup(region=region, ec2_client=ec2_client)
             context.exit_code = 0
 
