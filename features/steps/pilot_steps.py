@@ -519,8 +519,11 @@ def run_tui_test_with_machine(
             app_holder.pop("app", None)
             loop_holder.pop("loop", None)
 
+    async def guarded_run() -> dict[str, Any]:
+        return await asyncio.wait_for(run_tui_test(), timeout=max_wait + 30)
+
     try:
-        test_result = run_async_test(run_tui_test)
+        test_result = run_async_test(guarded_run)
 
         if timeout_triggered.is_set():
             logger.error(
@@ -533,6 +536,16 @@ def run_tui_test_with_machine(
             )
 
         return test_result
+    except asyncio.TimeoutError as exc:
+        timeout_triggered.set()
+        logger.error(
+            f"[TIMEOUT-ENFORCER] wait_for exceeded {max_wait + 30}s - raising AssertionError"
+        )
+        raise AssertionError(
+            f"TUI test exceeded {max_wait}s timeout. "
+            f"Check logs for container boot delays or SSH issues. "
+            "Test may still be running in background."
+        ) from exc
 
     finally:
         timer.cancel()
