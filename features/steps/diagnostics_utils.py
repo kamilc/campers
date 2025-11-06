@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
+
 from behave.runner import Context
 
 
@@ -94,6 +95,35 @@ def record_diagnostic_artifact(context: Context, artifact_path: Path) -> None:
         context.diagnostic_artifacts: list[Path] = []
 
     context.diagnostic_artifacts.append(artifact_path)
+
+
+def send_signal_to_process(process: subprocess.Popen, sig: int) -> None:
+    """Deliver a signal to a subprocess and its process group when available."""
+
+    if process is None:
+        return
+
+    pid = getattr(process, "pid", None)
+
+    if pid is None:
+        return
+
+    try:
+        pgid = os.getpgid(pid)
+    except OSError:
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            pass
+        return
+
+    try:
+        os.killpg(pgid, sig)
+    except OSError:
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            pass
 
 
 def collect_diagnostics(

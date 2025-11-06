@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 from behave import given, then, when
 from behave.runner import Context
-from features.steps.diagnostics_utils import collect_diagnostics
+from features.steps.diagnostics_utils import collect_diagnostics, send_signal_to_process
 
 TEST_INSTANCE_ID = "i-test123"
 GRACEFUL_CLEANUP_TIMEOUT_SECONDS = 30
@@ -163,6 +163,7 @@ def step_instance_running_with_all_resources(context: Context) -> None:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=True,
         )
 
         max_wait = 60
@@ -264,6 +265,7 @@ def step_instance_launch_in_progress(context: Context) -> None:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=True,
         )
 
         time.sleep(2)
@@ -372,7 +374,7 @@ def step_sigint_received(context: Context) -> None:
         if not hasattr(context, "app_process") or context.app_process is None:
             raise AssertionError("No app_process found for signal delivery")
 
-        os.kill(context.app_process.pid, signal.SIGINT)
+        send_signal_to_process(context.app_process, signal.SIGINT)
 
         try:
             returncode = context.app_process.wait(
@@ -382,7 +384,7 @@ def step_sigint_received(context: Context) -> None:
             context.exit_code = returncode
             context.process_output = stdout + stderr
         except subprocess.TimeoutExpired:
-            context.app_process.kill()
+            send_signal_to_process(context.app_process, signal.SIGKILL)
             stdout, stderr = context.app_process.communicate()
             diagnostics_path = collect_diagnostics(
                 context,
@@ -420,7 +422,7 @@ def step_sigterm_received(context: Context) -> None:
         if not hasattr(context, "app_process") or context.app_process is None:
             raise AssertionError("No app_process found for signal delivery")
 
-        os.kill(context.app_process.pid, signal.SIGTERM)
+        send_signal_to_process(context.app_process, signal.SIGTERM)
 
         try:
             returncode = context.app_process.wait(
@@ -430,7 +432,7 @@ def step_sigterm_received(context: Context) -> None:
             context.exit_code = returncode
             context.process_output = stdout + stderr
         except subprocess.TimeoutExpired:
-            context.app_process.kill()
+            send_signal_to_process(context.app_process, signal.SIGKILL)
             stdout, stderr = context.app_process.communicate()
             diagnostics_path = collect_diagnostics(
                 context,

@@ -4,13 +4,14 @@ import importlib.util
 import logging
 import logging.handlers
 import os
+import signal
 import sys
 from pathlib import Path
 
 from behave.model import Scenario
 from behave.runner import Context
 from moto import mock_aws
-from features.steps.diagnostics_utils import collect_diagnostics
+from features.steps.diagnostics_utils import collect_diagnostics, send_signal_to_process
 
 logger = logging.getLogger(__name__)
 
@@ -676,7 +677,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         if "localstack" in scenario.tags and hasattr(context, "app_process"):
             if context.app_process and context.app_process.poll() is None:
                 logger.info("Killing orphaned app_process from graceful shutdown test")
-                context.app_process.kill()
+                send_signal_to_process(context.app_process, signal.SIGKILL)
                 try:
                     context.app_process.wait(timeout=5)
                 except Exception as e:
