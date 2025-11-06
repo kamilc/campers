@@ -6,10 +6,147 @@ import signal
 import socket
 import subprocess
 import time
+from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from behave import given, then, when
 from behave.runner import Context
+
+
+def _run_diagnostic_command(command: list[str]) -> str:
+    """Run a diagnostic command and capture its output.
+
+    Parameters
+    ----------
+    command : list[str]
+        Command and arguments to execute.
+
+    Returns
+    -------
+    str
+        Combined stdout and stderr output, or an error description.
+    """
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except Exception as exc:  # pragma: no cover - best-effort diagnostics
+        return f"command failed: {' '.join(command)} :: {exc}"
+
+    stdout_text = result.stdout.strip()
+    stderr_text = result.stderr.strip()
+    payload = []
+
+    if stdout_text:
+        payload.append(stdout_text)
+
+    if stderr_text:
+        payload.append(f"[stderr] {stderr_text}")
+
+    if not payload:
+        payload.append(f"command returned {result.returncode} with no output")
+
+    return "\n".join(payload)
+
+
+def _collect_shutdown_timeout_diagnostics(
+    context: Context,
+    stdout_text: str,
+    stderr_text: str,
+) -> Path:
+    """Collect diagnostics when graceful shutdown exceeds timeout.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context containing harness services.
+    stdout_text : str
+        Captured subprocess stdout text.
+    stderr_text : str
+        Captured subprocess stderr text.
+
+    Returns
+    -------
+    Path
+        Path to the diagnostics artifact.
+    """
+
+    harness = getattr(context, "harness", None)
+    artifact_manager = getattr(getattr(harness, "services", None), "artifacts", None)
+    timestamp = datetime.utcnow().isoformat() + "Z"
+    pid_value = getattr(getattr(context, "app_process", None), "pid", None)
+    return_code = getattr(getattr(context, "app_process", None), "returncode", None)
+
+    env_snapshot = {
+        key: value
+        for key, value in os.environ.items()
+        if key.startswith("MOONDOCK_")
+        or key.startswith("AWS_")
+        or key.startswith("LOCALSTACK")
+    }
+    sorted_env = "\n".join(
+        f"{key}={env_snapshot[key]}" for key in sorted(env_snapshot)
+    )
+
+    ps_output = _run_diagnostic_command(
+        [
+            "ps",
+            "-p",
+            str(pid_value) if pid_value is not None else "0",
+            "-o",
+            "pid,ppid,stat,etime,command",
+        ]
+    )
+    docker_ps_output = _run_diagnostic_command(["docker", "ps"])
+    docker_logs_output = _run_diagnostic_command(
+        ["docker", "logs", "moondock-localstack", "--tail", "200"]
+    )
+    mutagen_output = _run_diagnostic_command(["mutagen", "sync", "list"])
+
+    sections = [
+        f"timestamp: {timestamp}",
+        f"pid: {pid_value}",
+        f"process_returncode: {return_code}",
+        "",
+        "environment_snapshot:",
+        sorted_env or "<none>",
+        "",
+        "process_status:",
+        ps_output,
+        "",
+        "docker_ps:",
+        docker_ps_output,
+        "",
+        "docker_logs_moondock_localstack:",
+        docker_logs_output,
+        "",
+        "mutagen_sync_list:",
+        mutagen_output,
+        "",
+        "stdout:",
+        stdout_text.strip() or "<empty>",
+        "",
+        "stderr:",
+        stderr_text.strip() or "<empty>",
+    ]
+
+    content = "\n".join(sections) + "\n"
+
+    if artifact_manager is not None:
+        filename = f"diagnostics/graceful-shutdown-timeout-{int(time.time())}.log"
+        return artifact_manager.create_temp_file(filename, content)
+
+    fallback_dir = Path.cwd() / "tmp" / "behave"
+    fallback_dir.mkdir(parents=True, exist_ok=True)
+    fallback_path = fallback_dir / f"graceful-shutdown-timeout-{int(time.time())}.log"
+    fallback_path.write_text(content)
+    return fallback_path
 
 TEST_INSTANCE_ID = "i-test123"
 GRACEFUL_CLEANUP_TIMEOUT_SECONDS = 30
@@ -383,9 +520,15 @@ def step_sigint_received(context: Context) -> None:
         except subprocess.TimeoutExpired:
             context.app_process.kill()
             stdout, stderr = context.app_process.communicate()
+            diagnostics_path = _collect_shutdown_timeout_diagnostics(
+                context,
+                stdout,
+                stderr,
+            )
             raise AssertionError(
                 f"Graceful shutdown did not complete within {GRACEFUL_CLEANUP_TIMEOUT_SECONDS}s. "
-                f"Process appears hung. Last output:\n{stderr[-1000:] if stderr else 'No stderr'}"
+                f"Process appears hung. Last output:\n{stderr[-1000:] if stderr else 'No stderr'}\n"
+                f"Diagnostics written to: {diagnostics_path}"
             )
     else:
         capture_logs_during_cleanup(
@@ -424,9 +567,15 @@ def step_sigterm_received(context: Context) -> None:
         except subprocess.TimeoutExpired:
             context.app_process.kill()
             stdout, stderr = context.app_process.communicate()
+            diagnostics_path = _collect_shutdown_timeout_diagnostics(
+                context,
+                stdout,
+                stderr,
+            )
             raise AssertionError(
                 f"Graceful shutdown did not complete within {GRACEFUL_CLEANUP_TIMEOUT_SECONDS}s. "
-                f"Process appears hung. Last output:\n{stderr[-1000:] if stderr else 'No stderr'}"
+                f"Process appears hung. Last output:\n{stderr[-1000:] if stderr else 'No stderr'}\n"
+                f"Diagnostics written to: {diagnostics_path}"
             )
     else:
         capture_logs_during_cleanup(
