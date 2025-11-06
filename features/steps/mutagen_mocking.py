@@ -311,7 +311,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 f"Mock create_sync_session called with ssh_port={ssh_port}, "
                 f"username={ssh_username}"
             )
-            if not hasattr(context, "instance_id"):
+            if not hasattr(context, "instance_id") or context.instance_id is None:
                 target_ids = os.environ.get("MOONDOCK_TARGET_INSTANCE_IDS", "")
                 if target_ids:
                     instance_ids = [
@@ -322,8 +322,22 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                         logger.debug(
                             f"Set context.instance_id from env: {context.instance_id}"
                         )
+
             context.ssh_username = ssh_username
-            create_synced_directories(context)
+
+            harness_available = hasattr(context, "harness") and context.harness is not None
+            instance_known = getattr(context, "instance_id", None) is not None
+
+            if harness_available and instance_known:
+                create_synced_directories(context)
+            else:
+                logger.debug(
+                    "Skipping synced directory creation: "
+                    "harness_available=%s instance_known=%s",
+                    harness_available,
+                    instance_known,
+                )
+
             logger.info("Sync session created")
             return {"session_id": "mock-session", "status": "synced"}
 

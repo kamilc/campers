@@ -417,8 +417,12 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
         stderr_capture = io.StringIO()
         old_stderr = sys.stderr
         sys.stderr = stderr_capture
+        root_logger = logging.getLogger()
+        original_level = root_logger.level
 
         try:
+            root_logger.setLevel(logging.DEBUG)
+
             with mutagen_mocked(context):
                 cli = MoondockCLI(
                     ec2_manager_factory=ec2_manager_factory,
@@ -487,6 +491,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
             context.error = str(e)
         finally:
             sys.stderr = old_stderr
+            root_logger.setLevel(original_level)
 
     else:
         logger.debug("Non-LocalStack scenario, using subprocess execution")

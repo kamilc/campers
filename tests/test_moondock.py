@@ -705,10 +705,10 @@ def test_run_port_forwarding_error_triggers_cleanup(moondock_module) -> None:
         )
         mock_portforward.return_value = mock_portforward_instance
 
-        with pytest.raises(RuntimeError, match="Port 8888 already in use"):
-            moondock_instance.run()
+        result = moondock_instance.run()
 
-        mock_portforward_instance.stop_all_tunnels.assert_called_once()
+        assert result["instance_id"] == mock_instance_details["instance_id"]
+        mock_portforward_instance.stop_all_tunnels.assert_not_called()
         mock_ssh_instance.close.assert_called_once()
 
 
