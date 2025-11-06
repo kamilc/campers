@@ -916,6 +916,9 @@ class Moondock:
                 return
             self._cleanup_in_progress = True
 
+        force_exit = False
+        exit_code = None
+
         try:
             errors = []
 
@@ -925,6 +928,9 @@ class Moondock:
 
             if resources_to_clean:
                 logging.info("Shutdown requested - beginning cleanup...")
+
+            if "ssh_manager" in resources_to_clean:
+                resources_to_clean["ssh_manager"].abort_active_command()
 
             try:
                 if "portforward_mgr" in resources_to_clean:
@@ -1127,11 +1133,21 @@ class Moondock:
                         if signum == signal.SIGINT
                         else (143 if signum == signal.SIGTERM else 1)
                     )
-                    sys.exit(exit_code)
+                    if os.environ.get("MOONDOCK_FORCE_SIGNAL_EXIT") == "1":
+                        logging.info(
+                            "Forced signal exit enabled; terminating with code %s",
+                            exit_code,
+                        )
+                        force_exit = True
+                    else:
+                        sys.exit(exit_code)
 
         finally:
             with self._cleanup_lock:
                 self._cleanup_in_progress = False
+
+        if force_exit and exit_code is not None:
+            os._exit(exit_code)
 
     def run(
         self,
@@ -1321,6 +1337,8 @@ class Moondock:
 
         self._validate_sync_paths_config(merged_config.get("sync_paths"))
 
+        disable_mutagen = os.environ.get("MOONDOCK_DISABLE_MUTAGEN") == "1"
+
         if update_queue is not None:
             logging.debug("Sending merged_config to TUI queue")
             update_queue.put({"type": "merged_config", "payload": merged_config})
@@ -1334,7 +1352,7 @@ class Moondock:
         try:
             mutagen_mgr = MutagenManager()
 
-            if merged_config.get("sync_paths"):
+            if merged_config.get("sync_paths") and not disable_mutagen:
                 mutagen_mgr.check_mutagen_installed()
 
             ec2_manager = self.ec2_manager_factory(region=merged_config["region"])
@@ -1421,7 +1439,9 @@ class Moondock:
 
             logging.info(f"Forwarding {len(env_vars)} environment variables")
 
-            if merged_config.get("sync_paths"):
+            sync_paths = merged_config.get("sync_paths")
+
+            if sync_paths:
                 mutagen_session_name = f"moondock-{instance_details['unique_id']}"
                 mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)
 
@@ -1437,46 +1457,85 @@ class Moondock:
                         }
                     )
 
-            if merged_config.get("sync_paths"):
-                if self._cleanup_in_progress:
-                    logging.debug("Cleanup in progress, aborting Mutagen sync")
-                    return {}
-
-                sync_config = merged_config["sync_paths"][0]
-
-                logging.info("Starting Mutagen file sync...")
-                logging.debug(
-                    "Mutagen sync details - local: %s, remote: %s, host: %s",
-                    sync_config["local"],
-                    sync_config["remote"],
-                    instance_details["public_ip"],
-                )
-
-                if update_queue is not None:
-                    update_queue.put(
-                        {
-                            "type": "mutagen_status",
-                            "payload": {"state": "starting", "files_synced": 0},
-                        }
+            if sync_paths:
+                if disable_mutagen:
+                    logging.info(
+                        "Mutagen disabled via MOONDOCK_DISABLE_MUTAGEN=1; skipping sync setup."
                     )
 
-                moondock_dir = os.environ.get(
-                    "MOONDOCK_DIR", str(Path.home() / ".moondock")
-                )
+                    if update_queue is not None:
+                        update_queue.put(
+                            {
+                                "type": "mutagen_status",
+                                "payload": {"state": "disabled"},
+                            }
+                        )
+                else:
+                    if self._cleanup_in_progress:
+                        logging.debug("Cleanup in progress, aborting Mutagen sync")
+                        return {}
 
-                logging.debug("Creating Mutagen sync session: %s", mutagen_session_name)
-                mutagen_mgr.create_sync_session(
-                    session_name=mutagen_session_name,
-                    local_path=sync_config["local"],
-                    remote_path=sync_config["remote"],
-                    host=ssh_host,
-                    key_file=ssh_key_file,
-                    username="ubuntu",
-                    ignore_patterns=merged_config.get("ignore"),
-                    include_vcs=merged_config.get("include_vcs", False),
-                    ssh_wrapper_dir=moondock_dir,
-                    ssh_port=ssh_port,
-                )
+                    sync_config = sync_paths[0]
+
+                    logging.info("Starting Mutagen file sync...")
+                    logging.debug(
+                        "Mutagen sync details - local: %s, remote: %s, host: %s",
+                        sync_config["local"],
+                        sync_config["remote"],
+                        instance_details["public_ip"],
+                    )
+
+                    if update_queue is not None:
+                        update_queue.put(
+                            {
+                                "type": "mutagen_status",
+                                "payload": {"state": "starting", "files_synced": 0},
+                            }
+                        )
+
+                    moondock_dir = os.environ.get(
+                        "MOONDOCK_DIR", str(Path.home() / ".moondock")
+                    )
+
+                    logging.debug(
+                        "Creating Mutagen sync session: %s", mutagen_session_name
+                    )
+
+                    mutagen_mgr.create_sync_session(
+                        session_name=mutagen_session_name,
+                        local_path=sync_config["local"],
+                        remote_path=sync_config["remote"],
+                        host=ssh_host,
+                        key_file=ssh_key_file,
+                        username="ubuntu",
+                        ignore_patterns=merged_config.get("ignore"),
+                        include_vcs=merged_config.get("include_vcs", False),
+                        ssh_wrapper_dir=moondock_dir,
+                        ssh_port=ssh_port,
+                    )
+
+                    logging.info("Waiting for initial file sync to complete...")
+
+                    if update_queue is not None:
+                        update_queue.put(
+                            {
+                                "type": "mutagen_status",
+                                "payload": {"state": "syncing", "files_synced": 0},
+                            }
+                        )
+
+                    mutagen_mgr.wait_for_initial_sync(
+                        mutagen_session_name, timeout=SYNC_TIMEOUT
+                    )
+                    logging.info("File sync completed")
+
+                    if update_queue is not None:
+                        update_queue.put(
+                            {
+                                "type": "mutagen_status",
+                                "payload": {"state": "idle"},
+                            }
+                        )
 
             if merged_config.get("setup_script", "").strip():
                 if self._cleanup_in_progress:
@@ -1496,34 +1555,6 @@ class Moondock:
                     )
 
                 logging.info("Setup script completed successfully")
-
-            if merged_config.get("sync_paths"):
-                if self._cleanup_in_progress:
-                    logging.debug("Cleanup in progress, aborting sync wait")
-                    return {}
-
-                logging.info("Waiting for initial file sync to complete...")
-
-                if update_queue is not None:
-                    update_queue.put(
-                        {
-                            "type": "mutagen_status",
-                            "payload": {"state": "syncing", "files_synced": 0},
-                        }
-                    )
-
-                mutagen_mgr.wait_for_initial_sync(
-                    mutagen_session_name, timeout=SYNC_TIMEOUT
-                )
-                logging.info("File sync completed")
-
-                if update_queue is not None:
-                    update_queue.put(
-                        {
-                            "type": "mutagen_status",
-                            "payload": {"state": "idle"},
-                        }
-                    )
 
             if merged_config.get("ports"):
                 if self._cleanup_in_progress:
@@ -1551,7 +1582,9 @@ class Moondock:
                     )
                 except RuntimeError as e:
                     logging.error("Port forwarding failed: %s", e)
-                    raise
+                    with self._resources_lock:
+                        self._resources.pop("portforward_mgr", None)
+                    portforward_mgr = None
 
             if merged_config.get("startup_script"):
                 if self._cleanup_in_progress:

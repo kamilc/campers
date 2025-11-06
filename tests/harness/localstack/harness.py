@@ -733,6 +733,10 @@ class LocalStackHarness(ScenarioHarness):
         if self.services is None:
             return
 
+        if os.environ.get("MOONDOCK_DISABLE_MUTAGEN") == "1":
+            logger.info("Mutagen disabled via MOONDOCK_DISABLE_MUTAGEN=1; skipping harness sync setup")
+            return
+
         config_data = getattr(self.context, "config_data", None)
         defaults = (config_data or {}).get("defaults", {})
         sync_paths: list[dict[str, Any]] = defaults.get("sync_paths", [])

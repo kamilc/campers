@@ -147,6 +147,14 @@ def step_instance_running_with_all_resources(context: Context) -> None:
             "MOONDOCK_CONFIG", temp_file.name
         )
         context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
+        context.harness.services.configuration_env.set(
+            "MOONDOCK_FORCE_SIGNAL_EXIT", "1"
+        )
+        os.environ["MOONDOCK_FORCE_SIGNAL_EXIT"] = "1"
+        context.harness.services.configuration_env.set(
+            "MOONDOCK_DISABLE_MUTAGEN", "1"
+        )
+        os.environ["MOONDOCK_DISABLE_MUTAGEN"] = "1"
 
         context.app_process = subprocess.Popen(
             ["uv", "run", "moondock", "run", "test-box"],
@@ -234,6 +242,14 @@ def step_instance_launch_in_progress(context: Context) -> None:
             "MOONDOCK_CONFIG", temp_file.name
         )
         context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
+        context.harness.services.configuration_env.set(
+            "MOONDOCK_FORCE_SIGNAL_EXIT", "1"
+        )
+        os.environ["MOONDOCK_FORCE_SIGNAL_EXIT"] = "1"
+        context.harness.services.configuration_env.set(
+            "MOONDOCK_DISABLE_MUTAGEN", "1"
+        )
+        os.environ["MOONDOCK_DISABLE_MUTAGEN"] = "1"
 
         scenario_name = context.scenario.name if hasattr(context, "scenario") else ""
         if "only cleans created resources" in scenario_name:

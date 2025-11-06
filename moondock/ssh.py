@@ -8,7 +8,7 @@ import socket
 import time
 
 import paramiko
-from paramiko.channel import ChannelFile
+from paramiko.channel import Channel, ChannelFile
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +177,7 @@ class SSHManager:
         self.username = username
         self.port = port
         self.client: paramiko.SSHClient | None = None
+        self._active_channel: Channel | None = None
 
     def connect(self, max_retries: int = 10) -> None:
         """Establish SSH connection with retry logic.
@@ -312,6 +313,7 @@ class SSHManager:
 
         try:
             stdin, stdout, stderr = self.client.exec_command(command)
+            self._active_channel = stdout.channel
 
             self.stream_output_realtime(stdout, stderr)
 
@@ -334,6 +336,8 @@ class SSHManager:
 
             if stderr:
                 stderr.close()
+
+            self._active_channel = None
 
     def execute_command(self, command: str) -> int:
         """Execute command and stream output in real-time.
@@ -525,6 +529,26 @@ class SSHManager:
 
     def close(self) -> None:
         """Close SSH connection and clean up resources."""
+        self.abort_active_command()
+
         if self.client:
             self.client.close()
             self.client = None
+
+    def abort_active_command(self) -> None:
+        """Abort in-flight command execution.
+
+        Notes
+        -----
+        Closes the active SSH channel, if present, so blocking output reads
+        terminate promptly during cleanup.
+        """
+        if self._active_channel is None:
+            return
+
+        try:
+            self._active_channel.close()
+        except Exception as exc:  # pragma: no cover
+            logging.debug("Failed to close active SSH channel: %s", exc)
+        finally:
+            self._active_channel = None
