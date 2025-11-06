@@ -353,6 +353,10 @@ def step_mutagen_session_terminated(context: Context) -> None:
     if "localstack" not in context.tags:
         return
 
+    if getattr(context, "mutagen_sync_timeout", False):
+        logger.debug("Skipping mutagen termination verification during timeout mock")
+        return
+
     import subprocess
 
     try:

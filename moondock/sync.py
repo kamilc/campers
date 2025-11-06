@@ -184,10 +184,7 @@ class MutagenManager:
             raise ValueError(f"Invalid host: {host}")
 
         local = str(Path(local_path).expanduser().resolve())
-        if ssh_port != 22:
-            remote = f"{username}@{host}:{ssh_port}:{remote_path}"
-        else:
-            remote = f"{username}@{host}:{remote_path}"
+        remote = f"{username}@{host}:{remote_path}"
 
         cmd.append(local)
         cmd.append(remote)
@@ -278,7 +275,10 @@ Host {host}
         ssh_env.pop("SSH_AUTH_SOCK", None)
         ssh_env["MUTAGEN_SSH_CONFIG"] = str(moondock_config_path)
         ssh_env["MUTAGEN_SSH_ARGS"] = (
-            f"-oIdentitiesOnly=yes -i {str(temp_key_path.resolve())}"
+            "-oIdentitiesOnly=yes "
+            "-oStrictHostKeyChecking=no "
+            "-oUserKnownHostsFile=/dev/null "
+            f"-i {str(temp_key_path.resolve())}"
         )
 
         try:
