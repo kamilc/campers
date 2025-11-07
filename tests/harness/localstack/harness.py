@@ -222,6 +222,9 @@ class LocalStackHarness(ScenarioHarness):
         diagnostics.record(
             "localstack-harness", "ready", {"scenario": self.scenario.name}
         )
+        diagnostics.record_system_snapshot(
+            "setup-initial-state", include_thread_stacks=False
+        )
 
         diagnostics.record("monitor", "starting", {"scenario": self.scenario.name})
 
@@ -242,6 +245,9 @@ class LocalStackHarness(ScenarioHarness):
             "localstack-harness",
             "cleanup-start",
             {"scenario": self.scenario.name},
+        )
+        self.services.diagnostics.record_system_snapshot(
+            "cleanup-start", include_thread_stacks=False
         )
 
         teardown_steps = [
@@ -284,6 +290,9 @@ class LocalStackHarness(ScenarioHarness):
                 "scenario": self.scenario.name,
                 "errors": len(summary.errors),
             },
+        )
+        self.services.diagnostics.record_system_snapshot(
+            "cleanup-complete", include_thread_stacks=False
         )
 
         self.services = None
@@ -427,6 +436,8 @@ class LocalStackHarness(ScenarioHarness):
 
     def _teardown_cleanup_artifacts(self) -> dict[str, Any]:
         scenario_failed = self.scenario.status == "failed"
+        if not scenario_failed:
+            self.services.diagnostics.set_log_path(None)
         self.services.artifacts.cleanup(preserve_on_failure=scenario_failed)
         return {"preserved": scenario_failed}
 

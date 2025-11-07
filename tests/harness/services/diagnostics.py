@@ -1,10 +1,10 @@
 """Diagnostics collection for debugging test scenarios."""
 
-import logging
 import json
-from pathlib import Path
+import logging
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -115,3 +115,14 @@ class DiagnosticsCollector:
     def set_log_path(self, log_path: Path | None) -> None:
         """Update the on-disk log path used for streaming diagnostics."""
         self._log_path = Path(log_path) if log_path else None
+
+    def record_system_snapshot(
+        self, description: str, include_thread_stacks: bool = False
+    ) -> None:
+        """Capture and record a holistic system snapshot."""
+        from tests.harness.utils.system_snapshot import gather_system_snapshot
+
+        snapshot = gather_system_snapshot(
+            include_thread_stacks=include_thread_stacks
+        )
+        self.record("system-snapshot", description, snapshot)

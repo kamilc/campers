@@ -1,12 +1,15 @@
 """Textual Pilot step definitions for TUI testing."""
 
 import asyncio
+import json
 import logging
 import os
 import queue
 import tempfile
 import threading
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -16,6 +19,7 @@ from textual.css.query import NoMatches
 from textual.widgets import Log
 
 from features.steps.utils import run_async_test
+from tests.harness.utils.system_snapshot import gather_system_snapshot
 from moondock.__main__ import Moondock, MoondockTUI
 
 logger = logging.getLogger(__name__)
@@ -407,6 +411,42 @@ def run_tui_test_with_machine(
         logger.error(
             f"[TIMEOUT-ENFORCER] Test exceeded {max_wait}s timeout - marking as failed"
         )
+        snapshot = gather_system_snapshot(include_thread_stacks=True)
+        recorded = False
+        harness = None
+        if behave_context is not None:
+            harness = getattr(behave_context, "harness", None)
+        if harness is not None and getattr(harness, "services", None) is not None:
+            try:
+                harness.services.diagnostics.record(
+                    "system-snapshot", "tui-timeout-handler", snapshot
+                )
+                recorded = True
+            except Exception:  # pragma: no cover - diagnostics best effort
+                logger.debug(
+                    "Failed to record timeout snapshot via harness diagnostics",
+                    exc_info=True,
+                )
+        if not recorded:
+            try:
+                fallback_dir = (
+                    Path.cwd()
+                    / "tmp"
+                    / "behave"
+                    / "_diagnostics"
+                    / "_tui-timeouts"
+                )
+                fallback_dir.mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+                fallback_path = fallback_dir / f"{timestamp}.json"
+                fallback_path.write_text(
+                    json.dumps(
+                        {"description": "tui-timeout-handler", "snapshot": snapshot},
+                        indent=2,
+                    )
+                )
+            except Exception:  # pragma: no cover - best effort
+                logger.debug("Failed to persist timeout snapshot", exc_info=True)
         loop = loop_holder.get("loop")
         app = app_holder.get("app")
 

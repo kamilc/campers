@@ -78,6 +78,9 @@ class DryRunHarness(ScenarioHarness):
         scenario_dir = self.services.artifacts.create_scenario_dir(self.scenario.name)
         self.services.diagnostics.set_log_path(scenario_dir / "diagnostics.log")
         self.services.configuration_env.set("MOONDOCK_DIR", str(scenario_dir))
+        self.services.diagnostics.record_system_snapshot(
+            "setup-initial-state", include_thread_stacks=False
+        )
 
     def cleanup(self) -> None:
         """Cleanup scenario-scoped resources and restore state.
@@ -92,6 +95,10 @@ class DryRunHarness(ScenarioHarness):
 
         logger = logging.getLogger(__name__)
         errors = []
+
+        self.services.diagnostics.record_system_snapshot(
+            "cleanup-start", include_thread_stacks=False
+        )
 
         try:
             self.services.resource_registry.cleanup_all()
@@ -110,6 +117,8 @@ class DryRunHarness(ScenarioHarness):
 
         try:
             scenario_failed = self.scenario.status == "failed"
+            if not scenario_failed:
+                self.services.diagnostics.set_log_path(None)
             self.services.artifacts.cleanup(preserve_on_failure=scenario_failed)
         except Exception as e:
             errors.append(f"Artifact cleanup failed: {e}")
@@ -123,3 +132,6 @@ class DryRunHarness(ScenarioHarness):
             logger.warning(
                 f"Cleanup completed with {len(errors)} errors: {'; '.join(errors)}"
             )
+        self.services.diagnostics.record_system_snapshot(
+            "cleanup-complete", include_thread_stacks=False
+        )
