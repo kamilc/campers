@@ -209,9 +209,14 @@ def step_instance_launched(context: Context) -> None:
     ):
         assert context.exit_code != 0, "Setup/Startup script should have caused failure"
     else:
-        assert context.exit_code == 0, (
-            f"Command failed with exit code {context.exit_code}"
-        )
+        if context.exit_code != 0:
+            stdout = getattr(context, "stdout", "")
+            stderr = getattr(context, "stderr", "")
+            raise AssertionError(
+                f"Command failed with exit code {context.exit_code}\n"
+                f"STDOUT: {stdout}\n"
+                f"STDERR: {stderr}"
+            )
 
 
 @then("SSH connection is not attempted")
