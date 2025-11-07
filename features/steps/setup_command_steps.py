@@ -1,11 +1,9 @@
 """Step definitions for setup command feature."""
 
-import os
-import subprocess
-from pathlib import Path
-
 from behave import given, then
 from behave.runner import Context
+
+from features.steps.common_steps import execute_command_direct
 
 
 @given('"moondock setup" completed successfully')
@@ -17,18 +15,18 @@ def step_setup_completed_successfully(context: Context) -> None:
     context : Context
         Behave context
     """
-    project_root = Path(__file__).parent.parent.parent
-    moondock_script = project_root / "moondock" / "__main__.py"
+    if not hasattr(context, "patched_ec2_client"):
+        raise AssertionError(
+            '"moondock setup" precondition requires patched_ec2_client'
+        )
 
-    env = os.environ.copy()
+    context.setup_user_input = "n"
+    execute_command_direct(context, "setup")
 
-    subprocess.run(
-        ["uv", "run", "python", str(moondock_script), "setup"],
-        env=env,
-        capture_output=True,
-        text=True,
-        input="n\n",
-    )
+    if getattr(context, "exit_code", 0) != 0:
+        raise AssertionError(
+            f'Expected "moondock setup" to succeed, exit code {context.exit_code}'
+        )
 
     context.initial_vpc_count = len(
         context.patched_ec2_client.describe_vpcs().get("Vpcs", [])
