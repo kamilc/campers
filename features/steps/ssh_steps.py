@@ -212,10 +212,12 @@ def step_instance_launched(context: Context) -> None:
         if context.exit_code != 0:
             stdout = getattr(context, "stdout", "")
             stderr = getattr(context, "stderr", "")
+            error_msg = getattr(context, "error", "")
             raise AssertionError(
                 f"Command failed with exit code {context.exit_code}\n"
                 f"STDOUT: {stdout}\n"
-                f"STDERR: {stderr}"
+                f"STDERR: {stderr}\n"
+                f"ERROR: {error_msg}"
             )
 
 

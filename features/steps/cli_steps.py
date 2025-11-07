@@ -12,6 +12,8 @@ import yaml
 from behave import given, then, when
 from behave.runner import Context
 
+from features.steps.common_steps import execute_command_direct
+from features.steps.utils import run_async_test
 from moondock.__main__ import MoondockCLI
 
 JSON_OUTPUT_TRUNCATE_LENGTH = 200
@@ -396,6 +398,25 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
         hasattr(context, "scenario")
         and ("smoke" in context.scenario.tags or "error" in context.scenario.tags)
     ) and (args and args[0] == "run")
+    use_direct_instantiation = getattr(context, "use_direct_instantiation", False)
+
+    if use_direct_instantiation and not is_localstack:
+        params = parse_cli_args(args)
+        execute_command_direct(
+            context,
+            args[0] if args else "",
+            args={
+                "machine_name": params.get("machine_name"),
+                "command": params.get("command"),
+                "instance_type": params.get("instance_type"),
+                "disk_size": params.get("disk_size"),
+                "region": params.get("region"),
+                "port": params.get("port"),
+                "include_vcs": params.get("include_vcs"),
+                "ignore": params.get("ignore"),
+            },
+        )
+        return
 
     if is_localstack or is_cli_test:
         logger.debug("LocalStack scenario detected, using in-process execution")

@@ -179,3 +179,7 @@ class FakeSSHManager:
         """
         full_command = self.build_command_with_env(command, env_vars)
         return self.execute_command(full_command)
+
+    def abort_active_command(self) -> None:
+        """Simulate aborting an active command (no-op for fake)."""
+        logger.info("Fake SSH: abort_active_command (no-op)")
