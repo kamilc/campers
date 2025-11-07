@@ -18,6 +18,7 @@ from tests.harness.services.ssh_container_pool import (
     SSHContainerPool,
 )
 from tests.harness.services.timeout_manager import TimeoutManager
+from tests.harness.utils.system_snapshot import gather_system_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +293,22 @@ class MonitorController:
                     "watchdog-timeout",
                     {"error": str(exc)},
                 )
+                snapshot = gather_system_snapshot(include_thread_stacks=True)
+                self._diagnostics.record(
+                    "system-snapshot",
+                    "monitor-watchdog-timeout",
+                    snapshot,
+                )
+                self._event_bus.publish(
+                    Event(
+                        type="monitor-error",
+                        instance_id=None,
+                        data={"error": str(exc), "source": "watchdog-timeout"},
+                    )
+                )
                 logger.warning("Monitor poll exceeded watchdog budget: %s", exc)
+                self._stop_event.set()
+                break
             except Exception as exc:  # pylint: disable=broad-except
                 self._diagnostics.record(
                     "monitor",

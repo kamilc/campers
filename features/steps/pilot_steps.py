@@ -223,7 +223,7 @@ def restore_environment(
 
 
 async def poll_tui_with_unified_timeout(
-    app: MoondockTUI, pilot: Any, max_wait: int
+    app: MoondockTUI, pilot: Any, max_wait: int, behave_context: Context | None = None
 ) -> None:
     """Poll TUI with unified timeout budget for all conditions.
 
@@ -252,6 +252,18 @@ async def poll_tui_with_unified_timeout(
     error_detection_time = None
 
     while time.time() - start_time < max_wait:
+        if (
+            behave_context is not None
+            and getattr(behave_context, "monitor_error", None) is not None
+        ):
+            error_message = getattr(behave_context, "monitor_error")
+            logger.error(
+                "Monitor reported error during TUI polling: %s", error_message
+            )
+            raise AssertionError(
+                f"Monitor error detected while waiting for TUI: {error_message}"
+            )
+
         try:
             status_widget = app.query_one("#status-widget")
             status_text = str(status_widget.render())
@@ -501,7 +513,7 @@ def run_tui_test_with_machine(
                                 await pilot.pause()
 
                                 await poll_tui_with_unified_timeout(
-                                    app, pilot, max_wait
+                                    app, pilot, max_wait, behave_context
                                 )
 
                                 if timeout_triggered.is_set():
