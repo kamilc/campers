@@ -162,7 +162,10 @@ class LocalStackHarness(ScenarioHarness):
         configuration_env.set("AWS_DEFAULT_REGION", "us-east-1")
 
         resource_registry = ResourceRegistry()
-        timeout_manager = TimeoutManager(budget_seconds=DEFAULT_TIMEOUT_BUDGET)
+        scenario_timeout = getattr(
+            self.context, "scenario_timeout", DEFAULT_TIMEOUT_BUDGET
+        )
+        timeout_manager = TimeoutManager(budget_seconds=min(scenario_timeout, DEFAULT_TIMEOUT_BUDGET))
         event_bus = EventBus()
         artifacts = ArtifactManager()
         scenario_dir = artifacts.create_scenario_dir(self.scenario.name)

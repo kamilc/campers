@@ -59,11 +59,13 @@ class DryRunHarness(ScenarioHarness):
 
     def setup(self) -> None:
         """Setup scenario-scoped resources and services."""
+        scenario_timeout = getattr(self.context, "scenario_timeout", 180)
+
         self.services = ServiceContainer(
             configuration_env=ConfigurationEnv(),
             signal_registry=SignalRegistry(),
             resource_registry=ResourceRegistry(),
-            timeout_manager=TimeoutManager(budget_seconds=180),
+            timeout_manager=TimeoutManager(budget_seconds=scenario_timeout),
             event_bus=EventBus(),
             diagnostics=DiagnosticsCollector(verbose=False),
             artifacts=ArtifactManager(),
