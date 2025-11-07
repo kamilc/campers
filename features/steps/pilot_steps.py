@@ -132,6 +132,15 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
         machine_name, context.config_path, max_wait, context
     )
     context.tui_result = result
+
+    if hasattr(context, "harness") and hasattr(context.harness, "current_instance_id"):
+        try:
+            instance_id = context.harness.current_instance_id()
+        except Exception:  # pragma: no cover - defensive
+            instance_id = None
+        if instance_id:
+            context.instance_id = instance_id
+
     logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {machine_name} ===")
     logger.info(f"TUI result status: {result.get('status', 'UNKNOWN')}")
     logger.info(f"TUI log length: {len(result.get('log_text', ''))} characters")
