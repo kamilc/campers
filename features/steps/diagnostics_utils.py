@@ -7,12 +7,13 @@ import os
 import re
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
 
 from behave.runner import Context
+from tests.harness.utils.system_snapshot import gather_system_snapshot
 
 
 DIAGNOSTIC_ENV_PREFIXES: tuple[str, ...] = ("MOONDOCK_", "AWS_", "LOCALSTACK")
@@ -156,7 +157,7 @@ def collect_diagnostics(
     scenario_status = getattr(scenario, "status", "unknown")
     scenario_tags = sorted(getattr(scenario, "tags", []))
 
-    timestamp = datetime.utcnow().isoformat() + "Z"
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     scenario_slug = sanitize_for_path(scenario_name)
     reason_slug = sanitize_for_path(reason)
 
@@ -183,6 +184,8 @@ def collect_diagnostics(
         "--tail",
         "200",
     ]
+
+    system_snapshot = gather_system_snapshot(include_thread_stacks=True)
 
     sections = [
         f"timestamp: {timestamp}",
@@ -216,6 +219,9 @@ def collect_diagnostics(
         "",
         "context_process_output:",
         getattr(context, "process_output", "").strip() or "<empty>",
+        "",
+        "system_snapshot:",
+        json.dumps(system_snapshot, indent=2),
     ]
 
     content = "\n".join(sections) + "\n"
@@ -224,16 +230,20 @@ def collect_diagnostics(
     services = getattr(harness, "services", None)
     artifact_manager = getattr(services, "artifacts", None)
 
-    filename = (
-        f"diagnostics/{scenario_slug}/{int(time.time())}-{reason_slug}.log"
-    )
+    unique_suffix = f"{int(time.time() * 1000)}"
+    run_id = getattr(artifact_manager, "run_id", None)
+
+    if run_id:
+        unique_suffix = f"{run_id}-{unique_suffix}"
+
+    filename = f"diagnostics/{scenario_slug}/{unique_suffix}-{reason_slug}.log"
 
     if artifact_manager is not None:
         artifact_path = artifact_manager.create_temp_file(filename, content)
     else:
         fallback_dir = Path.cwd() / "tmp" / "behave" / "diagnostics" / scenario_slug
         fallback_dir.mkdir(parents=True, exist_ok=True)
-        artifact_path = fallback_dir / f"{int(time.time())}-{reason_slug}.log"
+        artifact_path = fallback_dir / f"{unique_suffix}-{reason_slug}.log"
         artifact_path.write_text(content)
 
     record_diagnostic_artifact(context, artifact_path)

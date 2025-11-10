@@ -6,6 +6,8 @@ import logging.handlers
 import os
 import signal
 import sys
+import threading
+import time
 from pathlib import Path
 
 from behave.model import Scenario
@@ -19,6 +21,7 @@ logger = logging.getLogger(__name__)
 TEST_SSH_TIMEOUT_SECONDS = 3
 TEST_SSH_MAX_RETRIES = 6
 SCENARIO_TIMEOUT_SECONDS = 180
+TIMEOUT_ENFORCER_SIGNAL = getattr(signal, "SIGUSR1", signal.SIGTERM)
 
 
 class LogCapture(logging.Handler):
@@ -30,6 +33,179 @@ class LogCapture(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         self.records.append(record)
+
+
+class ScenarioTimeoutWatchdog:
+    """Enforce per-scenario timeout budgets with diagnostics and signaling.
+
+    Parameters
+    ----------
+    context : Context
+        Behave scenario context containing harness references and metadata.
+    timeout_seconds : int
+        Maximum allowed runtime in seconds.
+    signal_number : int, optional
+        Signal used to interrupt the main thread when the timeout elapses.
+    """
+
+    def __init__(
+        self,
+        context: Context,
+        timeout_seconds: int,
+        signal_number: int = TIMEOUT_ENFORCER_SIGNAL,
+    ) -> None:
+        self._context = context
+        self._timeout_seconds = timeout_seconds
+        self._signal_number = signal_number
+        self._deadline = time.monotonic() + timeout_seconds
+        self._stop_event = threading.Event()
+        self._triggered = threading.Event()
+        scenario = getattr(context, "scenario", None)
+        scenario_name = scenario.name if scenario else "unknown"
+        thread_label = scenario_name.replace(" ", "-").replace("/", "-")
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"scenario-watchdog-{thread_label[:40]}",
+            daemon=True,
+        )
+        self._previous_handler = None
+
+    def start(self) -> None:
+        """Activate the watchdog thread and install the timeout signal handler."""
+
+        if self._timeout_seconds <= 0:
+            return
+
+        self._previous_handler = signal.getsignal(self._signal_number)
+        signal.signal(self._signal_number, self._signal_handler)
+        self._thread.start()
+
+    def cancel(self) -> None:
+        """Stop the watchdog and restore the prior signal handler."""
+
+        self._stop_event.set()
+
+        if self._thread.is_alive():
+            self._thread.join(timeout=1)
+
+        if self._previous_handler is not None:
+            signal.signal(self._signal_number, self._previous_handler)
+            self._previous_handler = None
+
+    def triggered(self) -> bool:
+        """Return True when the timeout has fired."""
+
+        return self._triggered.is_set()
+
+    def _run(self) -> None:
+        """Monitor elapsed time and trigger diagnostics on timeout."""
+
+        poll_interval = min(1.0, max(0.1, self._timeout_seconds / 30))
+
+        while not self._stop_event.wait(timeout=poll_interval):
+            if time.monotonic() >= self._deadline:
+                self._handle_timeout()
+                break
+
+    def _handle_timeout(self) -> None:
+        """Collect diagnostics and interrupt execution when timeout expires."""
+
+        if self._triggered.is_set():
+            return
+
+        self._triggered.set()
+
+        scenario = getattr(self._context, "scenario", None)
+        scenario_name = scenario.name if scenario else "unknown-scenario"
+        diag_path = None
+
+        diagnostics = self._get_diagnostics_service()
+
+        try:
+            diag_path = collect_diagnostics(
+                self._context,
+                reason="scenario_timeout",
+            )
+        except Exception as exc:  # pragma: no cover - diagnostics best effort
+            logger.error(
+                "Scenario watchdog failed to write diagnostics: %s", exc
+            )
+
+        if diagnostics is not None:
+            try:
+                diagnostics.record(
+                    "scenario-watchdog",
+                    "timeout",
+                    {
+                        "scenario": scenario_name,
+                        "timeout_seconds": self._timeout_seconds,
+                        "artifact": str(diag_path) if diag_path else None,
+                    },
+                )
+                diagnostics.record_system_snapshot(
+                    "scenario-watchdog-timeout",
+                    include_thread_stacks=True,
+                )
+            except Exception as exc:  # pragma: no cover - diagnostics best effort
+                logger.debug("Failed to record watchdog diagnostics: %s", exc)
+
+        if diag_path is not None:
+            setattr(self._context, "watchdog_artifact_path", diag_path)
+
+        logger.error(
+            "Scenario '%s' exceeded %ss timeout. Diagnostics: %s",
+            scenario_name,
+            self._timeout_seconds,
+            diag_path if diag_path else "unavailable",
+        )
+
+        try:
+            os.kill(os.getpid(), self._signal_number)
+        except OSError as exc:  # pragma: no cover - process teardown best effort
+            logger.error("Failed to signal timeout for scenario '%s': %s", scenario_name, exc)
+
+    def _signal_handler(self, signum, frame):  # type: ignore[override]
+        """Raise TimeoutError when the watchdog signal is delivered."""
+
+        scenario = getattr(self._context, "scenario", None)
+        scenario_name = scenario.name if scenario else "unknown-scenario"
+        message = (
+            f"Scenario '{scenario_name}' exceeded {self._timeout_seconds}s timeout"
+        )
+        raise TimeoutError(message)
+
+    def _get_diagnostics_service(self):
+        """Return the harness diagnostics collector if available."""
+
+        harness = getattr(self._context, "harness", None)
+        services = getattr(harness, "services", None)
+        return getattr(services, "diagnostics", None)
+
+
+def _start_scenario_watchdog(context: Context, timeout_seconds: int) -> None:
+    """Start a scenario watchdog for the given Behave context."""
+
+    if timeout_seconds <= 0:
+        return
+
+    if hasattr(context, "scenario_watchdog"):
+        context.scenario_watchdog.cancel()
+
+    watchdog = ScenarioTimeoutWatchdog(context, timeout_seconds)
+    watchdog.start()
+    context.scenario_watchdog = watchdog
+
+
+def _stop_scenario_watchdog(context: Context) -> None:
+    """Stop and remove any active scenario watchdog."""
+
+    if not hasattr(context, "scenario_watchdog"):
+        return
+
+    try:
+        context.scenario_watchdog.cancel()
+    finally:
+        delattr(context, "scenario_watchdog")
 
 
 def cleanup_env_var(var_name: str, logger: logging.Logger) -> None:
@@ -278,6 +454,7 @@ def before_all(context: Context) -> None:
 def before_scenario(context: Context, scenario: Scenario) -> None:
     """Setup executed before each scenario."""
     context.diagnostic_artifacts = []
+    context.scenario = scenario
     import boto3
 
     timeout_seconds = SCENARIO_TIMEOUT_SECONDS
@@ -558,6 +735,8 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.moondock_path = None
     context.no_ami_found = None
     context.rapid_test_execution = None
+
+    _start_scenario_watchdog(context, timeout_seconds)
     context.region = None
     context.result = None
     context.retry_delays = None
@@ -648,6 +827,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
 def after_scenario(context: Context, scenario: Scenario) -> None:
     """Cleanup executed after each scenario."""
+    _stop_scenario_watchdog(context)
     diagnostics_paths = getattr(context, "diagnostic_artifacts", [])
 
     if scenario.status == "failed":

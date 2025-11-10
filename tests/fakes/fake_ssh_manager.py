@@ -1,6 +1,8 @@
 """Fake SSHManager for testing with dependency injection."""
 
 import logging
+import os
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -124,9 +126,43 @@ class FakeSSHManager:
         Returns
         -------
         dict[str, str]
-            Empty dict for fake implementation
+            Dictionary of filtered environment variables
         """
-        return {}
+
+        if not env_filter:
+            return {}
+
+        compiled_patterns = [re.compile(pattern) for pattern in env_filter]
+        filtered_vars: dict[str, str] = {}
+
+        for var_name, var_value in os.environ.items():
+            for regex in compiled_patterns:
+                if regex.match(var_name):
+                    filtered_vars[var_name] = var_value
+                    break
+
+        if filtered_vars:
+            var_names = ", ".join(sorted(filtered_vars.keys()))
+            logger.info(
+                "Forwarding %s environment variables: %s",
+                len(filtered_vars),
+                var_names,
+            )
+
+            sensitive_patterns = ["SECRET", "PASSWORD", "TOKEN", "KEY"]
+            sensitive_vars = [
+                name
+                for name in filtered_vars.keys()
+                if any(pattern in name.upper() for pattern in sensitive_patterns)
+            ]
+
+            if sensitive_vars:
+                logger.warning(
+                    "Forwarding sensitive environment variables: %s",
+                    ", ".join(sensitive_vars),
+                )
+
+        return filtered_vars
 
     def build_command_with_env(
         self,

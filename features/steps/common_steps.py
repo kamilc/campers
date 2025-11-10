@@ -45,6 +45,10 @@ def execute_command_direct(
     sys.stdout = stdout_capture
     sys.stderr = stderr_capture
 
+    root_logger = logging.getLogger()
+    original_log_level = root_logger.level
+    root_logger.setLevel(logging.INFO)
+
     def timeout_handler(signum, frame):
         raise TimeoutError(f"Command '{command}' execution timed out after 180 seconds")
 
@@ -139,6 +143,7 @@ def execute_command_direct(
         signal.signal(signal.SIGALRM, old_handler)
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+        root_logger.setLevel(original_log_level)
         context.stdout = stdout_capture.getvalue()
         context.stderr = stderr_capture.getvalue()
         stdout_capture.close()
