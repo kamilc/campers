@@ -1,5 +1,6 @@
 """Fake EC2Manager for testing with dependency injection."""
 
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -115,9 +116,11 @@ class FakeEC2Manager:
         key_name, key_file = self.create_key_pair(unique_id)
         sg_id = self.create_security_group(unique_id)
 
+        public_ip = None if os.environ.get("MOONDOCK_NO_PUBLIC_IP") == "1" else "203.0.113.1"
+
         instance = {
             "instance_id": instance_id,
-            "public_ip": "203.0.113.1",
+            "public_ip": public_ip,
             "state": "running",
             "key_file": str(key_file),
             "security_group_id": sg_id,

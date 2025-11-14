@@ -52,7 +52,7 @@ def get_ssh_connection_info(
 
     Raises
     ------
-    RuntimeError
+    ValueError
         If instance has no public IP address and LocalStack is not detected
     """
     logger.info(
@@ -122,8 +122,8 @@ def get_ssh_connection_info(
     except Exception as e:
         logger.warning(f"Failed to read SSH tags from instance {instance_id}: {e}")
 
-    raise RuntimeError(
-        f"Instance {instance_id} has no public IP address. "
+    raise ValueError(
+        f"Instance {instance_id} does not have a public IP address. "
         "SSH connection requires public networking configuration."
     )
 
