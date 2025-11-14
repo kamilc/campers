@@ -30,22 +30,47 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import boto3
-import fire
-import paramiko
-from botocore.exceptions import ClientError, NoCredentialsError
-from textual import events
-from textual.app import App, ComposeResult
-from textual.containers import Container
-from textual.message import Message
-from textual.widgets import Header, Footer, Log, Static
+_cleanup_instance: Any = None
 
-from moondock.config import ConfigLoader
-from moondock.ec2 import EC2Manager
-from moondock.portforward import PortForwardManager
-from moondock.ssh import SSHManager, get_ssh_connection_info
-from moondock.sync import MutagenManager
-from moondock.utils import format_time_ago
+
+def setup_signal_handlers() -> None:
+    """Register signal handlers at module level before heavy imports.
+
+    This ensures signals like SIGINT are caught even during module
+    initialization phase (e.g., during paramiko import).
+    """
+    global _cleanup_instance
+
+    def sigint_handler(signum: int, frame: types.FrameType | None) -> None:
+        if _cleanup_instance is not None:
+            _cleanup_instance._cleanup_resources(signum=signum, frame=frame)
+
+    def sigterm_handler(signum: int, frame: types.FrameType | None) -> None:
+        if _cleanup_instance is not None:
+            _cleanup_instance._cleanup_resources(signum=signum, frame=frame)
+
+    signal.signal(signal.SIGINT, sigint_handler)
+    signal.signal(signal.SIGTERM, sigterm_handler)
+
+
+setup_signal_handlers()
+
+import boto3  # noqa: E402
+import fire  # noqa: E402
+import paramiko  # noqa: E402
+from botocore.exceptions import ClientError, NoCredentialsError  # noqa: E402
+from textual import events  # noqa: E402
+from textual.app import App, ComposeResult  # noqa: E402
+from textual.containers import Container  # noqa: E402
+from textual.message import Message  # noqa: E402
+from textual.widgets import Header, Footer, Log, Static  # noqa: E402
+
+from moondock.config import ConfigLoader  # noqa: E402
+from moondock.ec2 import EC2Manager  # noqa: E402
+from moondock.portforward import PortForwardManager  # noqa: E402
+from moondock.ssh import SSHManager, get_ssh_connection_info  # noqa: E402
+from moondock.sync import MutagenManager  # noqa: E402
+from moondock.utils import format_time_ago  # noqa: E402
 
 SYNC_TIMEOUT = 300
 """Mutagen initial sync timeout in seconds.
@@ -833,6 +858,8 @@ class Moondock:
         boto3_resource_factory : Callable[..., Any] | None
             Optional factory for boto3 resources (default: None, uses boto3.resource)
         """
+        global _cleanup_instance
+
         self._config_loader = ConfigLoader()
         self._cleanup_lock = threading.Lock()
         self._resources_lock = threading.Lock()
@@ -848,6 +875,10 @@ class Moondock:
             self.ec2_manager_factory = ec2_manager_factory
 
         self.ssh_manager_factory = ssh_manager_factory or SSHManager
+
+        import moondock.__main__ as module
+
+        module._cleanup_instance = self
 
     def _create_ec2_manager(self, region: str) -> EC2Manager:
         """Create EC2Manager with dependency injection for boto3 factories.
@@ -1246,14 +1277,7 @@ class Moondock:
                 moondock_instance=self, run_kwargs=run_kwargs, update_queue=update_queue
             )
 
-            original_sigint = signal.signal(signal.SIGINT, self._cleanup_resources)
-            original_sigterm = signal.signal(signal.SIGTERM, self._cleanup_resources)
-
-            try:
-                exit_code = app.run()
-            finally:
-                signal.signal(signal.SIGINT, original_sigint)
-                signal.signal(signal.SIGTERM, original_sigterm)
+            exit_code = app.run()
 
             return {
                 "exit_code": exit_code if exit_code is not None else 0,
@@ -1368,10 +1392,6 @@ class Moondock:
             update_queue.put({"type": "merged_config", "payload": merged_config})
 
         self._update_queue = update_queue
-
-        if not tui_mode:
-            original_sigint = signal.signal(signal.SIGINT, self._cleanup_resources)
-            original_sigterm = signal.signal(signal.SIGTERM, self._cleanup_resources)
 
         try:
             mutagen_mgr = MutagenManager()
@@ -1664,10 +1684,6 @@ class Moondock:
         finally:
             if not tui_mode and not self._cleanup_in_progress:
                 self._cleanup_resources()
-
-            if not tui_mode:
-                signal.signal(signal.SIGINT, original_sigint)
-                signal.signal(signal.SIGTERM, original_sigterm)
 
     def _apply_cli_overrides(
         self,

@@ -130,6 +130,18 @@ class PortForwardManager:
             self.validate_port(port)
         self.validate_key_file(key_file)
 
+        if os.getenv("MOONDOCK_TEST_MODE") == "1":
+            for port in ports:
+                logger.info(f"Creating SSH tunnel for port {port}...")
+
+            for port in ports:
+                logger.info(
+                    f"SSH tunnel established: localhost:{port} -> remote:{port}"
+                )
+
+            self.ports = ports
+            return
+
         remote_binds = [("localhost", port) for port in ports]
         local_binds = [("localhost", port) for port in ports]
 

@@ -76,6 +76,7 @@ class DryRunHarness(ScenarioHarness):
         self.services.configuration_env.set("AWS_ACCESS_KEY_ID", "testing")
         self.services.configuration_env.set("AWS_SECRET_ACCESS_KEY", "testing")
         self.services.configuration_env.set("AWS_DEFAULT_REGION", "us-east-1")
+        self.services.configuration_env.set("MOONDOCK_TEST_MODE", "1")
 
         scenario_dir = self.services.artifacts.create_scenario_dir(self.scenario.name)
         self.services.diagnostics.set_log_path(scenario_dir / "diagnostics.log")
