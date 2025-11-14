@@ -767,9 +767,12 @@ class MoondockTUI(App):
                     log_widget.write_line("Force exit - skipping cleanup!")
                 except Exception:
                     pass
-                import os
 
-                os._exit(130)
+                if hasattr(self, "_driver") and self._driver is not None:
+                    self.exit(130)
+                else:
+                    import os
+                    os._exit(130)
             else:
                 self.last_ctrl_c_time = current_time
                 self.action_quit()

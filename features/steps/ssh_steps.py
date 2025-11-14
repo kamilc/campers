@@ -3,6 +3,7 @@
 import datetime
 import json
 import logging
+import os
 import re
 from unittest.mock import MagicMock, patch
 
@@ -59,7 +60,10 @@ def step_ec2_no_ssh_access(context: Context) -> None:
 @given('MOONDOCK_TEST_MODE is "{value}"')
 def step_moondock_test_mode(context: Context, value: str) -> None:
     """Set MOONDOCK_TEST_MODE environment variable."""
-    context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", value)
+    if hasattr(context, 'harness') and context.harness is not None:
+        context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", value)
+    else:
+        os.environ["MOONDOCK_TEST_MODE"] = value
     context.test_mode_enabled = value == "1"
 
 
