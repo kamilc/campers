@@ -139,7 +139,7 @@ def step_startup_script_executes_successfully(context: Context) -> None:
 def step_simulate_running_machine_in_tui(context: Context) -> None:
     """Simulate running the machine in the TUI using Textual Pilot.
 
-    This step uses the machine_name from context if set, otherwise uses default machine.
+    This step uses the machine_name from context if set, otherwise uses None for ad-hoc mode.
     It also ensures sync_directory is properly initialized if sync_paths are configured.
 
     Parameters
@@ -149,7 +149,7 @@ def step_simulate_running_machine_in_tui(context: Context) -> None:
     """
     from features.steps.pilot_steps import run_tui_test_with_machine
 
-    machine_name = getattr(context, "machine_name", "default")
+    machine_name = getattr(context, "machine_name", None)
 
     if not hasattr(context, "config_path"):
         raise AssertionError(
@@ -160,10 +160,17 @@ def step_simulate_running_machine_in_tui(context: Context) -> None:
 
     max_wait = 180
     logger.info(f"=== STARTING TUI TEST FOR MACHINE: {machine_name} ===")
-    result = run_tui_test_with_machine(
-        machine_name, context.config_path, max_wait, context
-    )
+    result = run_tui_test_with_machine(machine_name, context.config_path, max_wait, context)
     context.tui_result = result
+
+    if hasattr(context, "harness") and hasattr(context.harness, "current_instance_id"):
+        try:
+            instance_id = context.harness.current_instance_id()
+        except Exception:
+            instance_id = None
+        if instance_id:
+            context.instance_id = instance_id
+
     logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {machine_name} ===")
     logger.info(f"TUI result status: {result.get('status', 'UNKNOWN')}")
     logger.info(f"TUI log length: {len(result.get('log_text', ''))} characters")
