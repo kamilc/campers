@@ -37,6 +37,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container
+from textual.message import Message
 from textual.widgets import Header, Footer, Log, Static
 
 from moondock.config import ConfigLoader
@@ -257,6 +258,14 @@ class StreamRoutingFilter(logging.Filter):
         return record_stream == self.stream_type
 
 
+class TuiLogMessage(Message):
+    """Message delivering a log line to the TUI log widget."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        super().__init__()
+
+
 class TuiLogHandler(logging.Handler):
     """Logging handler that writes to a Textual Log widget.
 
@@ -300,8 +309,13 @@ class TuiLogHandler(logging.Handler):
         msg = self.format(record)
 
         try:
-            self.app.call_from_thread(self.log_widget.write_line, msg)
-        except RuntimeError:
+            if self.app._thread_id == threading.get_ident():
+                self.log_widget.write_line(msg)
+                return
+
+            if not self.app.post_message(TuiLogMessage(msg)):
+                self.log_widget.write_line(msg)
+        except Exception:
             try:
                 self.log_widget.write_line(msg)
             except Exception:
@@ -374,6 +388,7 @@ class MoondockTUI(App):
         self.worker_exit_code = 0
         self.instance_start_time: datetime | None = None
         self.last_ctrl_c_time: float = 0.0
+        self.log_widget: Log | None = None
 
     def compose(self) -> ComposeResult:
         """Compose TUI layout.
@@ -409,6 +424,7 @@ class MoondockTUI(App):
         self.original_handlers = root_logger.handlers[:]
 
         log_widget = self.query_one(Log)
+        self.log_widget = log_widget
         tui_handler = TuiLogHandler(self, log_widget)
         tui_handler.setFormatter(StreamFormatter("%(message)s"))
 
@@ -426,6 +442,14 @@ class MoondockTUI(App):
 
         if self._start_worker:
             self.run_worker(self.run_moondock_logic, exit_on_error=False, thread=True)
+
+    async def on_tui_log_message(self, message: TuiLogMessage) -> None:
+        """Append log messages emitted from worker threads to the log widget."""
+
+        if self.log_widget is None:
+            return
+
+        self.log_widget.write_line(message.text)
 
     def check_for_updates(self) -> None:
         """Check queue for updates and update widgets accordingly.

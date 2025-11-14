@@ -136,6 +136,8 @@ def execute_command_direct(
     except (ValueError, RuntimeError, ClientError, TypeError, AttributeError) as e:
         context.exit_code = 1
         stderr_capture.write(f"Error: {str(e)}\n")
+        context.error = str(e)
+        context.exception = e
         logger.error("Command execution failed: %s", e, exc_info=True)
 
     finally:
