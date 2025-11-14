@@ -437,9 +437,15 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
 
         stderr_capture = io.StringIO()
         old_stderr = sys.stderr
-        sys.stderr = stderr_capture
         root_logger = logging.getLogger()
         original_level = root_logger.level
+        original_handlers = list(root_logger.handlers)
+
+        stderr_handler = logging.StreamHandler(stderr_capture)
+        stderr_handler.setFormatter(logging.Formatter("%(message)s"))
+        root_logger.addHandler(stderr_handler)
+
+        sys.stderr = stderr_capture
 
         try:
             root_logger.setLevel(logging.DEBUG)
@@ -513,6 +519,9 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
         finally:
             sys.stderr = old_stderr
             root_logger.setLevel(original_level)
+            for handler in root_logger.handlers[:]:
+                if handler not in original_handlers:
+                    root_logger.removeHandler(handler)
 
     else:
         logger.debug("Non-LocalStack scenario, using subprocess execution")

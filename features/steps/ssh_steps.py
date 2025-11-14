@@ -313,17 +313,29 @@ def step_ssh_not_actually_attempted(context: Context) -> None:
 @then("status messages are printed")
 def step_status_messages_printed(context: Context) -> None:
     """Verify status messages were printed."""
-    if hasattr(context, "stderr"):
-        assert (
-            "Waiting for SSH to be ready..." in context.stderr
-            or "SSH connection established" in context.stderr
+    found_waiting_msg = False
+    found_established_msg = False
+
+    if hasattr(context, "log_records") and context.log_records:
+        messages = [record.getMessage() for record in context.log_records]
+        found_waiting_msg = any(
+            "Waiting for SSH to be ready" in msg for msg in messages
         )
+        found_established_msg = any("SSH connection established" in msg for msg in messages)
+
+    assert (
+        found_waiting_msg or found_established_msg
+    ), f"Expected status messages in log records, got: {[record.getMessage() for record in getattr(context, 'log_records', [])]}"
 
 
 @then("command_exit_code is {exit_code:d} in result")
 def step_command_exit_code_in_result(context: Context, exit_code: int) -> None:
     """Verify command_exit_code field in result."""
-    if hasattr(context, "final_config") and "command_exit_code" in context.final_config:
+    if (
+        hasattr(context, "final_config")
+        and context.final_config is not None
+        and "command_exit_code" in context.final_config
+    ):
         assert context.final_config["command_exit_code"] == exit_code
 
 
