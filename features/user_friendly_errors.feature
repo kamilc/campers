@@ -18,7 +18,7 @@ Scenario: Debug flag shows stack trace
   Then exit code is not 0
   And stderr contains "Traceback"
 
-@error @dry_run @no_credentials
+@error @no_credentials
 Scenario: Missing credentials error is user-friendly
   Given AWS credentials are not configured
   When I run run
