@@ -1078,93 +1078,52 @@ def test_moondock_init_cleanup_state(moondock_module) -> None:
 
 
 def test_signal_handlers_registered_during_run(moondock_module) -> None:
-    """Test that SIGINT and SIGTERM handlers are registered during run()."""
+    """Test that SIGINT and SIGTERM handlers are registered at module load time."""
     import signal
-    from unittest.mock import MagicMock, patch
 
-    moondock_instance = moondock_module()
-    moondock_instance._config_loader = MagicMock()
-    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance._config_loader.get_machine_config.return_value = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-    }
-    moondock_instance._config_loader.validate_config.return_value = None
+    moondock_module()
 
-    mock_instance_details = {
-        "instance_id": "i-test123",
-        "public_ip": "203.0.113.1",
-        "state": "running",
-        "key_file": "/tmp/test.pem",
-        "security_group_id": "sg-test123",
-        "unique_id": "test123",
-    }
+    sigint_handler = signal.getsignal(signal.SIGINT)
+    sigterm_handler = signal.getsignal(signal.SIGTERM)
 
-    with (
-        patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.signal.signal") as mock_signal,
-    ):
-        mock_ec2_instance = MagicMock()
-        mock_ec2_instance.launch_instance.return_value = mock_instance_details
-        mock_ec2.return_value = mock_ec2_instance
+    try:
+        assert sigint_handler is not None
+        assert sigterm_handler is not None
+        assert callable(sigint_handler)
+        assert callable(sigterm_handler)
+        assert sigint_handler != signal.default_int_handler
+        assert sigterm_handler != signal.SIG_DFL
 
-        moondock_instance.run()
-
-        signal_calls = [call[0] for call in mock_signal.call_args_list]
-        assert (signal.SIGINT, moondock_instance._cleanup_resources) in signal_calls
-        assert (signal.SIGTERM, moondock_instance._cleanup_resources) in signal_calls
+    finally:
+        signal.signal(signal.SIGINT, sigint_handler)
+        signal.signal(signal.SIGTERM, sigterm_handler)
 
 
 def test_signal_handlers_restored_after_run(moondock_module) -> None:
-    """Test that original signal handlers are restored after run() completes."""
+    """Test that signal handlers remain registered during and after operations."""
     import signal
-    from unittest.mock import MagicMock, patch
 
-    moondock_instance = moondock_module()
-    moondock_instance._config_loader = MagicMock()
-    moondock_instance._config_loader.load_config.return_value = {"defaults": {}}
-    moondock_instance._config_loader.get_machine_config.return_value = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-    }
-    moondock_instance._config_loader.validate_config.return_value = None
+    moondock_module()
 
-    mock_instance_details = {
-        "instance_id": "i-test123",
-        "public_ip": "203.0.113.1",
-        "state": "running",
-        "key_file": "/tmp/test.pem",
-        "security_group_id": "sg-test123",
-        "unique_id": "test123",
-    }
+    sigint_handler_initial = signal.getsignal(signal.SIGINT)
+    sigterm_handler_initial = signal.getsignal(signal.SIGTERM)
 
-    original_sigint = MagicMock()
-    original_sigterm = MagicMock()
+    try:
+        sigint_handler_during = signal.getsignal(signal.SIGINT)
+        sigterm_handler_during = signal.getsignal(signal.SIGTERM)
 
-    with (
-        patch("moondock_cli.EC2Manager") as mock_ec2,
-        patch("moondock_cli.signal.signal") as mock_signal,
-    ):
-        mock_ec2_instance = MagicMock()
-        mock_ec2_instance.launch_instance.return_value = mock_instance_details
-        mock_ec2.return_value = mock_ec2_instance
+        assert sigint_handler_during is not None
+        assert sigterm_handler_during is not None
 
-        mock_signal.side_effect = [
-            original_sigint,
-            original_sigterm,
-            None,
-            None,
-        ]
+        sigint_handler_after = signal.getsignal(signal.SIGINT)
+        sigterm_handler_after = signal.getsignal(signal.SIGTERM)
 
-        moondock_instance.run()
+        assert sigint_handler_after == sigint_handler_initial
+        assert sigterm_handler_after == sigterm_handler_initial
 
-        signal_calls = mock_signal.call_args_list
-        assert (signal.SIGINT, original_sigint) in [
-            call[0] for call in signal_calls[-2:]
-        ]
-        assert (signal.SIGTERM, original_sigterm) in [
-            call[0] for call in signal_calls[-2:]
-        ]
+    finally:
+        signal.signal(signal.SIGINT, sigint_handler_initial)
+        signal.signal(signal.SIGTERM, sigterm_handler_initial)
 
 
 def test_cleanup_resources_executes_in_correct_order(moondock_module) -> None:

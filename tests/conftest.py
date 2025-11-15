@@ -3,11 +3,37 @@
 import importlib.util
 import os
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
+from collections.abc import Generator
 
 import pytest
 import yaml
+
+
+@pytest.fixture(autouse=True)
+def cleanup_test_mode_env() -> Generator[None, None, None]:
+    """Ensure MOONDOCK_TEST_MODE is not set for unit tests.
+
+    Yields
+    ------
+    None
+        Control back to test after ensuring clean environment
+
+    Notes
+    -----
+    This fixture cleans up MOONDOCK_TEST_MODE environment variable that may
+    have been set by integration tests or harness tests, ensuring unit tests
+    run with a clean environment.
+    """
+    original_test_mode = os.environ.pop("MOONDOCK_TEST_MODE", None)
+
+    yield
+
+    if original_test_mode is not None:
+        os.environ["MOONDOCK_TEST_MODE"] = original_test_mode
+    else:
+        os.environ.pop("MOONDOCK_TEST_MODE", None)
 
 
 @pytest.fixture(scope="session")
