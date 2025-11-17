@@ -434,6 +434,14 @@ class MoondockTUI(App):
     #log-panel {
         height: 1fr;
     }
+
+    ScrollBar {
+        background: transparent;
+    }
+
+    ScrollBar:vertical {
+        background: #606060;
+    }
     """
 
     def __init__(
