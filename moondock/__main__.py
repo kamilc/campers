@@ -708,7 +708,7 @@ class MoondockTUI(App):
             except queue.Empty:
                 break
 
-        if not self.moondock._cleanup_in_progress:
+        if not self.moondock._abort_requested and not self.moondock._cleanup_in_progress:
             self.moondock._cleanup_resources()
 
     def run_moondock_logic(self) -> None:
