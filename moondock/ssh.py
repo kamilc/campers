@@ -276,10 +276,10 @@ class SSHManager:
             if line:
                 logging.info(line.rstrip("\n"), extra={"stream": "stdout"})
 
-            err_line = stderr.readline()
-
-            if err_line:
-                logging.info(err_line.rstrip("\n"), extra={"stream": "stderr"})
+            if stderr.channel.recv_stderr_ready():
+                err_line = stderr.readline()
+                if err_line:
+                    logging.info(err_line.rstrip("\n"), extra={"stream": "stderr"})
 
             if stdout.channel.exit_status_ready():
                 break
