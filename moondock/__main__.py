@@ -350,6 +350,55 @@ class TuiLogHandler(logging.Handler):
                 pass
 
 
+def detect_terminal_background() -> tuple[str, bool]:
+    """Detect terminal background color using OSC 11 query.
+
+    Returns
+    -------
+    tuple[str, bool]
+        (background_color_hex, is_light)
+        Example: ("#1e1e1e", False) for dark or ("#ffffff", True) for light
+    """
+    try:
+        sys.stdout.write("\033]11;?\033\\")
+        sys.stdout.flush()
+
+        old_settings = termios.tcgetattr(sys.stdin)
+        tty.setraw(sys.stdin.fileno())
+
+        response = ""
+        start_time = time.time()
+
+        while time.time() - start_time < 0.1:
+            if select.select([sys.stdin], [], [], 0)[0]:
+                char = sys.stdin.read(1)
+                response += char
+                if response.endswith("\033\\") or response.endswith("\007"):
+                    break
+
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+        if match := re.search(r'rgb:([0-9a-fA-F]{4})/([0-9a-fA-F]{4})/([0-9a-fA-F]{4})', response):
+            r = int(match.group(1), 16) / 65535
+            g = int(match.group(2), 16) / 65535
+            b = int(match.group(3), 16) / 65535
+
+            luminance = 0.299 * r + 0.587 * g + 0.114 * b
+            is_light = luminance > 0.5
+
+            r_hex = int(r * 255)
+            g_hex = int(g * 255)
+            b_hex = int(b * 255)
+            bg_color = f"#{r_hex:02x}{g_hex:02x}{b_hex:02x}"
+
+            return (bg_color, is_light)
+
+    except Exception:
+        pass
+
+    return ("#000000", False)
+
+
 class MoondockTUI(App):
     """Textual TUI application for moondock.
 
@@ -378,10 +427,12 @@ class MoondockTUI(App):
 
     CSS = """
     #status-panel {
-        height: 1fr;
+        height: auto;
+        background: #383838;
+        padding: 1;
     }
     #log-panel {
-        height: 2fr;
+        height: 1fr;
     }
     """
 
@@ -406,6 +457,7 @@ class MoondockTUI(App):
             Whether to start the worker thread on mount (default: True)
             Set to False for tests that verify initial placeholder state
         """
+        self.terminal_bg, self.is_light_theme = detect_terminal_background()
         super().__init__()
         self.moondock = moondock_instance
         self.run_kwargs = run_kwargs
@@ -416,6 +468,7 @@ class MoondockTUI(App):
         self.instance_start_time: datetime | None = None
         self.last_ctrl_c_time: float = 0.0
         self.log_widget: Log | None = None
+        self.styles.background = self.terminal_bg
 
     def compose(self) -> ComposeResult:
         """Compose TUI layout.
