@@ -222,7 +222,9 @@ def test_execute_command_success(
     exit_code = ssh_manager.execute_command("echo test")
 
     assert exit_code == 0
-    mock_client.exec_command.assert_called_once_with("cd ~ && bash -c 'echo test'")
+    mock_client.exec_command.assert_called_once_with(
+        "cd ~ && bash -c 'echo test'", get_pty=True
+    )
 
 
 @patch("moondock.ssh.paramiko.SSHClient")
@@ -303,7 +305,7 @@ def test_execute_command_shell_features(
     ssh_manager.execute_command("echo hello | grep ll")
 
     mock_client.exec_command.assert_called_once_with(
-        "cd ~ && bash -c 'echo hello | grep ll'"
+        "cd ~ && bash -c 'echo hello | grep ll'", get_pty=True
     )
 
 
@@ -426,7 +428,7 @@ def test_execute_command_raw_success(
     exit_code = ssh_manager.execute_command_raw("cd /tmp && ls -la")
 
     assert exit_code == 0
-    mock_client.exec_command.assert_called_once_with("cd /tmp && ls -la")
+    mock_client.exec_command.assert_called_once_with("cd /tmp && ls -la", get_pty=True)
 
 
 @patch("moondock.ssh.paramiko.SSHClient")
@@ -663,7 +665,7 @@ def test_execute_command_with_env_success(
 
     assert exit_code == 0
     mock_client.exec_command.assert_called_once_with(
-        "cd ~ && bash -c 'export AWS_REGION=us-west-2 && aws s3 ls'"
+        "cd ~ && bash -c 'export AWS_REGION=us-west-2 && aws s3 ls'", get_pty=True
     )
 
 
@@ -693,4 +695,6 @@ def test_execute_command_with_env_no_vars(
     exit_code = ssh_manager.execute_command_with_env("echo test", None)
 
     assert exit_code == 0
-    mock_client.exec_command.assert_called_once_with("cd ~ && bash -c 'echo test'")
+    mock_client.exec_command.assert_called_once_with(
+        "cd ~ && bash -c 'echo test'", get_pty=True
+    )
