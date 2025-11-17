@@ -19,12 +19,15 @@ import logging
 import os
 import queue
 import re
+import select
 import shlex
 import signal
 import socket
 import sys
+import termios
 import threading
 import time
+import tty
 import types
 from datetime import datetime
 from pathlib import Path
@@ -376,7 +379,6 @@ class MoondockTUI(App):
     CSS = """
     #status-panel {
         height: 1fr;
-        border: heavy white;
     }
     #log-panel {
         height: 2fr;
@@ -420,16 +422,11 @@ class MoondockTUI(App):
 
         Yields
         ------
-        Header
-            Header widget
         Container
             Status panel container with static widgets
         Container
             Log panel container with log widget
-        Footer
-            Footer widget
         """
-        yield Header()
         with Container(id="status-panel"):
             yield Static("SSH: loading...", id="ssh-widget")
             yield Static("Status: launching...", id="status-widget")
@@ -441,7 +438,6 @@ class MoondockTUI(App):
             yield Static("Mutagen: Not syncing", id="mutagen-widget")
         with Container(id="log-panel"):
             yield Log()
-        yield Footer()
 
     def on_mount(self) -> None:
         """Handle mount event - setup logging, start worker, and timer."""
