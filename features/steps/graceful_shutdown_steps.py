@@ -152,9 +152,7 @@ def step_instance_running_with_all_resources(context: Context) -> None:
             "MOONDOCK_FORCE_SIGNAL_EXIT", "1"
         )
         os.environ["MOONDOCK_FORCE_SIGNAL_EXIT"] = "1"
-        context.harness.services.configuration_env.set(
-            "MOONDOCK_DISABLE_MUTAGEN", "1"
-        )
+        context.harness.services.configuration_env.set("MOONDOCK_DISABLE_MUTAGEN", "1")
         os.environ["MOONDOCK_DISABLE_MUTAGEN"] = "1"
 
         context.app_process = subprocess.Popen(
@@ -248,9 +246,7 @@ def step_instance_launch_in_progress(context: Context) -> None:
             "MOONDOCK_FORCE_SIGNAL_EXIT", "1"
         )
         os.environ["MOONDOCK_FORCE_SIGNAL_EXIT"] = "1"
-        context.harness.services.configuration_env.set(
-            "MOONDOCK_DISABLE_MUTAGEN", "1"
-        )
+        context.harness.services.configuration_env.set("MOONDOCK_DISABLE_MUTAGEN", "1")
         os.environ["MOONDOCK_DISABLE_MUTAGEN"] = "1"
 
         scenario_name = context.scenario.name if hasattr(context, "scenario") else ""

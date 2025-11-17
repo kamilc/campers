@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import queue
 import shutil
 import subprocess
 import time
@@ -19,6 +18,7 @@ from behave.runner import Context
 from behave.model import Scenario
 
 from tests.harness.base import ScenarioHarness
+from tests.harness.localstack.extensions import Extensions
 from tests.harness.localstack.monitor_controller import MonitorAction, MonitorController
 from tests.harness.services.artifacts import ArtifactManager
 from tests.harness.services.configuration_env import ConfigurationEnv
@@ -139,6 +139,7 @@ class LocalStackHarness(ScenarioHarness):
     def __init__(self, context: Context, scenario: Scenario) -> None:
         super().__init__(context, scenario)
         self.services: LocalStackServiceContainer | None = None
+        self.extensions: Extensions | None = None
         self._ec2_client = boto3.client(
             "ec2",
             endpoint_url=LOCALSTACK_ENDPOINT,
@@ -165,14 +166,14 @@ class LocalStackHarness(ScenarioHarness):
         scenario_timeout = getattr(
             self.context, "scenario_timeout", DEFAULT_TIMEOUT_BUDGET
         )
-        timeout_manager = TimeoutManager(budget_seconds=min(scenario_timeout, DEFAULT_TIMEOUT_BUDGET))
+        timeout_manager = TimeoutManager(
+            budget_seconds=min(scenario_timeout, DEFAULT_TIMEOUT_BUDGET)
+        )
         event_bus = EventBus()
         artifacts = ArtifactManager()
         scenario_dir = artifacts.create_scenario_dir(self.scenario.name)
         diagnostics_log_path = scenario_dir / "diagnostics.log"
-        diagnostics = DiagnosticsCollector(
-            verbose=False, log_path=diagnostics_log_path
-        )
+        diagnostics = DiagnosticsCollector(verbose=False, log_path=diagnostics_log_path)
         ssh_pool = SSHContainerPool(
             base_port=SSH_PORT_BASE,
             max_containers_per_instance=MAX_CONTAINERS_PER_INSTANCE,
@@ -222,6 +223,17 @@ class LocalStackHarness(ScenarioHarness):
             container_manager=container_manager,
         )
 
+        self.extensions = Extensions()
+        if self._should_initialize_pilot_extension():
+            from tests.harness.localstack.pilot_extension import PilotExtension
+
+            pilot_ext = PilotExtension(
+                event_bus=event_bus,
+                timeout_manager=timeout_manager,
+                diagnostics=diagnostics,
+            )
+            self.extensions.pilot = pilot_ext
+
         diagnostics.record(
             "localstack-harness", "ready", {"scenario": self.scenario.name}
         )
@@ -255,7 +267,7 @@ class LocalStackHarness(ScenarioHarness):
 
         teardown_steps = [
             ("monitor-pause", self._teardown_pause_monitor),
-            ("tui-signal", self._teardown_signal_tui),
+            ("tui-shutdown", self._teardown_tui_shutdown),
             ("cli-terminate", self._teardown_terminate_cli_process),
             ("monitor-shutdown", self._teardown_shutdown_monitor),
             ("eventbus-drain", self._teardown_drain_event_bus),
@@ -355,24 +367,26 @@ class LocalStackHarness(ScenarioHarness):
         self.services.monitor_controller.pause()
         return {"paused": True}
 
-    def _teardown_signal_tui(self) -> dict[str, Any]:
-        try:
-            from features.steps.pilot_steps import get_tui_update_queue
+    def _teardown_tui_shutdown(self) -> tuple[str, dict[str, Any]]:
+        if self.extensions is None or self.extensions.pilot is None:
+            return "skip", {"reason": "pilot-extension-not-initialized"}
 
-            update_queue = get_tui_update_queue()
-        except ImportError:
-            return {"signaled": False, "reason": "pilot-extension-missing"}
-        except Exception as exc:  # pylint: disable=broad-except
-            return {"signaled": False, "reason": f"access-error: {exc}"}
-
-        if update_queue is None:
-            return {"signaled": False, "reason": "queue-missing"}
+        if self.extensions.pilot.tui_handle is None:
+            return "success", {"tui_was_running": False}
 
         try:
-            update_queue.put_nowait({"type": "harness-shutdown", "payload": {}})
-            return {"signaled": True}
-        except queue.Full:
-            return {"signaled": False, "reason": "queue-full"}
+            self.extensions.pilot.shutdown(timeout_sec=10)
+            return "success", {"tui_was_running": True, "shutdown": "graceful"}
+        except TimeoutError:
+            return "error", {
+                "reason": "tui-shutdown-timeout",
+                "timeout_sec": 10,
+            }
+        except Exception as exc:
+            return "error", {
+                "reason": f"tui-shutdown-error: {exc}",
+                "error_type": type(exc).__name__,
+            }
 
     def _teardown_terminate_cli_process(self) -> dict[str, Any]:
         proc = getattr(self.context, "app_process", None)
@@ -448,8 +462,14 @@ class LocalStackHarness(ScenarioHarness):
         from datetime import datetime, timezone
 
         artifacts = self.services.artifacts
-        scenario_slug = getattr(artifacts, "scenario_slug", None) or self.scenario.name.lower().replace(" ", "-").replace("/", "-")
-        run_id = getattr(artifacts, "run_id", None) or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+        scenario_slug = getattr(artifacts, "scenario_slug", None)
+        if not scenario_slug:
+            scenario_slug = (
+                self.scenario.name.lower().replace(" ", "-").replace("/", "-")
+            )
+        run_id = getattr(artifacts, "run_id", None)
+        if not run_id:
+            run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
 
         diagnostics_dir = artifacts.base_dir / "_diagnostics" / scenario_slug
         diagnostics_dir.mkdir(parents=True, exist_ok=True)
@@ -513,6 +533,20 @@ class LocalStackHarness(ScenarioHarness):
                 time.sleep(1)
 
         raise RuntimeError(f"LocalStack health check failed after {timeout} seconds")
+
+    def _should_initialize_pilot_extension(self) -> bool:
+        """Determine if PilotExtension should be initialized for this scenario.
+
+        Returns
+        -------
+        bool
+            True if scenario has @pilot or @tui tags, False otherwise
+        """
+        if not self.scenario.tags:
+            return False
+
+        pilot_tags = {"@pilot", "@tui"}
+        return any(tag in pilot_tags for tag in self.scenario.tags)
 
     def wait_for_event(
         self, event_type: str, instance_id: str | None, timeout_sec: float
@@ -765,7 +799,10 @@ class LocalStackHarness(ScenarioHarness):
             return
 
         if os.environ.get("MOONDOCK_DISABLE_MUTAGEN") == "1":
-            logger.info("Mutagen disabled via MOONDOCK_DISABLE_MUTAGEN=1; skipping harness sync setup")
+            logger.info(
+                "Mutagen disabled via MOONDOCK_DISABLE_MUTAGEN=1; "
+                "skipping harness sync setup"
+            )
             return
 
         config_data = getattr(self.context, "config_data", None)

@@ -127,9 +127,7 @@ class ScenarioTimeoutWatchdog:
                 reason="scenario_timeout",
             )
         except Exception as exc:  # pragma: no cover - diagnostics best effort
-            logger.error(
-                "Scenario watchdog failed to write diagnostics: %s", exc
-            )
+            logger.error("Scenario watchdog failed to write diagnostics: %s", exc)
 
         if diagnostics is not None:
             try:
@@ -162,7 +160,9 @@ class ScenarioTimeoutWatchdog:
         try:
             os.kill(os.getpid(), self._signal_number)
         except OSError as exc:  # pragma: no cover - process teardown best effort
-            logger.error("Failed to signal timeout for scenario '%s': %s", scenario_name, exc)
+            logger.error(
+                "Failed to signal timeout for scenario '%s': %s", scenario_name, exc
+            )
 
     def _signal_handler(self, signum, frame):  # type: ignore[override]
         """Raise TimeoutError when the watchdog signal is delivered."""
@@ -556,9 +556,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
-                    logger.debug(
-                        "Cleaned up localhost entries from ~/.ssh/known_hosts"
-                    )
+                    logger.debug("Cleaned up localhost entries from ~/.ssh/known_hosts")
         except Exception as e:
             logger.debug(f"Error cleaning known_hosts: {e}")
 
@@ -1100,9 +1098,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
-                    msg = (
-                        "Cleaned up localhost entries from ~/.ssh/known_hosts after scenario"
-                    )
+                    msg = "Cleaned up localhost entries from ~/.ssh/known_hosts after scenario"
                     logger.debug(msg)
         except Exception as e:
             logger.debug(f"Error cleaning known_hosts after scenario: {e}")

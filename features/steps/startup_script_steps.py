@@ -160,7 +160,9 @@ def step_simulate_running_machine_in_tui(context: Context) -> None:
 
     max_wait = 180
     logger.info(f"=== STARTING TUI TEST FOR MACHINE: {machine_name} ===")
-    result = run_tui_test_with_machine(machine_name, context.config_path, max_wait, context)
+    result = run_tui_test_with_machine(
+        machine_name, context.config_path, max_wait, context
+    )
     context.tui_result = result
 
     if hasattr(context, "harness") and hasattr(context.harness, "current_instance_id"):

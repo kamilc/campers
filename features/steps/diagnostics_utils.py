@@ -74,9 +74,7 @@ def run_diagnostic_command(command: Sequence[str]) -> str:
         payload.append(f"[stderr] {stderr_text}")
 
     if not payload:
-        payload.append(
-            f"command returned {result.returncode} with no output"
-        )
+        payload.append(f"command returned {result.returncode} with no output")
 
     return "\n".join(payload)
 

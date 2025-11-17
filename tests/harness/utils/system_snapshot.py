@@ -73,9 +73,7 @@ def _gather_docker_info() -> dict[str, Any]:
     return snapshot
 
 
-def gather_system_snapshot(
-    *, include_thread_stacks: bool = False
-) -> dict[str, Any]:
+def gather_system_snapshot(*, include_thread_stacks: bool = False) -> dict[str, Any]:
     """Gather diagnostic information about the current process, threads and Docker.
 
     Parameters

@@ -48,9 +48,7 @@ class DiagnosticsCollector:
         Whether to output to console during collection
     """
 
-    def __init__(
-        self, verbose: bool = False, log_path: Path | None = None
-    ) -> None:
+    def __init__(self, verbose: bool = False, log_path: Path | None = None) -> None:
         self.events: list[DiagnosticEvent] = []
         self.verbose = verbose
         self._log_path = Path(log_path) if log_path else None
@@ -122,7 +120,5 @@ class DiagnosticsCollector:
         """Capture and record a holistic system snapshot."""
         from tests.harness.utils.system_snapshot import gather_system_snapshot
 
-        snapshot = gather_system_snapshot(
-            include_thread_stacks=include_thread_stacks
-        )
+        snapshot = gather_system_snapshot(include_thread_stacks=include_thread_stacks)
         self.record("system-snapshot", description, snapshot)

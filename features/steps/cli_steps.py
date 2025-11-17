@@ -13,7 +13,6 @@ from behave import given, then, when
 from behave.runner import Context
 
 from features.steps.common_steps import execute_command_direct
-from features.steps.utils import run_async_test
 from moondock.__main__ import MoondockCLI
 
 JSON_OUTPUT_TRUNCATE_LENGTH = 200

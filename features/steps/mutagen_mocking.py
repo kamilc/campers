@@ -49,9 +49,6 @@ def apply_timeout_mock_if_needed(context: Context) -> list:
         try:
             from moondock.sync import MutagenManager
 
-            original_create = MutagenManager.create_sync_session
-            original_terminate = MutagenManager.terminate_session
-
             def mock_create(  # type: ignore[override]
                 self,
                 session_name: str,
@@ -326,7 +323,9 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
 
             context.ssh_username = ssh_username
 
-            harness_available = hasattr(context, "harness") and context.harness is not None
+            harness_available = (
+                hasattr(context, "harness") and context.harness is not None
+            )
             instance_known = getattr(context, "instance_id", None) is not None
 
             if harness_available and instance_known:
@@ -390,9 +389,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 patch.object(
                     PortForwardManager, "validate_key_file", mock_validate_key_file
                 ),
-                patch.object(
-                    PortForwardManager, "create_tunnels", mock_create_tunnels
-                ),
+                patch.object(PortForwardManager, "create_tunnels", mock_create_tunnels),
                 patch.object(
                     PortForwardManager, "stop_all_tunnels", mock_stop_all_tunnels
                 ),

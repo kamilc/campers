@@ -60,7 +60,7 @@ def step_ec2_no_ssh_access(context: Context) -> None:
 @given('MOONDOCK_TEST_MODE is "{value}"')
 def step_moondock_test_mode(context: Context, value: str) -> None:
     """Set MOONDOCK_TEST_MODE environment variable."""
-    if hasattr(context, 'harness') and context.harness is not None:
+    if hasattr(context, "harness") and context.harness is not None:
         context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", value)
     else:
         os.environ["MOONDOCK_TEST_MODE"] = value
@@ -325,11 +325,13 @@ def step_status_messages_printed(context: Context) -> None:
         found_waiting_msg = any(
             "Waiting for SSH to be ready" in msg for msg in messages
         )
-        found_established_msg = any("SSH connection established" in msg for msg in messages)
+        found_established_msg = any(
+            "SSH connection established" in msg for msg in messages
+        )
 
-    assert (
-        found_waiting_msg or found_established_msg
-    ), f"Expected status messages in log records, got: {[record.getMessage() for record in getattr(context, 'log_records', [])]}"
+    assert found_waiting_msg or found_established_msg, (
+        f"Expected status messages in log records, got: {[record.getMessage() for record in getattr(context, 'log_records', [])]}"
+    )
 
 
 @then("command_exit_code is {exit_code:d} in result")

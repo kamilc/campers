@@ -24,18 +24,31 @@ from moondock.__main__ import Moondock, MoondockTUI
 
 logger = logging.getLogger(__name__)
 
-_tui_update_queue: queue.Queue | None = None
 
-
-def get_tui_update_queue() -> queue.Queue | None:
+def get_tui_update_queue(context: Context | None = None) -> queue.Queue | None:
     """Get the TUI update queue for monitor thread communication.
+
+    Accesses the TUI update queue from PilotExtension if available,
+    otherwise returns None. This replaces the global _tui_update_queue.
+
+    Parameters
+    ----------
+    context : Context | None
+        Behave context object containing harness reference
 
     Returns
     -------
     queue.Queue | None
         The TUI update queue if TUI test is running, None otherwise
     """
-    return _tui_update_queue
+    if not context or not hasattr(context, "harness"):
+        return None
+
+    pilot_ext = context.harness.extensions.pilot
+    if not pilot_ext or not pilot_ext.tui_handle:
+        return None
+
+    return pilot_ext.tui_handle.event_queue
 
 
 @given("a config file with defaults section")
@@ -266,9 +279,7 @@ async def poll_tui_with_unified_timeout(
             and getattr(behave_context, "monitor_error", None) is not None
         ):
             error_message = getattr(behave_context, "monitor_error")
-            logger.error(
-                "Monitor reported error during TUI polling: %s", error_message
-            )
+            logger.error("Monitor reported error during TUI polling: %s", error_message)
             raise AssertionError(
                 f"Monitor error detected while waiting for TUI: {error_message}"
             )
@@ -451,11 +462,7 @@ def run_tui_test_with_machine(
         if not recorded:
             try:
                 fallback_dir = (
-                    Path.cwd()
-                    / "tmp"
-                    / "behave"
-                    / "_diagnostics"
-                    / "_tui-timeouts"
+                    Path.cwd() / "tmp" / "behave" / "_diagnostics" / "_tui-timeouts"
                 )
                 fallback_dir.mkdir(parents=True, exist_ok=True)
                 timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
@@ -477,8 +484,6 @@ def run_tui_test_with_machine(
     timer = threading.Timer(max_wait, timeout_handler)
 
     async def run_tui_test() -> dict[str, Any]:
-        global _tui_update_queue
-
         logger.info("=== TUI TEST START === (machine: %s)", machine_name)
         logger.info(f"[TIMEOUT-ENFORCER] Starting test with {max_wait}s timeout")
         loop_holder["loop"] = asyncio.get_running_loop()
@@ -507,7 +512,6 @@ def run_tui_test_with_machine(
                 async with mocking_context_manager():
                     moondock = Moondock()
                     update_queue: queue.Queue = queue.Queue(maxsize=100)
-                    _tui_update_queue = update_queue
 
                     app = MoondockTUI(
                         moondock_instance=moondock,
@@ -575,7 +579,6 @@ def run_tui_test_with_machine(
                 }
         finally:
             test_completed.set()
-            _tui_update_queue = None
             restore_environment(original_values, behave_context)
             app_holder.pop("app", None)
             loop_holder.pop("loop", None)

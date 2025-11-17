@@ -357,6 +357,12 @@ exec /init
                     logger.info(
                         f"SSH server ready on port {port} after {ssh_ready_elapsed:.1f}s (total: {total_elapsed:.1f}s)"
                     )
+
+                    logger.info(
+                        "Waiting for SSH authentication subsystem to initialize..."
+                    )
+                    time.sleep(2)
+
                     break
                 time.sleep(0.5)
             else:
