@@ -433,14 +433,12 @@ class MoondockTUI(App):
     }
     #log-panel {
         height: 1fr;
-    }
-
-    ScrollBar {
-        background: transparent;
-    }
-
-    ScrollBar:vertical {
-        background: #606060;
+        scrollbar-background: #383838;
+        scrollbar-color: #606060;
+        scrollbar-background-hover: #404040;
+        scrollbar-color-hover: #707070;
+        scrollbar-background-active: #383838;
+        scrollbar-color-active: #606060;
     }
     """
 
@@ -797,7 +795,9 @@ class MoondockTUI(App):
                     )
                     time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
 
-            if not self.moondock._cleanup_in_progress:
+            if self.moondock._abort_requested:
+                self.worker_exit_code = 130
+            elif not self.moondock._cleanup_in_progress:
                 self.moondock._cleanup_resources()
 
             self.call_from_thread(self.exit, self.worker_exit_code)
@@ -836,43 +836,10 @@ class MoondockTUI(App):
 
     def action_quit(self) -> None:
         """Handle quit action (q key or first Ctrl+C)."""
-        try:
-            log_widget = self.query_one(Log)
-            log_widget.write_line("Shutting down - cleaning up resources...")
-            log_widget.write_line("Press Ctrl+C again to force exit")
-            log_widget.refresh()
-        except Exception:
-            pass
+        self.moondock._abort_requested = True
 
-        if not self.moondock._cleanup_in_progress:
-            root_logger = logging.getLogger()
-            tui_handlers = [
-                h for h in root_logger.handlers if isinstance(h, TuiLogHandler)
-            ]
-            for handler in tui_handlers:
-                root_logger.removeHandler(handler)
-
-            try:
-                self.moondock._cleanup_resources()
-            except Exception as e:
-                try:
-                    log_widget = self.query_one(Log)
-                    log_widget.write_line(f"Cleanup error: {e}")
-                    log_widget.refresh()
-                except Exception:
-                    pass
-
-            for handler in tui_handlers:
-                root_logger.addHandler(handler)
-
-        try:
-            log_widget = self.query_one(Log)
-            log_widget.write_line("Cleanup complete, exiting...")
-            log_widget.refresh()
-        except Exception:
-            pass
-
-        self.set_timer(0.1, lambda: self.exit(130))
+        if hasattr(self.moondock, "_resources") and "ssh_manager" in self.moondock._resources:
+            self.moondock._resources["ssh_manager"].abort_active_command()
 
 
 class Moondock:
@@ -924,6 +891,7 @@ class Moondock:
         self._cleanup_lock = threading.Lock()
         self._resources_lock = threading.Lock()
         self._cleanup_in_progress = False
+        self._abort_requested = False
         self._resources: dict[str, Any] = {}
         self._update_queue: queue.Queue | None = None
         self.boto3_client_factory = boto3_client_factory or boto3.client
@@ -1338,6 +1306,12 @@ class Moondock:
             )
 
             exit_code = app.run()
+
+            if exit_code == 130:
+                print("\nCtrl+C received. Cleaning up the instance...")
+                print("Press Ctrl+C again to force exit")
+                self._cleanup_resources()
+                print("Cleanup complete.")
 
             return {
                 "exit_code": exit_code if exit_code is not None else 0,
