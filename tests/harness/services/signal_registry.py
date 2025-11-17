@@ -4,7 +4,7 @@ import threading
 import time
 from typing import Any
 
-from tests.unit.harness.exceptions import HarnessTimeoutError
+from tests.harness.exceptions import HarnessTimeoutError
 
 
 class SignalRegistry:

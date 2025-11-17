@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tests.unit.harness.localstack.pilot_extension import PilotExtension
+    from tests.harness.localstack.pilot_extension import PilotExtension
 
 
 @dataclass

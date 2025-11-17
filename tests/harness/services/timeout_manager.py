@@ -5,7 +5,7 @@ import time
 from contextlib import contextmanager
 from typing import Iterator
 
-from tests.unit.harness.exceptions import HarnessTimeoutError
+from tests.harness.exceptions import HarnessTimeoutError
 
 logger = logging.getLogger(__name__)
 

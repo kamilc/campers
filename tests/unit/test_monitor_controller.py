@@ -5,15 +5,15 @@ import time
 from collections import deque
 from pathlib import Path
 
-from tests.unit.harness.localstack.monitor_controller import (
+from tests.harness.localstack.monitor_controller import (
     MonitorAction,
     MonitorController,
 )
-from tests.unit.harness.services.diagnostics import DiagnosticsCollector
-from tests.unit.harness.services.event_bus import EventBus
-from tests.unit.harness.services.resource_registry import ResourceRegistry
-from tests.unit.harness.services.ssh_container_pool import SSHContainerPool
-from tests.unit.harness.services.timeout_manager import TimeoutManager
+from tests.harness.services.diagnostics import DiagnosticsCollector
+from tests.harness.services.event_bus import EventBus
+from tests.harness.services.resource_registry import ResourceRegistry
+from tests.harness.services.ssh_container_pool import SSHContainerPool
+from tests.harness.services.timeout_manager import TimeoutManager
 
 
 class TestMonitorControllerLifecycle:

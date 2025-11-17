@@ -8,9 +8,9 @@ import pytest
 from behave.model import Scenario
 from behave.runner import Context
 
-from tests.unit.harness.dry_run import DryRunHarness, ServiceContainer
-from tests.unit.harness.exceptions import HarnessTimeoutError
-from tests.unit.harness.services.event_bus import Event
+from tests.harness.dry_run import DryRunHarness, ServiceContainer
+from tests.harness.exceptions import HarnessTimeoutError
+from tests.harness.services.event_bus import Event
 
 
 class TestServiceContainerCreation:
@@ -18,14 +18,14 @@ class TestServiceContainerCreation:
 
     def test_create_service_container(self) -> None:
         """Test creating a service container."""
-        from tests.unit.harness.services.artifacts import ArtifactManager
-        from tests.unit.harness.services.configuration_env import ConfigurationEnv
-        from tests.unit.harness.services.diagnostics import DiagnosticsCollector
-        from tests.unit.harness.services.event_bus import EventBus
-        from tests.unit.harness.services.resource_registry import ResourceRegistry
-        from tests.unit.harness.services.signal_registry import SignalRegistry
-        from tests.unit.harness.services.timeout_manager import TimeoutManager
-        from tests.unit.harness.utils.port_allocator import PortAllocator
+        from tests.harness.services.artifacts import ArtifactManager
+        from tests.harness.services.configuration_env import ConfigurationEnv
+        from tests.harness.services.diagnostics import DiagnosticsCollector
+        from tests.harness.services.event_bus import EventBus
+        from tests.harness.services.resource_registry import ResourceRegistry
+        from tests.harness.services.signal_registry import SignalRegistry
+        from tests.harness.services.timeout_manager import TimeoutManager
+        from tests.harness.utils.port_allocator import PortAllocator
 
         container = ServiceContainer(
             configuration_env=ConfigurationEnv(),

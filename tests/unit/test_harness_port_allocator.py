@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.unit.harness.utils.port_allocator import PortAllocator
+from tests.harness.utils.port_allocator import PortAllocator
 
 
 class TestPortAllocatorBasic:

@@ -3,13 +3,13 @@
 import time
 from unittest.mock import Mock, MagicMock
 
-from tests.unit.harness.localstack.pilot_extension import (
+from tests.harness.localstack.pilot_extension import (
     PilotExtension,
     TUIHandle,
 )
-from tests.unit.harness.services.diagnostics import DiagnosticsCollector
-from tests.unit.harness.services.event_bus import EventBus
-from tests.unit.harness.services.timeout_manager import TimeoutManager
+from tests.harness.services.diagnostics import DiagnosticsCollector
+from tests.harness.services.event_bus import EventBus
+from tests.harness.services.timeout_manager import TimeoutManager
 
 
 class TestTUIHandle:

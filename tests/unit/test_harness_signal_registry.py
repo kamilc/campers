@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from tests.unit.harness.exceptions import HarnessTimeoutError
-from tests.unit.harness.services.signal_registry import SignalRegistry
+from tests.harness.exceptions import HarnessTimeoutError
+from tests.harness.services.signal_registry import SignalRegistry
 
 
 class TestSignalRegistryPublishWait:

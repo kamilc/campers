@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from tests.unit.harness.exceptions import HarnessTimeoutError
-from tests.unit.harness.services.timeout_manager import TimeoutManager
+from tests.harness.exceptions import HarnessTimeoutError
+from tests.harness.services.timeout_manager import TimeoutManager
 
 
 class TestTimeoutManagerBasic:

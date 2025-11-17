@@ -3,7 +3,7 @@
 import time
 
 
-from tests.unit.harness.services.diagnostics import (
+from tests.harness.services.diagnostics import (
     DiagnosticEvent,
     DiagnosticsCollector,
 )

@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from tests.unit.harness.services.configuration_env import ConfigurationEnv
+from tests.harness.services.configuration_env import ConfigurationEnv
 
 
 class TestConfigurationEnvSetUnset:

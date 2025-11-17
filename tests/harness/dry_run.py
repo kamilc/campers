@@ -4,15 +4,15 @@ import logging
 from dataclasses import dataclass
 
 
-from tests.unit.harness.base import ScenarioHarness
-from tests.unit.harness.services.artifacts import ArtifactManager
-from tests.unit.harness.services.configuration_env import ConfigurationEnv
-from tests.unit.harness.services.diagnostics import DiagnosticsCollector
-from tests.unit.harness.services.event_bus import EventBus
-from tests.unit.harness.services.resource_registry import ResourceRegistry
-from tests.unit.harness.services.signal_registry import SignalRegistry
-from tests.unit.harness.services.timeout_manager import TimeoutManager
-from tests.unit.harness.utils.port_allocator import PortAllocator
+from tests.harness.base import ScenarioHarness
+from tests.harness.services.artifacts import ArtifactManager
+from tests.harness.services.configuration_env import ConfigurationEnv
+from tests.harness.services.diagnostics import DiagnosticsCollector
+from tests.harness.services.event_bus import EventBus
+from tests.harness.services.resource_registry import ResourceRegistry
+from tests.harness.services.signal_registry import SignalRegistry
+from tests.harness.services.timeout_manager import TimeoutManager
+from tests.harness.utils.port_allocator import PortAllocator
 
 
 @dataclass

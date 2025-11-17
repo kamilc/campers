@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit.harness.services.artifacts import ArtifactManager
+from tests.harness.services.artifacts import ArtifactManager
 
 
 @pytest.fixture

@@ -483,14 +483,14 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     is_dry_run = "dry_run" in scenario.tags
 
     if is_localstack_scenario:
-        from tests.unit.harness.localstack import LocalStackHarness
+        from tests.harness.localstack import LocalStackHarness
 
         context.harness = LocalStackHarness(context, scenario)
         context.harness.setup()
         logger.info(f"Initialized LocalStackHarness for scenario: {scenario.name}")
 
     elif is_dry_run:
-        from tests.unit.harness.dry_run import DryRunHarness
+        from tests.harness.dry_run import DryRunHarness
 
         context.harness = DryRunHarness(context, scenario)
         context.harness.setup()
@@ -1040,7 +1040,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     harness = getattr(context, "harness", None)
     harness_managed = False
     try:
-        from tests.unit.harness.localstack import LocalStackHarness
+        from tests.harness.localstack import LocalStackHarness
 
         harness_managed = isinstance(harness, LocalStackHarness)
     except ImportError:
@@ -1125,7 +1125,7 @@ def after_feature(context: Context, feature) -> None:
         logger.info(
             f"Feature '{feature.name}' had @localstack scenarios, stopping LocalStack container"
         )
-        from tests.unit.harness.localstack import LocalStackHarness
+        from tests.harness.localstack import LocalStackHarness
 
         LocalStackHarness.stop_localstack_container()
 

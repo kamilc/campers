@@ -118,7 +118,7 @@ class DiagnosticsCollector:
         self, description: str, include_thread_stacks: bool = False
     ) -> None:
         """Capture and record a holistic system snapshot."""
-        from tests.unit.harness.utils.system_snapshot import gather_system_snapshot
+        from tests.harness.utils.system_snapshot import gather_system_snapshot
 
         snapshot = gather_system_snapshot(include_thread_stacks=include_thread_stacks)
         self.record("system-snapshot", description, snapshot)

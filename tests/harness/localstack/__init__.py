@@ -1,5 +1,5 @@
 """LocalStack harness components."""
 
-from tests.unit.harness.localstack.harness import LocalStackHarness
+from tests.harness.localstack.harness import LocalStackHarness
 
 __all__ = ["LocalStackHarness"]

@@ -7,7 +7,7 @@ import pytest
 from behave.model import Scenario
 from behave.runner import Context
 
-from tests.unit.harness.base import ScenarioHarness
+from tests.harness.base import ScenarioHarness
 
 
 class ConcreteHarness(ScenarioHarness):

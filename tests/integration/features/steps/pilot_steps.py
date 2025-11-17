@@ -19,7 +19,7 @@ from textual.css.query import NoMatches
 from textual.widgets import Log
 
 from tests.integration.features.steps.utils import run_async_test
-from tests.unit.harness.utils.system_snapshot import gather_system_snapshot
+from tests.harness.utils.system_snapshot import gather_system_snapshot
 from moondock.__main__ import Moondock, MoondockTUI
 
 logger = logging.getLogger(__name__)

@@ -17,26 +17,26 @@ import requests
 from behave.runner import Context
 from behave.model import Scenario
 
-from tests.unit.harness.base import ScenarioHarness
-from tests.unit.harness.localstack.extensions import Extensions
-from tests.unit.harness.localstack.monitor_controller import (
+from tests.harness.base import ScenarioHarness
+from tests.harness.localstack.extensions import Extensions
+from tests.harness.localstack.monitor_controller import (
     MonitorAction,
     MonitorController,
 )
-from tests.unit.harness.services.artifacts import ArtifactManager
-from tests.unit.harness.services.configuration_env import ConfigurationEnv
-from tests.unit.harness.services.diagnostics import DiagnosticsCollector
-from tests.unit.harness.services.event_bus import Event, EventBus
-from tests.unit.harness.services.mutagen_session_manager import (
+from tests.harness.services.artifacts import ArtifactManager
+from tests.harness.services.configuration_env import ConfigurationEnv
+from tests.harness.services.diagnostics import DiagnosticsCollector
+from tests.harness.services.event_bus import Event, EventBus
+from tests.harness.services.mutagen_session_manager import (
     MutagenSessionManager,
     MutagenCommandResult,
     MutagenError,
     MutagenTimeoutError,
 )
-from tests.unit.harness.services.resource_registry import ResourceRegistry
-from tests.unit.harness.services.ssh_container_pool import SSHContainerPool
-from tests.unit.harness.services.timeout_manager import TimeoutManager
-from tests.unit.harness.utils.port_allocator import PortAllocator
+from tests.harness.services.resource_registry import ResourceRegistry
+from tests.harness.services.ssh_container_pool import SSHContainerPool
+from tests.harness.services.timeout_manager import TimeoutManager
+from tests.harness.utils.port_allocator import PortAllocator
 
 from tests.integration.features.steps.docker_manager import EC2ContainerManager
 from moondock.sync import MutagenManager
@@ -228,7 +228,7 @@ class LocalStackHarness(ScenarioHarness):
 
         self.extensions = Extensions()
         if self._should_initialize_pilot_extension():
-            from tests.unit.harness.localstack.pilot_extension import PilotExtension
+            from tests.harness.localstack.pilot_extension import PilotExtension
 
             pilot_ext = PilotExtension(
                 event_bus=event_bus,
@@ -713,7 +713,7 @@ class LocalStackHarness(ScenarioHarness):
 
     def _build_monitor_action(self, instance: dict) -> "MonitorAction":
         """Construct a monitor action object from instance metadata."""
-        from tests.unit.harness.localstack.monitor_controller import MonitorAction
+        from tests.harness.localstack.monitor_controller import MonitorAction
 
         metadata = {
             "image_id": instance.get("ImageId"),

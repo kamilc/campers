@@ -10,7 +10,7 @@ import requests
 from behave import given, then
 from behave.runner import Context
 
-from tests.unit.harness.services.event_bus import EventBusTimeoutError
+from tests.harness.services.event_bus import EventBusTimeoutError
 
 logger = logging.getLogger(__name__)
 

@@ -13,9 +13,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from tests.unit.harness.services.diagnostics import DiagnosticsCollector
-from tests.unit.harness.services.event_bus import Event, EventBus
-from tests.unit.harness.services.timeout_manager import TimeoutManager
+from tests.harness.services.diagnostics import DiagnosticsCollector
+from tests.harness.services.event_bus import Event, EventBus
+from tests.harness.services.timeout_manager import TimeoutManager
 
 logger = logging.getLogger(__name__)
 

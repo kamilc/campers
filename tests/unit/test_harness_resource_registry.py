@@ -1,6 +1,6 @@
 """Unit tests for ResourceRegistry service."""
 
-from tests.unit.harness.services.resource_registry import ResourceRegistry
+from tests.harness.services.resource_registry import ResourceRegistry
 
 
 class TestResourceRegistryBasic:

@@ -5,7 +5,7 @@ from threading import Event as ThreadEvent
 
 import pytest
 
-from tests.unit.harness.services.event_bus import (
+from tests.harness.services.event_bus import (
     Event,
     EventBus,
     EventBusTimeoutError,

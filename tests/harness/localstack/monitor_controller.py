@@ -9,16 +9,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from tests.unit.harness.exceptions import HarnessTimeoutError
-from tests.unit.harness.services.diagnostics import DiagnosticsCollector
-from tests.unit.harness.services.event_bus import Event, EventBus
-from tests.unit.harness.services.resource_registry import ResourceRegistry
-from tests.unit.harness.services.ssh_container_pool import (
+from tests.harness.exceptions import HarnessTimeoutError
+from tests.harness.services.diagnostics import DiagnosticsCollector
+from tests.harness.services.event_bus import Event, EventBus
+from tests.harness.services.resource_registry import ResourceRegistry
+from tests.harness.services.ssh_container_pool import (
     PortExhaustedError,
     SSHContainerPool,
 )
-from tests.unit.harness.services.timeout_manager import TimeoutManager
-from tests.unit.harness.utils.system_snapshot import gather_system_snapshot
+from tests.harness.services.timeout_manager import TimeoutManager
+from tests.harness.utils.system_snapshot import gather_system_snapshot
 
 logger = logging.getLogger(__name__)
 

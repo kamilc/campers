@@ -5,15 +5,15 @@ from typing import Any
 
 import pytest
 
-from tests.unit.harness.services.event_bus import EventBus
-from tests.unit.harness.services.mutagen_session_manager import (
+from tests.harness.services.event_bus import EventBus
+from tests.harness.services.mutagen_session_manager import (
     MutagenCommandResult,
     MutagenError,
     MutagenSessionManager,
     MutagenTimeoutError,
 )
-from tests.unit.harness.services.resource_registry import ResourceRegistry
-from tests.unit.harness.services.timeout_manager import TimeoutManager
+from tests.harness.services.resource_registry import ResourceRegistry
+from tests.harness.services.timeout_manager import TimeoutManager
 
 
 class DiagnosticsRecorder:

@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.unit.harness.services.ssh_container_pool import (
+from tests.harness.services.ssh_container_pool import (
     PortExhaustedError,
     SSHContainerPool,
 )

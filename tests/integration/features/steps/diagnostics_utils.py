@@ -13,7 +13,7 @@ from typing import Sequence
 
 
 from behave.runner import Context
-from tests.unit.harness.utils.system_snapshot import gather_system_snapshot
+from tests.harness.utils.system_snapshot import gather_system_snapshot
 
 
 DIAGNOSTIC_ENV_PREFIXES: tuple[str, ...] = ("MOONDOCK_", "AWS_", "LOCALSTACK")

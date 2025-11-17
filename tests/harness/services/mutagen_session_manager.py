@@ -7,9 +7,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List
 
-from tests.unit.harness.services.event_bus import Event, EventBus
-from tests.unit.harness.services.resource_registry import ResourceRegistry
-from tests.unit.harness.services.timeout_manager import TimeoutManager
+from tests.harness.services.event_bus import Event, EventBus
+from tests.harness.services.resource_registry import ResourceRegistry
+from tests.harness.services.timeout_manager import TimeoutManager
 
 
 class MutagenError(Exception):
