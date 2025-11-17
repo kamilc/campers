@@ -30,5 +30,5 @@ dev = [
 packages = ["moondock"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit"]
 norecursedirs = ["tmp", ".git", ".venv", "__pycache__"]

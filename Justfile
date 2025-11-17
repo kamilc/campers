@@ -2,11 +2,11 @@ set dotenv-load := true
 
 
 unit-test options="":
-  uv run pytest {{options}}
+  uv run pytest tests/unit {{options}}
 
 bdd-test options="":
   just build-ssh-image
-  uv run behave --summary --stop {{options}}
+  uv run behave tests/integration/features --summary --stop {{options}}
 
 test: unit-test bdd-test
 
