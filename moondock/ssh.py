@@ -258,7 +258,7 @@ class SSHManager:
             Stream type identifier: "stdout" or "stderr"
         """
         for line in stream.readlines():
-            logging.info(line.rstrip("\n"), extra={"stream": stream_type})
+            logging.info(line.rstrip("\n"))
 
     def stream_output_realtime(self, stdout: ChannelFile, stderr: ChannelFile) -> None:
         """Stream stdout and stderr in real-time until command completes.
@@ -274,12 +274,12 @@ class SSHManager:
             line = stdout.readline()
 
             if line:
-                logging.info(line.rstrip("\n"), extra={"stream": "stdout"})
+                logging.info(line.rstrip("\n"))
 
             if stderr.channel.recv_stderr_ready():
                 err_line = stderr.readline()
                 if err_line:
-                    logging.info(err_line.rstrip("\n"), extra={"stream": "stderr"})
+                    logging.info(err_line.rstrip("\n"))
 
             if stdout.channel.exit_status_ready():
                 break
