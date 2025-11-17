@@ -312,7 +312,7 @@ class SSHManager:
         stderr = None
 
         try:
-            stdin, stdout, stderr = self.client.exec_command(command)
+            stdin, stdout, stderr = self.client.exec_command(command, get_pty=True)
             self._active_channel = stdout.channel
 
             self.stream_output_realtime(stdout, stderr)
