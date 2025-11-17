@@ -433,6 +433,8 @@ class MoondockTUI(App):
     }
     #log-panel {
         height: 1fr;
+    }
+    Log {
         scrollbar-background: #383838;
         scrollbar-color: #606060;
         scrollbar-background-hover: #404040;
