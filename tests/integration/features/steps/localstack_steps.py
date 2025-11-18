@@ -220,8 +220,8 @@ def step_localstack_is_healthy(context: Context) -> None:
         logger.warning(f"Failed to clean LocalStack: {e}")
 
     ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS (test image for LocalStack)",
+        Name="Amazon Ubuntu 24 LTS x86_64 20240101",
+        Description="Ubuntu 24.04 LTS (test image for LocalStack)",
         Architecture="x86_64",
         RootDeviceName="/dev/sda1",
         VirtualizationType="hvm",

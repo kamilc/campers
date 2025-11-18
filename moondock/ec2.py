@@ -173,6 +173,13 @@ class EC2Manager:
                 architecture=query.get("architecture"),
             )
 
+        if self._is_localstack_endpoint():
+            return self.find_ami_by_query(
+                name_pattern="*Ubuntu 24*",
+                owner=None,
+                architecture="x86_64",
+            )
+
         return self.find_ami_by_query(
             name_pattern="*Ubuntu 24*",
             owner="amazon",
