@@ -54,6 +54,7 @@ Scenario: Ansible playbook with variable substitution
 @integration
 Scenario: Full workflow with Ansible provisioning
   Given LocalStack is running
+  And Ansible is installed on local machine
   And config with playbook "webapp" defined
   And machine "webserver" with ansible_playbook "webapp"
   When I launch instance via CLI

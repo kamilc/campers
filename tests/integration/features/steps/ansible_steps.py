@@ -198,6 +198,7 @@ def step_ansible_installed(context: Context) -> None:
         Behave context object
     """
     import shutil
+    import subprocess
     import unittest.mock
 
     if hasattr(context, "config_to_validate"):
@@ -208,9 +209,20 @@ def step_ansible_installed(context: Context) -> None:
     if not hasattr(context, 'patches'):
         context.patches = []
 
-    patch = unittest.mock.patch('moondock.ansible.shutil.which', return_value='/usr/bin/ansible-playbook')
-    patch.start()
-    context.patches.append(patch)
+    patch_which = unittest.mock.patch('moondock.ansible.shutil.which', return_value='/usr/bin/ansible-playbook')
+    patch_which.start()
+    context.patches.append(patch_which)
+
+    def mock_popen(cmd, *args, **kwargs):
+        mock_process = unittest.mock.MagicMock()
+        mock_process.stdout = iter([])
+        mock_process.returncode = 0
+        mock_process.wait = unittest.mock.MagicMock(return_value=0)
+        return mock_process
+
+    patch_popen = unittest.mock.patch('moondock.ansible.subprocess.Popen', side_effect=mock_popen)
+    patch_popen.start()
+    context.patches.append(patch_popen)
 
     logger.info("Mocked Ansible as installed")
 
@@ -633,8 +645,18 @@ def step_launch_instance_via_cli(context: Context) -> None:
     config_path = _write_temp_config(context)
     context.temp_config_file = config_path
 
+    machine_name = None
+    if hasattr(context, "config_data") and context.config_data:
+        machines = context.config_data.get("machines", {})
+        if machines:
+            machine_name = list(machines.keys())[0]
+
+    args = {}
+    if machine_name:
+        args["machine_name"] = machine_name
+
     try:
-        execute_command_direct(context, "run")
+        execute_command_direct(context, "run", args=args if args else None)
         context.cli_exit_code = 0
     except Exception as e:
         context.cli_exit_code = 1
