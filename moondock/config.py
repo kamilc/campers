@@ -20,6 +20,7 @@ class ConfigLoader:
         "ignore": ["*.pyc", "__pycache__", "*.log", ".DS_Store"],
         "env_filter": ["AWS_.*"],
         "sync_paths": [],
+        "ssh_username": "ubuntu",
     }
 
     def load_config(self, config_path: str | None = None) -> dict[str, Any]:
@@ -157,6 +158,8 @@ class ConfigLoader:
             "command": (str, "command must be a string"),
             "setup_script": (str, "setup_script must be a string"),
             "startup_script": (str, "startup_script must be a string"),
+            "ssh_username": (str, "ssh_username must be a string"),
+            "ansible_playbook": (str, "ansible_playbook must be a string"),
         }
 
         for field, (expected_type, type_msg) in optional_validations.items():
@@ -214,3 +217,24 @@ class ConfigLoader:
                     raise ValueError(
                         "sync_paths entry must have both 'local' and 'remote' keys"
                     )
+
+        if "ssh_username" in config:
+            ssh_username = config["ssh_username"]
+            pattern: str = r"^[a-z_][a-z0-9_-]{0,31}$"
+            if not re.match(pattern, ssh_username):
+                raise ValueError(
+                    f"Invalid ssh_username '{ssh_username}'. "
+                    f"Must start with lowercase letter or underscore, "
+                    f"contain only lowercase letters, numbers, underscores, and hyphens, "
+                    f"and be 1-32 characters long."
+                )
+
+        if "ansible_playbook" in config and "ansible_playbooks" in config:
+            raise ValueError(
+                "Cannot specify both 'ansible_playbook' and 'ansible_playbooks'. "
+                "These fields are mutually exclusive."
+            )
+
+        if "ansible_playbooks" in config:
+            if not isinstance(config["ansible_playbooks"], list):
+                raise ValueError("ansible_playbooks must be a list")

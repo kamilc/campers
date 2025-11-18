@@ -629,25 +629,6 @@ def step_command_fails_with_value_error(context: Context) -> None:
         )
 
 
-@then('error message contains "{expected}"')
-def step_error_message_contains(context: Context, expected: str) -> None:
-    if hasattr(context, "exception") and context.exception is not None:
-        error_msg = str(context.exception)
-        assert expected in error_msg, (
-            f"Expected '{expected}' in error message but got: '{error_msg}'"
-        )
-    elif hasattr(context, "error"):
-        assert expected in context.error, (
-            f"Expected '{expected}' in error but got: {context.error}"
-        )
-    elif hasattr(context, "stderr"):
-        assert expected in context.stderr, (
-            f"Expected '{expected}' in stderr but got: {context.stderr}"
-        )
-    else:
-        raise AssertionError("No error message found in context")
-
-
 @then("final config contains built-in defaults for other fields")
 def step_final_config_contains_built_in_defaults(context: Context) -> None:
     assert context.exit_code == 0

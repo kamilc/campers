@@ -1238,3 +1238,158 @@ class TestConfigLoaderVariableSubstitution:
         config = loader.load_config(str(config_file))
 
         assert config["machines"]["dev"]["region"] == "us-east-1"
+
+    def test_ssh_username_validation_valid_ubuntu(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "moondock.yaml"
+        config_data = {
+            "defaults": {
+                "region": "us-east-1",
+                "instance_type": "t3.medium",
+                "disk_size": 50,
+                "ssh_username": "ubuntu",
+            }
+        }
+        config_file.write_text(yaml.dump(config_data))
+
+        loader = ConfigLoader()
+        config = loader.load_config(str(config_file))
+        merged = loader.get_machine_config(config)
+
+        loader.validate_config(merged)
+        assert merged["ssh_username"] == "ubuntu"
+
+    def test_ssh_username_validation_valid_ec2_user(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "moondock.yaml"
+        config_data = {
+            "defaults": {
+                "region": "us-east-1",
+                "instance_type": "t3.medium",
+                "disk_size": 50,
+                "ssh_username": "ec2-user",
+            }
+        }
+        config_file.write_text(yaml.dump(config_data))
+
+        loader = ConfigLoader()
+        config = loader.load_config(str(config_file))
+        merged = loader.get_machine_config(config)
+
+        loader.validate_config(merged)
+        assert merged["ssh_username"] == "ec2-user"
+
+    def test_ssh_username_validation_invalid_uppercase(self, tmp_path: Path) -> None:
+        config = {
+            "defaults": {
+                "region": "us-east-1",
+                "instance_type": "t3.medium",
+                "disk_size": 50,
+                "ssh_username": "Ubuntu",
+            }
+        }
+
+        loader = ConfigLoader()
+        with pytest.raises(ValueError) as exc_info:
+            loader.validate_config(config["defaults"])
+
+        assert "Invalid ssh_username" in str(exc_info.value)
+
+    def test_ssh_username_validation_invalid_special_chars(
+        self, tmp_path: Path
+    ) -> None:
+        config = {
+            "defaults": {
+                "region": "us-east-1",
+                "instance_type": "t3.medium",
+                "disk_size": 50,
+                "ssh_username": "user@host",
+            }
+        }
+
+        loader = ConfigLoader()
+        with pytest.raises(ValueError) as exc_info:
+            loader.validate_config(config["defaults"])
+
+        assert "Invalid ssh_username" in str(exc_info.value)
+
+    def test_ssh_username_validation_valid_underscore_start(
+        self, tmp_path: Path
+    ) -> None:
+        config = {
+            "defaults": {
+                "region": "us-east-1",
+                "instance_type": "t3.medium",
+                "disk_size": 50,
+                "ssh_username": "_sys_user",
+            }
+        }
+
+        loader = ConfigLoader()
+        loader.validate_config(config["defaults"])
+
+    def test_ssh_username_validation_valid_with_numbers(self, tmp_path: Path) -> None:
+        config = {
+            "defaults": {
+                "region": "us-east-1",
+                "instance_type": "t3.medium",
+                "disk_size": 50,
+                "ssh_username": "user123",
+            }
+        }
+
+        loader = ConfigLoader()
+        loader.validate_config(config["defaults"])
+
+    def test_ansible_playbook_and_playbooks_mutual_exclusivity(self) -> None:
+        config = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "ansible_playbook": "setup",
+            "ansible_playbooks": ["setup", "deploy"],
+        }
+
+        loader = ConfigLoader()
+        with pytest.raises(ValueError) as exc_info:
+            loader.validate_config(config)
+
+        error_msg = str(exc_info.value)
+        assert "mutually exclusive" in error_msg.lower()
+
+    def test_ansible_playbooks_must_be_list(self) -> None:
+        config = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "ansible_playbooks": "single_playbook",
+        }
+
+        loader = ConfigLoader()
+        with pytest.raises(ValueError) as exc_info:
+            loader.validate_config(config)
+
+        assert "ansible_playbooks must be a list" in str(exc_info.value)
+
+    def test_ansible_playbook_is_valid_string(self) -> None:
+        config = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "ansible_playbook": "setup",
+        }
+
+        loader = ConfigLoader()
+        loader.validate_config(config)
+
+    def test_ansible_playbook_invalid_type(self) -> None:
+        config = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "ansible_playbook": ["setup"],
+        }
+
+        loader = ConfigLoader()
+        with pytest.raises(ValueError) as exc_info:
+            loader.validate_config(config)
+
+        assert "ansible_playbook must be a string" in str(exc_info.value)

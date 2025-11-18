@@ -68,6 +68,7 @@ from textual.containers import Container  # noqa: E402
 from textual.message import Message  # noqa: E402
 from textual.widgets import Log, Static  # noqa: E402
 
+from moondock.ansible import AnsibleManager  # noqa: E402
 from moondock.config import ConfigLoader  # noqa: E402
 from moondock.ec2 import EC2Manager  # noqa: E402
 from moondock.portforward import PortForwardManager  # noqa: E402
@@ -378,7 +379,9 @@ def detect_terminal_background() -> tuple[str, bool]:
 
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
-        if match := re.search(r'rgb:([0-9a-fA-F]{4})/([0-9a-fA-F]{4})/([0-9a-fA-F]{4})', response):
+        if match := re.search(
+            r"rgb:([0-9a-fA-F]{4})/([0-9a-fA-F]{4})/([0-9a-fA-F]{4})", response
+        ):
             r = int(match.group(1), 16) / 65535
             g = int(match.group(2), 16) / 65535
             b = int(match.group(3), 16) / 65535
@@ -692,7 +695,8 @@ class MoondockTUI(App):
 
         if "public_ip" in details and details["public_ip"]:
             try:
-                ssh_string = f"ssh -o IdentitiesOnly=yes -i {details.get('key_file', 'key.pem')} ubuntu@{details['public_ip']}"
+                ssh_username = details.get("ssh_username", "ubuntu")
+                ssh_string = f"ssh -o IdentitiesOnly=yes -i {details.get('key_file', 'key.pem')} {ssh_username}@{details['public_ip']}"
                 self.query_one("#ssh-widget").update(f"SSH: {ssh_string}")
             except Exception as e:
                 logging.error("Failed to update SSH widget: %s", e)
@@ -708,7 +712,10 @@ class MoondockTUI(App):
             except queue.Empty:
                 break
 
-        if not self.moondock._abort_requested and not self.moondock._cleanup_in_progress:
+        if (
+            not self.moondock._abort_requested
+            and not self.moondock._cleanup_in_progress
+        ):
             self.moondock._cleanup_resources()
 
     def run_moondock_logic(self) -> None:
@@ -831,6 +838,7 @@ class MoondockTUI(App):
                     self.exit(130)
                 else:
                     import os
+
                     os._exit(130)
             else:
                 self.last_ctrl_c_time = current_time
@@ -840,7 +848,10 @@ class MoondockTUI(App):
         """Handle quit action (q key or first Ctrl+C)."""
         self.moondock._abort_requested = True
 
-        if hasattr(self.moondock, "_resources") and "ssh_manager" in self.moondock._resources:
+        if (
+            hasattr(self.moondock, "_resources")
+            and "ssh_manager" in self.moondock._resources
+        ):
             self.moondock._resources["ssh_manager"].abort_active_command()
 
 
@@ -1487,7 +1498,7 @@ class Moondock:
             ssh_manager = self.ssh_manager_factory(
                 host=ssh_host,
                 key_file=ssh_key_file,
-                username="ubuntu",
+                username=merged_config.get("ssh_username", "ubuntu"),
                 port=ssh_port,
             )
 
@@ -1587,7 +1598,7 @@ class Moondock:
                         remote_path=sync_config["remote"],
                         host=ssh_host,
                         key_file=ssh_key_file,
-                        username="ubuntu",
+                        username=merged_config.get("ssh_username", "ubuntu"),
                         ignore_patterns=merged_config.get("ignore"),
                         include_vcs=merged_config.get("include_vcs", False),
                         ssh_wrapper_dir=moondock_dir,
@@ -1616,6 +1627,37 @@ class Moondock:
                                 "payload": {"state": "idle"},
                             }
                         )
+
+            playbook_refs = self._get_playbook_references(merged_config)
+            if playbook_refs:
+                if self._cleanup_in_progress:
+                    logging.debug("Cleanup in progress, aborting Ansible playbooks")
+                    return {}
+
+                full_config = self._config_loader.load_config()
+                playbooks_config = full_config.get("playbooks", {})
+
+                if not playbooks_config:
+                    raise ValueError(
+                        "ansible_playbook(s) specified but no 'playbooks' section in config"
+                    )
+
+                logging.info(f"Running Ansible playbook(s): {', '.join(playbook_refs)}")
+
+                ansible_mgr = AnsibleManager()
+                try:
+                    ansible_mgr.execute_playbooks(
+                        playbook_names=playbook_refs,
+                        playbooks_config=playbooks_config,
+                        instance_ip=instance_details["public_ip"],
+                        ssh_key_file=instance_details["key_file"],
+                        ssh_username=merged_config.get("ssh_username", "ubuntu"),
+                        ssh_port=ssh_port if ssh_port else 22,
+                    )
+                    logging.info("Ansible playbook(s) completed successfully")
+                except Exception as e:
+                    logging.error(f"Ansible execution failed: {e}")
+                    raise
 
             if merged_config.get("setup_script", "").strip():
                 if self._cleanup_in_progress:
@@ -1657,7 +1699,7 @@ class Moondock:
                         ports=merged_config["ports"],
                         host=pf_host,
                         key_file=pf_key_file,
-                        username="ubuntu",
+                        username=merged_config.get("ssh_username", "ubuntu"),
                         ssh_port=pf_port,
                     )
                 except RuntimeError as e:
@@ -1922,6 +1964,32 @@ class Moondock:
             return name[: MAX_NAME_COLUMN_WIDTH - 3] + "..."
 
         return name
+
+    def _get_playbook_references(self, config: dict[str, Any]) -> list[str]:
+        """Extract playbook names from config.
+
+        Supports both singular and plural forms:
+        - ansible_playbook: "system_setup"
+        - ansible_playbooks: ["base", "system_setup"]
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration to extract playbook references from
+
+        Returns
+        -------
+        list[str]
+            List of playbook names to execute, or empty list if none specified
+        """
+        if "ansible_playbook" in config:
+            return [config["ansible_playbook"]]
+        elif "ansible_playbooks" in config:
+            playbooks = config["ansible_playbooks"]
+            if isinstance(playbooks, str):
+                return [playbooks]
+            return playbooks
+        return []
 
     def _validate_region(self, region: str) -> None:
         """Validate that a region string is a valid AWS region.

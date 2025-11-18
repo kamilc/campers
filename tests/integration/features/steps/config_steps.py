@@ -133,12 +133,50 @@ def step_config_missing_field(context, field: str) -> None:
 
 @when("I validate configuration")
 def step_validate_configuration(context) -> None:
+    import logging
+
+    logger = logging.getLogger(__name__)
     loader = ConfigLoader()
+    context.validation_error = None
+    context.validation_passed = True
+
     try:
-        loader.validate_config(context.config_to_validate)
-        context.validation_error = None
+        if (
+            hasattr(context, "config_to_validate")
+            and context.config_to_validate is not None
+        ):
+            loader.validate_config(context.config_to_validate)
+        elif hasattr(context, "config_data") and context.config_data is not None:
+            from tests.integration.features.steps.ansible_steps import (
+                _write_temp_config,
+            )
+
+            config_path = _write_temp_config(context)
+            loaded_config = loader.load_config(config_path)
+
+            machine_name = None
+            if "machines" in context.config_data:
+                machines = list(context.config_data["machines"].keys())
+
+                if len(machines) == 1:
+                    machine_name = machines[0]
+                    logger.debug(f"Validating single machine config: {machine_name}")
+
+                elif hasattr(context, "machine_name") and context.machine_name:
+                    machine_name = context.machine_name
+                    logger.debug(f"Validating specified machine config: {machine_name}")
+
+                else:
+                    logger.debug("Multiple machines defined, validating defaults only")
+
+            merged_config = loader.get_machine_config(loaded_config, machine_name)
+            loader.validate_config(merged_config)
+            context.loaded_config = loaded_config
+        else:
+            raise ValueError("No configuration found in context")
     except ValueError as e:
         context.validation_error = str(e)
+        context.validation_passed = False
 
 
 @then('ValueError is raised with "{expected_message}"')
