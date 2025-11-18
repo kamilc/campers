@@ -773,6 +773,14 @@ def step_error_message_contains(context: Context, text: str) -> None:
         error_msg = str(context.exception)
         logger.debug(f"Found error in exception: {error_msg[:100]}")
 
+    elif hasattr(context, "error") and context.error is not None:
+        error_msg = str(context.error)
+        logger.debug(f"Found error in error: {error_msg[:100]}")
+
+    elif hasattr(context, "stderr") and context.stderr is not None:
+        error_msg = str(context.stderr)
+        logger.debug(f"Found error in stderr: {error_msg[:100]}")
+
     else:
         available_attrs = [
             attr
@@ -790,7 +798,7 @@ def step_error_message_contains(context: Context, text: str) -> None:
     if text not in error_msg:
         raise AssertionError(
             f'Expected "{text}" in error message, got: {error_msg}\n'
-            f"(Checked: validation_error, cli_error, exception)"
+            f"(Checked: validation_error, cli_error, exception, error, stderr)"
         )
 
     logger.info(f"Verified error message contains: {text}")

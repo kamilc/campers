@@ -114,8 +114,18 @@ def execute_command_direct(
                 plain=True,
             )
             context.exit_code = 0
-            if isinstance(result, dict) and "command_exit_code" in result:
-                context.exit_code = result["command_exit_code"]
+            if isinstance(result, dict):
+                context.instance_details = result
+                if "command_exit_code" in result:
+                    context.exit_code = result["command_exit_code"]
+            elif isinstance(result, str):
+                import json
+                try:
+                    parsed_result = json.loads(result)
+                    if isinstance(parsed_result, dict):
+                        context.instance_details = parsed_result
+                except json.JSONDecodeError:
+                    pass
 
         elif command == "init":
             force = args.get("force", False) if args else False

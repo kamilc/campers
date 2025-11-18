@@ -1619,6 +1619,13 @@ def step_verify_ubuntu_22_ami_selected(context: Context) -> None:
     assert context.instance_details["instance_id"].startswith("i-")
 
 
+@then("Amazon Ubuntu 24 x86_64 is queried with Amazon owner")
+def step_verify_amazon_ubuntu_24_queried(context: Context) -> None:
+    """Verify Amazon Ubuntu 24 x86_64 AMI query parameters."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
 @then("Amazon Ubuntu 24 x86_64 AMI is selected")
 def step_verify_amazon_ubuntu_24_ami_selected(context: Context) -> None:
     """Verify Amazon Ubuntu 24 x86_64 AMI was selected."""
