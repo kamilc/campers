@@ -28,7 +28,8 @@ Scenario: Error when Ansible not installed locally
 
 @error @dry_run
 Scenario: Error when playbook name not found
-  Given config has no "missing_playbook" defined
+  Given Ansible is installed on local machine
+  And config has no "missing_playbook" defined
   And machine has ansible_playbook "missing_playbook"
   When I attempt to launch instance
   Then command fails with ValueError
@@ -36,7 +37,8 @@ Scenario: Error when playbook name not found
 
 @error @dry_run
 Scenario: Error when ansible_playbook but no playbooks section
-  Given config has no "playbooks" section
+  Given Ansible is installed on local machine
+  And config has no "playbooks" section
   And machine has ansible_playbook "test"
   When I attempt to launch instance
   Then command fails with ValueError

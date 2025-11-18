@@ -1635,12 +1635,13 @@ class Moondock:
                     return {}
 
                 full_config = self._config_loader.load_config()
-                playbooks_config = full_config.get("playbooks", {})
 
-                if not playbooks_config:
+                if "playbooks" not in full_config:
                     raise ValueError(
                         "ansible_playbook(s) specified but no 'playbooks' section in config"
                     )
+
+                playbooks_config = full_config.get("playbooks", {})
 
                 logging.info(f"Running Ansible playbook(s): {', '.join(playbook_refs)}")
 

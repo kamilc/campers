@@ -188,6 +188,33 @@ def step_ansible_not_installed(context: Context) -> None:
     logger.info("Mocked Ansible as not installed")
 
 
+@given("Ansible is installed on local machine")
+def step_ansible_installed(context: Context) -> None:
+    """Mock ansible-playbook to be available.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    import shutil
+    import unittest.mock
+
+    if hasattr(context, "config_to_validate"):
+        delattr(context, "config_to_validate")
+
+    context.ansible_not_installed = False
+
+    if not hasattr(context, 'patches'):
+        context.patches = []
+
+    patch = unittest.mock.patch('moondock.ansible.shutil.which', return_value='/usr/bin/ansible-playbook')
+    patch.start()
+    context.patches.append(patch)
+
+    logger.info("Mocked Ansible as installed")
+
+
 @given('config has ansible_playbook "{playbook_name}" defined')
 def step_config_has_ansible_playbook_defined(
     context: Context, playbook_name: str
@@ -778,14 +805,30 @@ def step_error_message_lists_playbooks(context: Context) -> None:
     context : Context
         Behave context object
     """
-    if hasattr(context, "validation_error") and context.validation_error:
-        error_msg = context.validation_error
+    error_msg = None
+
+    if hasattr(context, "validation_error") and context.validation_error is not None:
+        error_msg = str(context.validation_error)
+        logger.debug(f"Found error in validation_error: {error_msg[:100]}")
+
+    elif hasattr(context, "cli_error") and context.cli_error is not None:
+        error_msg = str(context.cli_error)
+        logger.debug(f"Found error in cli_error: {error_msg[:100]}")
+
+    elif hasattr(context, "exception") and context.exception is not None:
+        error_msg = str(context.exception)
+        logger.debug(f"Found error in exception: {error_msg[:100]}")
+
     else:
+        error_msg = ""
+
+    if error_msg is None:
         error_msg = ""
 
     if "Available playbooks" not in error_msg:
         raise AssertionError(
-            f'Expected "Available playbooks" in error message, got: {error_msg}'
+            f'Expected "Available playbooks" in error message, got: {error_msg}\n'
+            f"(Checked: validation_error, cli_error, exception)"
         )
 
     logger.info("Verified error message lists available playbooks")
@@ -800,14 +843,30 @@ def step_error_message_mentions_playbooks_section(context: Context) -> None:
     context : Context
         Behave context object
     """
-    if hasattr(context, "validation_error") and context.validation_error:
-        error_msg = context.validation_error
+    error_msg = None
+
+    if hasattr(context, "validation_error") and context.validation_error is not None:
+        error_msg = str(context.validation_error)
+        logger.debug(f"Found error in validation_error: {error_msg[:100]}")
+
+    elif hasattr(context, "cli_error") and context.cli_error is not None:
+        error_msg = str(context.cli_error)
+        logger.debug(f"Found error in cli_error: {error_msg[:100]}")
+
+    elif hasattr(context, "exception") and context.exception is not None:
+        error_msg = str(context.exception)
+        logger.debug(f"Found error in exception: {error_msg[:100]}")
+
     else:
+        error_msg = ""
+
+    if error_msg is None:
         error_msg = ""
 
     if "playbooks" not in error_msg.lower():
         raise AssertionError(
-            f'Expected "playbooks" mentioned in error message, got: {error_msg}'
+            f'Expected "playbooks" mentioned in error message, got: {error_msg}\n'
+            f"(Checked: validation_error, cli_error, exception)"
         )
 
     logger.info("Verified error message mentions playbooks section")
