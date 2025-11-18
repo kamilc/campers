@@ -223,7 +223,8 @@ class EC2Manager:
                 raise ValueError(
                     f"Invalid architecture: '{architecture}'. Must be 'x86_64' or 'arm64'"
                 )
-            filters.append({"Name": "architecture", "Values": [architecture]})
+            if not self._is_localstack_endpoint():
+                filters.append({"Name": "architecture", "Values": [architecture]})
 
         kwargs: dict[str, Any] = {"Filters": filters}
         if owner:

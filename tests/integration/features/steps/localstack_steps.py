@@ -219,14 +219,25 @@ def step_localstack_is_healthy(context: Context) -> None:
     except Exception as e:
         logger.warning(f"Failed to clean LocalStack: {e}")
 
-    ec2_client.register_image(
+    response = ec2_client.register_image(
         Name="Amazon Ubuntu 24 LTS x86_64 20240101",
         Description="Ubuntu 24.04 LTS (test image for LocalStack)",
         Architecture="x86_64",
         RootDeviceName="/dev/sda1",
         VirtualizationType="hvm",
     )
-    logger.info("Registered test Ubuntu AMI in LocalStack")
+    ami_id = response.get("ImageId")
+    logger.info(f"Registered test Ubuntu AMI in LocalStack with ID: {ami_id}")
+
+    try:
+        images_response = ec2_client.describe_images(ImageIds=[ami_id])
+        logger.info(f"describe_images response: {images_response.get('Images', [])}")
+        if images_response.get("Images"):
+            img = images_response["Images"][0]
+            logger.info(f"Verified AMI exists with name: {img['Name']}, architecture: {img['Architecture']}")
+    except Exception as e:
+        logger.warning(f"Failed to verify AMI: {e}")
+
     logger.info("LocalStackHarness monitor controller active; legacy monitor disabled")
 
 
