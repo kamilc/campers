@@ -544,19 +544,50 @@ def step_terminate_instance(context: Context) -> None:
 def step_attempt_to_launch_instance(context: Context) -> None:
     """Attempt to launch instance (may fail)."""
     try:
-        if hasattr(context, "aws_keys_backup"):
-            import boto3.session
+        if hasattr(context, "config_data") and context.config_data:
+            if getattr(context, "use_direct_instantiation", False):
+                from tests.integration.features.steps.config_steps import (
+                    _write_temp_config,
+                )
 
-            boto3.DEFAULT_SESSION = None
-            boto3.session.Session._session_cache = {}
+                config_path = _write_temp_config(context)
+                context.temp_config_file = config_path
 
-            ec2_manager = EC2Manager(region="us-east-1")
-            ec2_manager.resolve_ami({})
+                from moondock.__main__ import Moondock
+                from tests.unit.fakes.fake_ec2_manager import FakeEC2Manager
+                from tests.unit.fakes.fake_ssh_manager import FakeSSHManager
+
+                moondock = Moondock(
+                    ec2_manager_factory=FakeEC2Manager,
+                    ssh_manager_factory=FakeSSHManager,
+                )
+                moondock.run(machine_name="test", json_output=True, plain=True)
+            else:
+                if hasattr(context, "aws_keys_backup"):
+                    import boto3.session
+
+                    boto3.DEFAULT_SESSION = None
+                    boto3.session.Session._session_cache = {}
+
+                    ec2_manager = EC2Manager(region="us-east-1")
+                    ec2_manager.resolve_ami({})
+                else:
+                    step_launch_instance(context)
         else:
-            step_launch_instance(context)
+            if hasattr(context, "aws_keys_backup"):
+                import boto3.session
+
+                boto3.DEFAULT_SESSION = None
+                boto3.session.Session._session_cache = {}
+
+                ec2_manager = EC2Manager(region="us-east-1")
+                ec2_manager.resolve_ami({})
+            else:
+                step_launch_instance(context)
         context.exception = None
     except Exception as e:
         context.exception = e
+        context.cli_error = str(e)
 
 
 @when("instance launch fails")

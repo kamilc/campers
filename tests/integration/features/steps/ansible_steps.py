@@ -163,10 +163,28 @@ def step_ansible_not_installed(context: Context) -> None:
     context : Context
         Behave context object
     """
+    import shutil
+    import unittest.mock
+
     if hasattr(context, "config_to_validate"):
         delattr(context, "config_to_validate")
 
     context.ansible_not_installed = True
+
+    original_which = shutil.which
+
+    def mock_which(cmd: str, *args, **kwargs) -> str | None:
+        if cmd == "ansible-playbook":
+            return None
+        return original_which(cmd, *args, **kwargs)
+
+    if not hasattr(context, 'patches'):
+        context.patches = []
+
+    patch = unittest.mock.patch('moondock.ansible.shutil.which', side_effect=mock_which)
+    patch.start()
+    context.patches.append(patch)
+
     logger.info("Mocked Ansible as not installed")
 
 
@@ -174,7 +192,7 @@ def step_ansible_not_installed(context: Context) -> None:
 def step_config_has_ansible_playbook_defined(
     context: Context, playbook_name: str
 ) -> None:
-    """Configure machine with ansible_playbook (no playbooks section).
+    """Configure machine with ansible_playbook and create playbook definition.
 
     Parameters
     ----------
@@ -188,6 +206,29 @@ def step_config_has_ansible_playbook_defined(
 
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
+
+    if "defaults" not in context.config_data:
+        context.config_data["defaults"] = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "command": "echo test",
+        }
+
+    if "playbooks" not in context.config_data:
+        context.config_data["playbooks"] = {}
+
+    context.config_data["playbooks"][playbook_name] = [
+        {
+            "hosts": "all",
+            "tasks": [
+                {
+                    "name": f"Task for {playbook_name}",
+                    "debug": {"msg": f"Running {playbook_name}"},
+                }
+            ],
+        }
+    ]
 
     if "machines" not in context.config_data:
         context.config_data["machines"] = {}
@@ -217,6 +258,14 @@ def step_config_has_no_playbook(context: Context, playbook_name: str) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
 
+    if "defaults" not in context.config_data:
+        context.config_data["defaults"] = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "command": "echo test",
+        }
+
     if "playbooks" not in context.config_data:
         context.config_data["playbooks"] = {}
 
@@ -243,10 +292,18 @@ def step_machine_has_ansible_playbook(context: Context, playbook_name: str) -> N
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
 
+    if "defaults" not in context.config_data:
+        context.config_data["defaults"] = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "command": "echo test",
+        }
+
     if "machines" not in context.config_data:
         context.config_data["machines"] = {}
 
-    context.config_data["machines"]["testmachine"] = {
+    context.config_data["machines"]["test"] = {
         "instance_type": "t3.medium",
         "ansible_playbook": playbook_name,
     }
@@ -269,13 +326,21 @@ def step_config_has_no_playbooks_section(context: Context) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
 
+    if "defaults" not in context.config_data:
+        context.config_data["defaults"] = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "command": "echo test",
+        }
+
     if "playbooks" in context.config_data:
         del context.config_data["playbooks"]
 
     if "machines" not in context.config_data:
         context.config_data["machines"] = {}
 
-    context.config_data["machines"]["testmachine"] = {
+    context.config_data["machines"]["test"] = {
         "instance_type": "t3.medium",
         "ansible_playbook": "test",
     }
@@ -667,17 +732,17 @@ def step_error_message_contains(context: Context, text: str) -> None:
     """
     text = text.strip('"')
 
-    error_msg = ""
+    error_msg = None
 
-    if hasattr(context, "validation_error") and context.validation_error:
-        error_msg = context.validation_error
+    if hasattr(context, "validation_error") and context.validation_error is not None:
+        error_msg = str(context.validation_error)
         logger.debug(f"Found error in validation_error: {error_msg[:100]}")
 
-    elif hasattr(context, "cli_error") and context.cli_error:
-        error_msg = context.cli_error
+    elif hasattr(context, "cli_error") and context.cli_error is not None:
+        error_msg = str(context.cli_error)
         logger.debug(f"Found error in cli_error: {error_msg[:100]}")
 
-    elif hasattr(context, "exception") and context.exception:
+    elif hasattr(context, "exception") and context.exception is not None:
         error_msg = str(context.exception)
         logger.debug(f"Found error in exception: {error_msg[:100]}")
 
@@ -690,6 +755,10 @@ def step_error_message_contains(context: Context, text: str) -> None:
         logger.warning(
             f"No error found in expected locations. Available error-related attrs: {available_attrs}"
         )
+        error_msg = ""
+
+    if error_msg is None:
+        error_msg = ""
 
     if text not in error_msg:
         raise AssertionError(
