@@ -66,7 +66,7 @@ from textual import events  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
 from textual.containers import Container  # noqa: E402
 from textual.message import Message  # noqa: E402
-from textual.widgets import Header, Footer, Log, Static  # noqa: E402
+from textual.widgets import Log, Static  # noqa: E402
 
 from moondock.config import ConfigLoader  # noqa: E402
 from moondock.ec2 import EC2Manager  # noqa: E402

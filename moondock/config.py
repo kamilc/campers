@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-import yaml
+from omegaconf import OmegaConf
 
 
 class ConfigLoader:
@@ -34,7 +34,13 @@ class ConfigLoader:
         Returns
         -------
         dict[str, Any]
-            Parsed configuration with defaults and machines sections
+            Parsed configuration with defaults and machines sections,
+            with all variable interpolations resolved
+
+        Raises
+        ------
+        omegaconf.errors.InterpolationResolutionError
+            If undefined variables are referenced or circular references exist
         """
         if config_path is None:
             config_path = os.environ.get("MOONDOCK_CONFIG", "moondock.yaml")
@@ -44,11 +50,18 @@ class ConfigLoader:
         if not config_file.exists():
             return {"defaults": {}}
 
-        with open(config_file, "r") as f:
-            config = yaml.safe_load(f)
+        cfg = OmegaConf.load(config_file)
 
-        if config is None:
+        if cfg is None:
             return {"defaults": {}}
+
+        if "vars" in cfg:
+            vars_dict = OmegaConf.to_container(cfg.vars, resolve=False)
+            for key, value in vars_dict.items():
+                if key not in cfg:
+                    cfg[key] = value
+
+        config = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
 
         return config
 
