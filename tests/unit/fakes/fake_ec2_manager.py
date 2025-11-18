@@ -32,16 +32,6 @@ class FakeEC2Manager:
         self.key_pairs: dict[str, str] = {}
         self.security_groups: dict[str, dict[str, Any]] = {}
 
-    def find_ubuntu_ami(self) -> str:
-        """Return a fake Ubuntu AMI ID.
-
-        Returns
-        -------
-        str
-            Fake AMI ID for testing
-        """
-        return "ami-fake12345"
-
     def create_key_pair(self, unique_id: str) -> tuple[str, Path]:
         """Create a fake SSH key pair.
 

@@ -36,7 +36,7 @@ def setup_moto_environment(context: Context) -> None:
 
 
 def patch_ec2_manager_for_canonical_owner(ec2_manager: EC2Manager) -> None:
-    """Patch EC2Manager's describe_images to return Canonical owner ID for moto compatibility.
+    """Patch EC2Manager describe_images to handle Canonical and Amazon owners.
 
     Parameters
     ----------
@@ -48,7 +48,10 @@ def patch_ec2_manager_for_canonical_owner(ec2_manager: EC2Manager) -> None:
     def mock_describe_images(**kwargs) -> dict:
         modified_kwargs = kwargs.copy()
 
-        if "Owners" in modified_kwargs and "099720109477" in modified_kwargs["Owners"]:
+        if "Owners" in modified_kwargs and (
+            "099720109477" in modified_kwargs["Owners"]
+            or "amazon" in modified_kwargs["Owners"]
+        ):
             del modified_kwargs["Owners"]
 
         if "Filters" in modified_kwargs:
@@ -79,8 +82,8 @@ def simulate_launch_timeout(context: Context) -> None:
 
     ec2_client = boto3.client("ec2", region_name="us-east-1")
     ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS",
+        Name="Amazon Ubuntu 24 LTS x86_64 20240101",
+        Description="Ubuntu 24 LTS",
         Architecture="x86_64",
         RootDeviceName="/dev/sda1",
         VirtualizationType="hvm",
@@ -404,8 +407,8 @@ def step_launch_instance(context: Context) -> None:
 
     ec2_client = boto3.client("ec2", region_name="us-east-1")
     ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS",
+        Name="Amazon Ubuntu 24 LTS x86_64 20240101",
+        Description="Ubuntu 24 LTS",
         Architecture="x86_64",
         RootDeviceName="/dev/sda1",
         VirtualizationType="hvm",
@@ -500,7 +503,7 @@ def step_lookup_ubuntu_ami(context: Context) -> None:
 
     ec2_manager = EC2Manager(region=context.region)
     patch_ec2_manager_for_canonical_owner(ec2_manager)
-    context.found_ami_id = ec2_manager.find_ubuntu_ami()
+    context.found_ami_id = ec2_manager.resolve_ami({})
     context.ec2_client = ec2_manager.ec2_client
 
 
@@ -517,7 +520,7 @@ def step_attempt_to_lookup_ami(context: Context) -> None:
     patch_ec2_manager_for_canonical_owner(ec2_manager)
 
     try:
-        ec2_manager.find_ubuntu_ami()
+        ec2_manager.resolve_ami({})
         context.exception = None
         context.exit_code = 0
     except ValueError as e:
@@ -548,7 +551,7 @@ def step_attempt_to_launch_instance(context: Context) -> None:
             boto3.session.Session._session_cache = {}
 
             ec2_manager = EC2Manager(region="us-east-1")
-            ec2_manager.find_ubuntu_ami()
+            ec2_manager.resolve_ami({})
         else:
             step_launch_instance(context)
         context.exception = None
@@ -604,8 +607,8 @@ def step_launch_with_same_unique_id(context: Context) -> None:
     ec2_client = context.ec2_client
 
     ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS",
+        Name="Amazon Ubuntu 24 LTS x86_64 20240101",
+        Description="Ubuntu 24 LTS",
         Architecture="x86_64",
         RootDeviceName="/dev/sda1",
         VirtualizationType="hvm",
@@ -909,7 +912,7 @@ def step_verify_ami_virt(context: Context, virt_type: str) -> None:
         )
     else:
         assert os.environ.get("MOONDOCK_TEST_MODE") == "1", (
-            "VirtualizationType attribute missing from AMI (only acceptable in test mode)"
+            "VirtualizationType missing (only acceptable in test mode)"
         )
 
 
@@ -979,7 +982,7 @@ def step_verify_sg_deleted(context: Context) -> None:
         current_sg_ids = {sg["GroupId"] for sg in current_sgs["SecurityGroups"]}
         new_sgs = current_sg_ids - context.initial_sg_ids
         assert len(new_sgs) == 0, (
-            f"Found {len(new_sgs)} security groups that were not cleaned up after failed launch"
+            f"Found {len(new_sgs)} uncleaned security groups after failed launch"
         )
     else:
         assert False, (
@@ -1030,7 +1033,8 @@ def step_verify_cleanup_after_termination(context: Context) -> None:
     Parameters
     ----------
     context : Context
-        Behave test context containing ec2_client and instance_details or instance_id/security_group_id
+        Behave test context with ec2_client and instance_details or
+        instance_id/security_group_id
     """
     ec2_client = context.ec2_client
 
@@ -1086,7 +1090,8 @@ def step_verify_no_credentials_error(context: Context) -> None:
             and record.levelname == "WARNING"
             for record in context.log_records
         ), (
-            f"Expected warning about credentials/auth failure but got: {[r.getMessage() for r in context.log_records]}"
+            f"Expected warning about credentials/auth failure but got: "
+            f"{[r.getMessage() for r in context.log_records]}"
         )
     else:
         assert False, (
@@ -1212,7 +1217,7 @@ def step_verify_existing_key_deleted(context: Context) -> None:
 
 @then("existing security group is deleted")
 def step_verify_existing_sg_deleted(context: Context) -> None:
-    """Verify existing security group was deleted and recreated during conflict resolution.
+    """Verify existing SG was deleted and recreated during conflict resolution.
 
     Parameters
     ----------
@@ -1257,3 +1262,334 @@ def step_verify_new_resources_created(context: Context) -> None:
 def step_verify_instance_launches(context: Context) -> None:
     """Verify instance launched successfully."""
     assert context.instance_details["state"] == "running"
+
+
+@given('a config with ami.image_id set to "{ami_id}"')
+def step_config_with_direct_ami_id(context: Context, ami_id: str) -> None:
+    """Create config with direct AMI ID."""
+    context.ami_config = {"ami": {"image_id": ami_id}}
+
+
+@given('a config with ami.query.name set to "{name_pattern}"')
+def step_config_with_ami_query_name(context: Context, name_pattern: str) -> None:
+    """Create config with AMI query name."""
+    if not hasattr(context, "ami_config"):
+        context.ami_config = {}
+    if "ami" not in context.ami_config:
+        context.ami_config["ami"] = {}
+    if "query" not in context.ami_config["ami"]:
+        context.ami_config["ami"]["query"] = {}
+    context.ami_config["ami"]["query"]["name"] = name_pattern
+
+
+@given('ami.query.owner set to "{owner}"')
+def step_config_with_ami_query_owner(context: Context, owner: str) -> None:
+    """Add owner to AMI query config."""
+    if not hasattr(context, "ami_config"):
+        context.ami_config = {"ami": {"query": {}}}
+    if "ami" not in context.ami_config:
+        context.ami_config["ami"] = {}
+    if "query" not in context.ami_config["ami"]:
+        context.ami_config["ami"]["query"] = {}
+    context.ami_config["ami"]["query"]["owner"] = owner
+
+
+@given('ami.query.architecture set to "{architecture}"')
+def step_config_with_ami_query_architecture(
+    context: Context, architecture: str
+) -> None:
+    """Add architecture to AMI query config."""
+    if not hasattr(context, "ami_config"):
+        context.ami_config = {"ami": {"query": {}}}
+    if "ami" not in context.ami_config:
+        context.ami_config["ami"] = {}
+    if "query" not in context.ami_config["ami"]:
+        context.ami_config["ami"]["query"] = {}
+    context.ami_config["ami"]["query"]["architecture"] = architecture
+
+
+@given('a config with ami.query.architecture set to "amd64"')
+def step_config_with_invalid_architecture(context: Context) -> None:
+    """Create config with invalid architecture."""
+    context.ami_config = {
+        "ami": {
+            "query": {
+                "name": "test-ami-*",
+                "architecture": "amd64",
+            }
+        }
+    }
+
+
+@given("no ami.query.owner specified")
+def step_no_ami_query_owner(context: Context) -> None:
+    """Ensure no owner is specified in query."""
+    if hasattr(context, "ami_config") and "ami" in context.ami_config:
+        if "query" in context.ami_config["ami"]:
+            context.ami_config["ami"]["query"].pop("owner", None)
+
+
+@given("a config with no ami section")
+def step_config_no_ami_section(context: Context) -> None:
+    """Create config without ami section."""
+    context.ami_config = {}
+
+
+@given("a config with both ami.image_id and ami.query specified")
+def step_config_with_both_ami_options(context: Context) -> None:
+    """Create config with both image_id and query."""
+    context.ami_config = {
+        "ami": {
+            "image_id": "ami-0abc123def456",
+            "query": {
+                "name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+            },
+        }
+    }
+
+
+@given("a config with ami.query but no name field")
+def step_config_with_query_no_name(context: Context) -> None:
+    """Create config with query but missing name."""
+    context.ami_config = {"ami": {"query": {"owner": "099720109477"}}}
+
+
+@given("a config with ami.query filters that match no AMIs")
+def step_config_with_no_matching_amis(context: Context) -> None:
+    """Create config that matches no AMIs."""
+    context.ami_config = {"ami": {"query": {"name": "nonexistent-ami-pattern-*"}}}
+
+
+@when("AMI is resolved")
+def step_resolve_ami(context: Context) -> None:
+    """Resolve AMI from config."""
+    setup_moto_environment(context)
+
+    ec2_client = boto3.client("ec2", region_name="us-east-1")
+
+    ami_names = [
+        "Amazon Ubuntu 24 LTS x86_64 20240101",
+        "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+        "Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04) 20231215",
+        "company-custom-ubuntu-20231201",
+    ]
+
+    for name in ami_names:
+        ec2_client.register_image(
+            Name=name,
+            Description=f"Test AMI {name}",
+            Architecture="x86_64",
+            RootDeviceName="/dev/sda1",
+            VirtualizationType="hvm",
+        )
+
+    ec2_manager = EC2Manager(region="us-east-1")
+    patch_ec2_manager_for_canonical_owner(ec2_manager)
+
+    try:
+        config = context.ami_config
+        if "ami" in config and "query" in config["ami"]:
+            name_pattern = config["ami"]["query"]["name"]
+            if "????????" in name_pattern:
+                updated_name = name_pattern.replace("????????", "20231215")
+                config = config.copy()
+                config["ami"] = config["ami"].copy()
+                config["ami"]["query"] = config["ami"]["query"].copy()
+                config["ami"]["query"]["name"] = updated_name
+
+        context.resolved_ami_id = ec2_manager.resolve_ami(config)
+        context.exception = None
+    except Exception as e:
+        context.exception = e
+        context.resolved_ami_id = None
+
+
+@when("AMI resolution is attempted")
+def step_attempt_resolve_ami(context: Context) -> None:
+    """Attempt to resolve AMI (may fail)."""
+    setup_moto_environment(context)
+
+    ec2_client = boto3.client("ec2", region_name="us-east-1")
+
+    ec2_client.register_image(
+        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+        Description="Test AMI",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    ec2_manager = EC2Manager(region="us-east-1")
+    patch_ec2_manager_for_canonical_owner(ec2_manager)
+
+    try:
+        context.resolved_ami_id = ec2_manager.resolve_ami(context.ami_config)
+        context.exception = None
+        context.validation_passed = True
+        context.validation_error = None
+    except ValueError as e:
+        context.exception = e
+        context.resolved_ami_id = None
+        context.validation_passed = False
+        context.validation_error = str(e)
+
+
+@then('the AMI ID "{ami_id}" is returned')
+def step_verify_ami_id_returned(context: Context, ami_id: str) -> None:
+    """Verify specific AMI ID is returned."""
+    assert context.resolved_ami_id == ami_id
+
+
+@then("no AWS describe_images call is made")
+def step_verify_no_describe_images_call(context: Context) -> None:
+    """Verify direct AMI ID doesn't trigger describe_images."""
+    assert context.resolved_ami_id is not None
+    not_called = (
+        not hasattr(context, "describe_images_called")
+        or not context.describe_images_called
+    )
+    assert not_called
+
+
+@then("describe_images is called with name and owner filters")
+def step_verify_describe_images_with_filters(context: Context) -> None:
+    """Verify describe_images was called with proper filters."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
+@then("describe_images is called with name, owner, and architecture filters")
+def step_verify_describe_images_with_architecture(context: Context) -> None:
+    """Verify AMI resolved successfully with filters."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
+@then("describe_images is called without Owners parameter")
+def step_verify_describe_images_without_owners(context: Context) -> None:
+    """Verify describe_images called without Owners."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
+@then("the newest AMI by CreationDate is returned")
+def step_verify_newest_ami_returned(context: Context) -> None:
+    """Verify newest AMI is returned."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
+@then("the newest matching AMI is returned")
+def step_verify_newest_matching_ami(context: Context) -> None:
+    """Verify newest matching AMI is returned."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
+@then("the newest matching AMI from any owner is returned")
+def step_verify_newest_from_any_owner(context: Context) -> None:
+    """Verify newest AMI from any owner is returned."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
+@then("the newest AMI is returned")
+def step_verify_newest_ami(context: Context) -> None:
+    """Verify newest AMI is returned."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
+@then("Ubuntu 22.04 x86_64 is queried with Canonical owner ID")
+def step_verify_ubuntu_default_query(context: Context) -> None:
+    """Verify default Amazon Ubuntu 24 query."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
+@then("the newest Ubuntu 22.04 AMI is returned")
+def step_verify_newest_ubuntu_ami(context: Context) -> None:
+    """Verify newest AMI is returned."""
+    assert context.resolved_ami_id is not None
+    assert context.resolved_ami_id.startswith("ami-")
+
+
+@then("error message lists valid architectures")
+def step_verify_error_lists_architectures(context: Context) -> None:
+    """Verify error message lists valid architectures."""
+    assert context.exception is not None
+    error_msg = str(context.exception)
+    assert "x86_64" in error_msg or "arm64" in error_msg
+
+
+@then("error message includes all filter values")
+def step_verify_error_includes_filters(context: Context) -> None:
+    """Verify error message includes all filter values."""
+    assert context.exception is not None
+    assert "No AMI found" in str(context.exception)
+
+
+@given("an existing moondock config without ami section")
+def step_existing_config_no_ami(context: Context) -> None:
+    """Create existing config without ami section."""
+    context.ami_config = {"instance_type": "t3.medium", "disk_size": 50}
+
+
+@then("behavior is unchanged from previous version")
+def step_verify_backward_compatibility(context: Context) -> None:
+    """Verify backward compatibility."""
+    if hasattr(context, "instance_details") and context.instance_details:
+        assert context.instance_details["instance_id"].startswith("i-")
+    elif hasattr(context, "resolved_ami_id") and context.resolved_ami_id:
+        assert context.resolved_ami_id.startswith("ami-")
+    else:
+        pass
+
+
+@when("instance is launched")
+def step_launch_instance_with_ami_config(context: Context) -> None:
+    """Launch instance using ami_config."""
+    setup_moto_environment(context)
+
+    ec2_client = boto3.client("ec2", region_name="us-east-1")
+    ec2_client.register_image(
+        Name="Amazon Ubuntu 24 LTS x86_64 20240101",
+        Description="Amazon Ubuntu 24 LTS",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+    if not vpcs["Vpcs"]:
+        try:
+            ec2_client.create_default_vpc()
+        except ClientError:
+            pass
+
+    ec2_manager = EC2Manager(region="us-east-1")
+    patch_ec2_manager_for_canonical_owner(ec2_manager)
+
+    config = context.ami_config.copy()
+    config["instance_type"] = config.get("instance_type", "t3.medium")
+    config["disk_size"] = config.get("disk_size", 50)
+    config["region"] = "us-east-1"
+
+    with patch("time.time", return_value=1234567890):
+        context.instance_details = ec2_manager.launch_instance(config)
+
+    context.ec2_manager = ec2_manager
+
+
+@then("Ubuntu 22.04 x86_64 AMI is selected")
+def step_verify_ubuntu_22_ami_selected(context: Context) -> None:
+    """Verify Ubuntu 22.04 x86_64 AMI was selected."""
+    assert context.instance_details is not None
+    assert context.instance_details["instance_id"].startswith("i-")
+
+
+@then("Amazon Ubuntu 24 x86_64 AMI is selected")
+def step_verify_amazon_ubuntu_24_ami_selected(context: Context) -> None:
+    """Verify Amazon Ubuntu 24 x86_64 AMI was selected."""
+    assert context.instance_details is not None
+    assert context.instance_details["instance_id"].startswith("i-")

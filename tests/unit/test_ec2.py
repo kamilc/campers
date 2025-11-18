@@ -12,7 +12,7 @@ from moondock.ec2 import EC2Manager
 
 @pytest.fixture(scope="function")
 def ec2_manager(aws_credentials):
-    """Return a mocked EC2Manager with patched describe_images for Canonical owner ID."""
+    """Return mocked EC2Manager with patched describe_images for Canonical."""
     with mock_aws():
         manager = EC2Manager(region="us-east-1")
 
@@ -21,9 +21,9 @@ def ec2_manager(aws_credentials):
         def mock_describe_images(**kwargs):
             modified_kwargs = kwargs.copy()
 
-            if (
-                "Owners" in modified_kwargs
-                and "099720109477" in modified_kwargs["Owners"]
+            if "Owners" in modified_kwargs and (
+                "099720109477" in modified_kwargs["Owners"]
+                or "amazon" in modified_kwargs["Owners"]
             ):
                 del modified_kwargs["Owners"]
 
@@ -55,9 +55,9 @@ def mocked_aws(aws_credentials):
         yield
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def registered_ami(ec2_manager):
-    """Register Ubuntu 22.04 AMI for testing.
+    """Register an AMI for testing.
 
     Parameters
     ----------
@@ -70,14 +70,14 @@ def registered_ami(ec2_manager):
         AMI ID of registered image
     """
     ec2_client = ec2_manager.ec2_client
-    ec2_client.register_image(
-        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
-        Description="Ubuntu 22.04 LTS",
+    response = ec2_client.register_image(
+        Name="test-ami-image",
+        Description="Test AMI",
         Architecture="x86_64",
         RootDeviceName="/dev/sda1",
         VirtualizationType="hvm",
     )
-    yield ec2_manager.find_ubuntu_ami()
+    yield response["ImageId"]
 
 
 @pytest.fixture
@@ -107,18 +107,6 @@ def test_ec2_manager_initialization(ec2_manager):
     assert ec2_manager.region == "us-east-1"
     assert ec2_manager.ec2_client is not None
     assert ec2_manager.ec2_resource is not None
-
-
-def test_find_ubuntu_ami(registered_ami):
-    """Test finding Ubuntu 22.04 AMI."""
-    assert registered_ami is not None
-    assert registered_ami.startswith("ami-")
-
-
-def test_find_ubuntu_ami_no_ami_found(ec2_manager):
-    """Test error when no Ubuntu 22.04 AMI found."""
-    with pytest.raises(ValueError, match="No Ubuntu 22.04 AMI found"):
-        ec2_manager.find_ubuntu_ami()
 
 
 def test_create_key_pair(ec2_manager, cleanup_keys):
@@ -216,6 +204,7 @@ def test_launch_instance_success(ec2_manager, cleanup_keys, registered_ami):
         "disk_size": 50,
         "region": "us-east-1",
         "machine_name": "jupyter-lab",
+        "ami": {"image_id": registered_ami},
     }
 
     with patch("time.time", return_value=1234567890):
@@ -252,6 +241,7 @@ def test_launch_instance_ad_hoc(ec2_manager, cleanup_keys, registered_ami):
         "instance_type": "t3.medium",
         "disk_size": 50,
         "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
     }
 
     result = ec2_manager.launch_instance(config)
@@ -275,7 +265,7 @@ def test_launch_instance_rollback_on_failure(ec2_manager, cleanup_keys):
     }
 
     with patch("time.time", return_value=1234567890):
-        with pytest.raises(ValueError, match="No Ubuntu 22.04 AMI found"):
+        with pytest.raises(ValueError, match="No AMI found"):
             ec2_manager.launch_instance(config)
 
     key_pairs = ec2_client.describe_key_pairs()
@@ -293,6 +283,7 @@ def test_terminate_instance(ec2_manager, cleanup_keys, registered_ami):
         "instance_type": "t3.medium",
         "disk_size": 50,
         "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
     }
 
     with patch("time.time", return_value=1234567890):
@@ -511,3 +502,222 @@ def test_list_instances_region_query_failure(ec2_manager) -> None:
     ec2_manager.boto3_client_factory = mock_client_factory
     result = ec2_manager.list_instances()
     assert isinstance(result, list)
+
+
+def test_resolve_ami_direct_image_id(ec2_manager):
+    """Test resolve_ami with direct image_id."""
+    config = {"ami": {"image_id": "ami-0abc123def456"}}
+    ami_id = ec2_manager.resolve_ami(config)
+    assert ami_id == "ami-0abc123def456"
+
+
+def test_resolve_ami_direct_image_id_invalid_format(ec2_manager):
+    """Test resolve_ami with invalid AMI ID format."""
+    config = {"ami": {"image_id": "invalid-ami-id"}}
+    with pytest.raises(ValueError, match="Invalid AMI ID format"):
+        ec2_manager.resolve_ami(config)
+
+
+def test_resolve_ami_both_image_id_and_query(ec2_manager):
+    """Test error when both image_id and query are specified."""
+    config = {
+        "ami": {
+            "image_id": "ami-0abc123def456",
+            "query": {
+                "name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+            },
+        }
+    }
+    with pytest.raises(ValueError, match="Cannot specify both"):
+        ec2_manager.resolve_ami(config)
+
+
+def test_resolve_ami_query_with_name_and_owner(ec2_manager):
+    """Test resolve_ami with query using name and owner filters."""
+    ec2_client = ec2_manager.ec2_client
+    ec2_client.register_image(
+        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+        Description="Ubuntu 22.04 LTS",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+    ec2_client.register_image(
+        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20230801",
+        Description="Ubuntu 22.04 LTS (older)",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    config = {
+        "ami": {
+            "query": {
+                "name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
+                "owner": "099720109477",
+            }
+        }
+    }
+
+    ami_id = ec2_manager.resolve_ami(config)
+    assert ami_id.startswith("ami-")
+
+
+def test_resolve_ami_query_with_architecture_filter(ec2_manager):
+    """Test resolve_ami with query including architecture filter."""
+    ec2_client = ec2_manager.ec2_client
+    ec2_client.register_image(
+        Name="test-ami-x86_64",
+        Description="Test AMI x86_64",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    config = {
+        "ami": {
+            "query": {
+                "name": "test-ami-*",
+                "architecture": "x86_64",
+            }
+        }
+    }
+
+    ami_id = ec2_manager.resolve_ami(config)
+    assert ami_id.startswith("ami-")
+
+
+def test_resolve_ami_query_invalid_architecture(ec2_manager):
+    """Test error when invalid architecture is specified."""
+    config = {
+        "ami": {
+            "query": {
+                "name": "test-ami-*",
+                "architecture": "amd64",
+            }
+        }
+    }
+
+    with pytest.raises(ValueError, match="Invalid architecture"):
+        ec2_manager.resolve_ami(config)
+
+
+def test_resolve_ami_query_missing_name(ec2_manager):
+    """Test error when query.name is missing."""
+    config = {"ami": {"query": {"owner": "099720109477"}}}
+
+    with pytest.raises(ValueError, match="ami.query.name is required"):
+        ec2_manager.resolve_ami(config)
+
+
+def test_resolve_ami_query_no_results(ec2_manager):
+    """Test error when query matches no AMIs."""
+    config = {
+        "ami": {
+            "query": {
+                "name": "nonexistent-ami-pattern-*",
+            }
+        }
+    }
+
+    with pytest.raises(ValueError, match="No AMI found"):
+        ec2_manager.resolve_ami(config)
+
+
+def test_resolve_ami_default_ubuntu(ec2_manager):
+    """Test resolve_ami with default Amazon Ubuntu 24 when no ami section."""
+    ec2_client = ec2_manager.ec2_client
+    ec2_client.register_image(
+        Name="Amazon Ubuntu 24 LTS x86_64 20240101",
+        Description="Ubuntu 24 LTS",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    config = {}
+
+    ami_id = ec2_manager.resolve_ami(config)
+    assert ami_id.startswith("ami-")
+
+
+def test_find_ami_by_query_returns_newest(ec2_manager):
+    """Test find_ami_by_query returns the newest AMI by CreationDate."""
+    ec2_client = ec2_manager.ec2_client
+    ami1_id = ec2_client.register_image(
+        Name="test-ami-20230101",
+        Description="Test AMI 2023-01-01",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )["ImageId"]
+
+    ami2_id = ec2_client.register_image(
+        Name="test-ami-20231231",
+        Description="Test AMI 2023-12-31 (newer)",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )["ImageId"]
+
+    result_ami_id = ec2_manager.find_ami_by_query(
+        name_pattern="test-ami-*",
+    )
+
+    images = ec2_client.describe_images(ImageIds=[ami1_id, ami2_id])["Images"]
+    ami1_creation = next(img for img in images if img["ImageId"] == ami1_id)[
+        "CreationDate"
+    ]
+    ami2_creation = next(img for img in images if img["ImageId"] == ami2_id)[
+        "CreationDate"
+    ]
+
+    if ami2_creation > ami1_creation:
+        assert result_ami_id == ami2_id
+    else:
+        assert result_ami_id == ami1_id
+
+
+def test_find_ami_by_query_with_owner(ec2_manager):
+    """Test find_ami_by_query with owner filter."""
+    ec2_client = ec2_manager.ec2_client
+    ec2_client.register_image(
+        Name="test-owned-ami",
+        Description="Test owned AMI",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    result_ami_id = ec2_manager.find_ami_by_query(
+        name_pattern="test-owned-ami",
+    )
+
+    assert result_ami_id.startswith("ami-")
+
+
+def test_find_ami_by_query_with_architecture(ec2_manager):
+    """Test find_ami_by_query with architecture filter."""
+    ec2_client = ec2_manager.ec2_client
+    ec2_client.register_image(
+        Name="test-arch-x86",
+        Description="Test x86_64 AMI",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    result_ami_id = ec2_manager.find_ami_by_query(
+        name_pattern="test-arch-*",
+        architecture="x86_64",
+    )
+
+    assert result_ami_id.startswith("ami-")
+
+
+def test_find_ami_by_query_no_results(ec2_manager):
+    """Test find_ami_by_query raises error when no AMIs match."""
+    with pytest.raises(ValueError, match="No AMI found"):
+        ec2_manager.find_ami_by_query(
+            name_pattern="nonexistent-pattern-*",
+        )

@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -121,50 +122,122 @@ class EC2Manager:
             "localstack" in endpoint.lower() or ":4566" in endpoint
         )
 
-    def find_ubuntu_ami(self) -> str:
-        """Find latest Ubuntu 22.04 LTS AMI in region.
+    def resolve_ami(self, config: dict[str, Any]) -> str:
+        """Resolve AMI ID from configuration.
 
-        LocalStack compatibility: LocalStack's EC2 API doesn't support all filter
-        types that AWS does. When running against LocalStack (detected via
-        _is_localstack_endpoint), we omit filters for virtualization-type and
-        architecture to ensure queries succeed while maintaining standard AWS
-        behavior for production users.
+        Supports three modes of AMI selection with priority order:
+        1. Direct AMI ID specification (ami.image_id)
+        2. AMI query with filters (ami.query)
+        3. Default Amazon Ubuntu 24 x86_64 if no ami section
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration dictionary containing optional ami section
 
         Returns
         -------
         str
-            AMI ID for latest Ubuntu 22.04 LTS
+            AMI ID to use for instance launch
 
         Raises
         ------
         ValueError
-            If no suitable AMI found in region
+            If both image_id and query are specified, if image_id format is
+            invalid, if query.name is missing, if architecture is invalid,
+            or if query matches no AMIs
+        """
+        ami_config = config.get("ami", {})
+
+        if "image_id" in ami_config and "query" in ami_config:
+            raise ValueError(
+                "Cannot specify both 'ami.image_id' and 'ami.query'. "
+                "Use image_id for a specific AMI or query to search for the latest."
+            )
+
+        if "image_id" in ami_config:
+            ami_id = ami_config["image_id"]
+            if not re.match(r"^ami-[0-9a-f]{8,17}$", ami_id):
+                raise ValueError(f"Invalid AMI ID format: '{ami_id}'")
+            return ami_id
+
+        if "query" in ami_config:
+            query = ami_config["query"]
+
+            if "name" not in query:
+                raise ValueError("ami.query.name is required")
+
+            return self.find_ami_by_query(
+                name_pattern=query["name"],
+                owner=query.get("owner"),
+                architecture=query.get("architecture"),
+            )
+
+        return self.find_ami_by_query(
+            name_pattern="*Ubuntu 24*",
+            owner="amazon",
+            architecture="x86_64",
+        )
+
+    def find_ami_by_query(
+        self,
+        name_pattern: str,
+        owner: str | None = None,
+        architecture: str | None = None,
+    ) -> str:
+        """Query AWS for AMI matching pattern and return newest by CreationDate.
+
+        Parameters
+        ----------
+        name_pattern : str
+            AMI name pattern (supports * and ? wildcards)
+        owner : str | None
+            AWS account ID or alias (e.g., "099720109477", "amazon")
+        architecture : str | None
+            CPU architecture: "x86_64" or "arm64"
+
+        Returns
+        -------
+        str
+            Image ID of the newest matching AMI
+
+        Raises
+        ------
+        ValueError
+            If architecture is invalid or no AMIs match the filters
         """
         filters = [
-            {
-                "Name": "name",
-                "Values": ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"],
-            },
+            {"Name": "name", "Values": [name_pattern]},
             {"Name": "state", "Values": ["available"]},
         ]
 
-        if not self._is_localstack_endpoint():
-            filters.extend(
-                [
-                    {"Name": "owner-id", "Values": ["099720109477"]},
-                    {"Name": "virtualization-type", "Values": ["hvm"]},
-                    {"Name": "architecture", "Values": ["x86_64"]},
-                ]
-            )
+        if architecture:
+            if architecture not in ("x86_64", "arm64"):
+                raise ValueError(
+                    f"Invalid architecture: '{architecture}'. Must be 'x86_64' or 'arm64'"
+                )
+            filters.append({"Name": "architecture", "Values": [architecture]})
 
-        response = self.ec2_client.describe_images(Filters=filters)
+        kwargs: dict[str, Any] = {"Filters": filters}
+        if owner:
+            if not self._is_localstack_endpoint():
+                kwargs["Owners"] = [owner]
+
+        response = self.ec2_client.describe_images(**kwargs)
 
         if not response["Images"]:
-            raise ValueError(f"No Ubuntu 22.04 AMI found in region {self.region}")
+            owner_msg = f"owner={owner}, " if owner else ""
+            arch_msg = f"architecture={architecture}, " if architecture else ""
+            raise ValueError(
+                f"No AMI found for {owner_msg}{arch_msg}name={name_pattern}"
+            )
 
         images = sorted(
-            response["Images"], key=lambda x: x["CreationDate"], reverse=True
+            response["Images"],
+            key=lambda x: x["CreationDate"],
+            reverse=True,
         )
+
         return images[0]["ImageId"]
 
     def create_key_pair(self, unique_id: str) -> tuple[str, Path]:
@@ -219,7 +292,7 @@ class EC2Manager:
         )
 
         if not vpcs["Vpcs"]:
-            raise ValueError(f"No default VPC found in region {self.region}")
+            raise ValueError(f"No default VPC found in region '{self.region}'")
 
         vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
@@ -275,7 +348,8 @@ class EC2Manager:
         Returns
         -------
         dict[str, Any]
-            Instance details: {instance_id, public_ip, state, key_file, unique_id, security_group_id}
+            Instance details: {instance_id, public_ip, state, key_file, unique_id,
+            security_group_id}
 
         Raises
         ------
@@ -297,7 +371,7 @@ class EC2Manager:
                 "RunInstances",
             )
 
-        ami_id = self.find_ubuntu_ami()
+        ami_id = self.resolve_ami(config)
         unique_id = str(int(time.time()))
         machine_name = config.get("machine_name", "ad-hoc")
 
@@ -377,7 +451,8 @@ class EC2Manager:
                     self.ec2_client.delete_security_group(GroupId=sg_id)
                 except ClientError as cleanup_error:
                     logger.warning(
-                        f"Failed to delete security group during rollback: {cleanup_error}"
+                        "Failed to delete security group during rollback: "
+                        f"{cleanup_error}"
                     )
 
             if key_name:
