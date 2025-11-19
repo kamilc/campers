@@ -32,7 +32,11 @@ def step_config_file_with_defaults_no_path(context) -> None:
         }
     }
 
-    if hasattr(context, "scenario") and "graceful_shutdown" in str(context.scenario.feature.filename):
+    if (
+        hasattr(context, "scenario")
+        and "graceful_shutdown" in str(context.scenario.feature.filename)
+        and "localstack" in context.scenario.tags
+    ):
         context.config_data["defaults"]["on_exit"] = "terminate"
 
 

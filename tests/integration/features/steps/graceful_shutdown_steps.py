@@ -106,6 +106,10 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
     context.mock_moondock._resources["ssh_manager"].close.side_effect = (
         lambda: context.cleanup_order.append("ssh")
     )
+    context.mock_moondock._resources["ec2_manager"].stop_instance.side_effect = (
+        lambda id: context.cleanup_order.append("ec2")
+    )
+    context.mock_moondock._resources["ec2_manager"].get_volume_size.return_value = 50
     context.mock_moondock._resources["ec2_manager"].terminate_instance.side_effect = (
         lambda id: context.cleanup_order.append("ec2")
     )
