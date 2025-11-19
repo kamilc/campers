@@ -178,10 +178,10 @@ def step_ansible_not_installed(context: Context) -> None:
             return None
         return original_which(cmd, *args, **kwargs)
 
-    if not hasattr(context, 'patches'):
+    if not hasattr(context, "patches"):
         context.patches = []
 
-    patch = unittest.mock.patch('moondock.ansible.shutil.which', side_effect=mock_which)
+    patch = unittest.mock.patch("moondock.ansible.shutil.which", side_effect=mock_which)
     patch.start()
     context.patches.append(patch)
 
@@ -197,8 +197,6 @@ def step_ansible_installed(context: Context) -> None:
     context : Context
         Behave context object
     """
-    import shutil
-    import subprocess
     import unittest.mock
 
     if hasattr(context, "config_to_validate"):
@@ -206,10 +204,12 @@ def step_ansible_installed(context: Context) -> None:
 
     context.ansible_not_installed = False
 
-    if not hasattr(context, 'patches'):
+    if not hasattr(context, "patches"):
         context.patches = []
 
-    patch_which = unittest.mock.patch('moondock.ansible.shutil.which', return_value='/usr/bin/ansible-playbook')
+    patch_which = unittest.mock.patch(
+        "moondock.ansible.shutil.which", return_value="/usr/bin/ansible-playbook"
+    )
     patch_which.start()
     context.patches.append(patch_which)
 
@@ -220,7 +220,9 @@ def step_ansible_installed(context: Context) -> None:
         mock_process.wait = unittest.mock.MagicMock(return_value=0)
         return mock_process
 
-    patch_popen = unittest.mock.patch('moondock.ansible.subprocess.Popen', side_effect=mock_popen)
+    patch_popen = unittest.mock.patch(
+        "moondock.ansible.subprocess.Popen", side_effect=mock_popen
+    )
     patch_popen.start()
     context.patches.append(patch_popen)
 

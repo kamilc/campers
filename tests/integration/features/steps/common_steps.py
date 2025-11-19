@@ -120,6 +120,7 @@ def execute_command_direct(
                     context.exit_code = result["command_exit_code"]
             elif isinstance(result, str):
                 import json
+
                 try:
                     parsed_result = json.loads(result)
                     if isinstance(parsed_result, dict):

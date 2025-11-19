@@ -40,7 +40,14 @@ def step_create_security_groups_uuid(context: Context) -> None:
     context : Context
         The Behave context object.
     """
-    steps_file = context.project_root / "tests" / "integration" / "features" / "steps" / "ec2_steps.py"
+    steps_file = (
+        context.project_root
+        / "tests"
+        / "integration"
+        / "features"
+        / "steps"
+        / "ec2_steps.py"
+    )
     content = steps_file.read_text()
 
     context.uses_uuid = "uuid.uuid4()" in content
@@ -93,7 +100,9 @@ def step_after_scenario_cleanup(context: Context) -> None:
     context : Context
         The Behave context object.
     """
-    env_file = context.project_root / "tests" / "integration" / "features" / "environment.py"
+    env_file = (
+        context.project_root / "tests" / "integration" / "features" / "environment.py"
+    )
     content = env_file.read_text()
 
     context.has_logging_import = "import logging" in content

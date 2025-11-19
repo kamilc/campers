@@ -345,13 +345,17 @@ class EC2Manager:
 
         return sg_id
 
-    def launch_instance(self, config: dict[str, Any]) -> dict[str, Any]:
+    def launch_instance(
+        self, config: dict[str, Any], instance_name: str | None = None
+    ) -> dict[str, Any]:
         """Launch EC2 instance based on configuration.
 
         Parameters
         ----------
         config : dict[str, Any]
             Merged configuration from ConfigLoader
+        instance_name : str | None
+            Optional instance name for Name tag. If None, uses timestamp-based name.
 
         Returns
         -------
@@ -382,6 +386,8 @@ class EC2Manager:
         ami_id = self.resolve_ami(config)
         unique_id = str(int(time.time()))
         machine_name = config.get("machine_name", "ad-hoc")
+
+        instance_tag_name = instance_name if instance_name else f"moondock-{unique_id}"
 
         key_name = None
         key_file = None
@@ -415,7 +421,7 @@ class EC2Manager:
                         "ResourceType": "instance",
                         "Tags": [
                             {"Key": "ManagedBy", "Value": "moondock"},
-                            {"Key": "Name", "Value": f"moondock-{unique_id}"},
+                            {"Key": "Name", "Value": instance_tag_name},
                             {"Key": "MachineConfig", "Value": machine_name},
                             {"Key": "UniqueId", "Value": unique_id},
                         ],
@@ -573,12 +579,12 @@ class EC2Manager:
     def find_instances_by_name_or_id(
         self, name_or_id: str, region_filter: str | None = None
     ) -> list[dict[str, Any]]:
-        """Find moondock-managed instances matching ID or MachineConfig.
+        """Find moondock-managed instances matching ID, Name tag, or MachineConfig.
 
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID or MachineConfig name to search for
+            EC2 instance ID, Name tag, or MachineConfig name to search for
         region_filter : str | None
             Optional AWS region to filter results
 
@@ -595,7 +601,122 @@ class EC2Manager:
         if id_matches:
             return id_matches
 
+        name_matches = [inst for inst in instances if inst["name"] == name_or_id]
+
+        if name_matches:
+            return name_matches
+
         return [inst for inst in instances if inst["machine_config"] == name_or_id]
+
+    def stop_instance(self, instance_id: str) -> dict[str, Any]:
+        """Stop EC2 instance and wait for stopped state.
+
+        Parameters
+        ----------
+        instance_id : str
+            Instance ID to stop
+
+        Returns
+        -------
+        dict[str, Any]
+            Instance details with state='stopped'
+
+        Raises
+        ------
+        RuntimeError
+            If instance fails to reach stopped state within timeout
+        """
+        logger.info(f"Stopping instance {instance_id}...")
+
+        self.ec2_client.stop_instances(InstanceIds=[instance_id])
+
+        try:
+            waiter = self.ec2_client.get_waiter("instance_stopped")
+            waiter.wait(
+                InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 40}
+            )
+        except WaiterError as e:
+            raise RuntimeError(f"Failed to stop instance: {e}") from e
+
+        response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
+        instance = response["Reservations"][0]["Instances"][0]
+
+        logger.info(f"Instance {instance_id} stopped")
+        return instance
+
+    def start_instance(self, instance_id: str) -> dict[str, Any]:
+        """Start EC2 instance and wait for running state.
+
+        Parameters
+        ----------
+        instance_id : str
+            Instance ID to start
+
+        Returns
+        -------
+        dict[str, Any]
+            Instance details with new public IP address
+
+        Raises
+        ------
+        RuntimeError
+            If instance fails to reach running state within timeout
+        """
+        logger.info(f"Starting instance {instance_id}...")
+
+        self.ec2_client.start_instances(InstanceIds=[instance_id])
+
+        try:
+            waiter = self.ec2_client.get_waiter("instance_running")
+            waiter.wait(
+                InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 20}
+            )
+        except WaiterError as e:
+            raise RuntimeError(f"Failed to start instance: {e}") from e
+
+        response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
+        instance = response["Reservations"][0]["Instances"][0]
+
+        new_ip = instance.get("PublicIpAddress")
+        logger.info(f"Instance {instance_id} started with IP {new_ip}")
+
+        return instance
+
+    def get_volume_size(self, instance_id: str) -> int:
+        """Get root volume size for instance in GB.
+
+        Parameters
+        ----------
+        instance_id : str
+            Instance ID to get volume size for
+
+        Returns
+        -------
+        int
+            Volume size in GB, or 0 if volume not found
+        """
+        response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
+        instance = response["Reservations"][0]["Instances"][0]
+
+        block_device_mappings = instance.get("BlockDeviceMappings", [])
+        if not block_device_mappings:
+            logger.warning(f"No block device mappings found for instance {instance_id}")
+            return 0
+
+        volume_id = block_device_mappings[0].get("Ebs", {}).get("VolumeId")
+        if not volume_id:
+            logger.warning(f"No volume ID found for instance {instance_id}")
+            return 0
+
+        try:
+            volumes_response = self.ec2_client.describe_volumes(VolumeIds=[volume_id])
+            volume = volumes_response["Volumes"][0]
+            size = volume.get("Size", 0)
+            logger.info(f"Instance {instance_id} has root volume size {size}GB")
+            return size
+        except ClientError as e:
+            logger.warning(f"Failed to get volume size for {instance_id}: {e}")
+            return 0
 
     def terminate_instance(self, instance_id: str) -> None:
         """Terminate instance and clean up resources.

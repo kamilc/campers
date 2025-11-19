@@ -50,7 +50,9 @@ def moondock_module() -> Any:
     Any
         The moondock module with Moondock class available.
     """
-    moondock_script_path = Path(__file__).parent.parent.parent / "moondock" / "__main__.py"
+    moondock_script_path = (
+        Path(__file__).parent.parent.parent / "moondock" / "__main__.py"
+    )
     spec = importlib.util.spec_from_file_location(
         "moondock_script", moondock_script_path
     )
