@@ -32,6 +32,9 @@ def step_config_file_with_defaults_no_path(context) -> None:
         }
     }
 
+    if hasattr(context, "scenario") and "graceful_shutdown" in str(context.scenario.feature.filename):
+        context.config_data["defaults"]["on_exit"] = "terminate"
+
 
 def _write_temp_config(context) -> str:
     """Create a temporary config file using harness artifacts when available."""

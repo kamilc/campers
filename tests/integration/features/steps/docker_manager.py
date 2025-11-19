@@ -102,18 +102,43 @@ class EC2ContainerManager:
         ----------
         container_name : str
             Name of the container to remove if it exists
+
+        Raises
+        ------
+        RuntimeError
+            If container removal fails (except NotFound)
         """
-        try:
-            existing_container = self.client.containers.get(container_name)
-            logger.info(
-                f"Found existing container {container_name}, removing it before creating new one"
-            )
-            existing_container.remove(force=True)
-            logger.debug(f"Successfully removed existing container {container_name}")
-        except docker.errors.NotFound:
-            logger.debug(f"No existing container found with name {container_name}")
-        except Exception as e:
-            logger.warning(f"Error removing existing container {container_name}: {e}")
+        max_retries = 3
+        retry_delay = 0.5
+
+        for attempt in range(max_retries):
+            try:
+                existing_container = self.client.containers.get(container_name)
+                logger.info(
+                    f"Found existing container {container_name}, removing it (attempt {attempt + 1}/{max_retries})"
+                )
+                existing_container.remove(force=True)
+                logger.debug(
+                    f"Successfully removed existing container {container_name}"
+                )
+                return
+            except docker.errors.NotFound:
+                logger.debug(f"No existing container found with name {container_name}")
+                return
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Error removing container {container_name} (attempt {attempt + 1}/{max_retries}): {e}. Retrying..."
+                    )
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(
+                        f"Error removing existing container {container_name} after {max_retries} attempts: {e}",
+                        exc_info=True,
+                    )
+                    raise RuntimeError(
+                        f"Failed to remove existing container {container_name}: {e}"
+                    ) from e
 
     def generate_ssh_key(self, instance_id: str) -> Path:
         """Generate SSH key pair for container.
@@ -289,6 +314,28 @@ exec /init
                 logger.debug(
                     f"Successfully created container {container.id} for {instance_id}"
                 )
+            except docker.errors.APIError as e:
+                if "already in use" in str(e) or "Conflict" in str(e):
+                    logger.warning(
+                        f"Container name {container_name} conflict detected, retrying removal"
+                    )
+                    self.remove_existing_container(container_name)
+                    logger.info("Retrying container creation after removal")
+                    container = self.client.containers.run(
+                        SSH_CONTAINER_IMAGE,
+                        name=container_name,
+                        detach=True,
+                        remove=True,
+                        environment=environment,
+                        ports=ports,
+                        entrypoint="/bin/bash",
+                        command=["-c", delay_script],
+                    )
+                else:
+                    logger.error(
+                        f"Docker API call failed for {instance_id}: {e}", exc_info=True
+                    )
+                    raise
             except Exception as e:
                 logger.error(
                     f"Docker API call failed for {instance_id}: {e}", exc_info=True
@@ -308,6 +355,26 @@ exec /init
                 logger.debug(
                     f"Successfully created container {container.id} for {instance_id}"
                 )
+            except docker.errors.APIError as e:
+                if "already in use" in str(e) or "Conflict" in str(e):
+                    logger.warning(
+                        f"Container name {container_name} conflict detected, retrying removal"
+                    )
+                    self.remove_existing_container(container_name)
+                    logger.info("Retrying container creation after removal")
+                    container = self.client.containers.run(
+                        SSH_CONTAINER_IMAGE,
+                        name=container_name,
+                        detach=True,
+                        remove=True,
+                        environment=environment,
+                        ports=ports,
+                    )
+                else:
+                    logger.error(
+                        f"Docker API call failed for {instance_id}: {e}", exc_info=True
+                    )
+                    raise
             except Exception as e:
                 logger.error(
                     f"Docker API call failed for {instance_id}: {e}", exc_info=True
