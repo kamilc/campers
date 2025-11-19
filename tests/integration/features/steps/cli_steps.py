@@ -86,6 +86,22 @@ def create_cli_test_ec2_manager_factory():
             "security_group_id": "sg-test123456789",
             "unique_id": "test_unique_id",
         }
+        mock_mgr.stop_instance.return_value = {
+            "instance_id": "i-test123456789",
+            "public_ip": None,
+            "private_ip": "10.0.0.1",
+            "state": "stopped",
+            "instance_type": "t3.medium",
+        }
+        mock_mgr.start_instance.return_value = {
+            "instance_id": "i-test123456789",
+            "public_ip": "192.168.1.2",
+            "private_ip": "10.0.0.1",
+            "state": "running",
+            "instance_type": "t3.medium",
+        }
+        mock_mgr.terminate_instance.return_value = None
+        mock_mgr.get_volume_size.return_value = 50
         return mock_mgr
 
     return mock_ec2_manager
@@ -221,6 +237,14 @@ def step_machine_has_env_filter(
 ) -> None:
     ensure_machine_exists(context, machine_name)
     context.config_data["machines"][machine_name]["env_filter"] = [env_filter]
+
+
+@given('machine "{machine_name}" has on_exit "{on_exit_value}"')
+def step_machine_has_on_exit(
+    context: Context, machine_name: str, on_exit_value: str
+) -> None:
+    ensure_machine_exists(context, machine_name)
+    context.config_data["machines"][machine_name]["on_exit"] = on_exit_value
 
 
 @given("config file with machines {machine_list}")

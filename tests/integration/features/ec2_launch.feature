@@ -40,6 +40,7 @@ Scenario: Launch and terminate instance via TUI with LocalStack
   And machine "test-machine" has instance_type "t3.micro"
   And machine "test-machine" has region "us-east-1"
   And machine "test-machine" has command "echo 'test'"
+  And machine "test-machine" has on_exit "terminate"
   And LocalStack is healthy and responding
 
   When I launch the Moondock TUI with the config file

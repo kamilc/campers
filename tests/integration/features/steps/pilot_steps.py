@@ -302,9 +302,9 @@ async def poll_tui_with_unified_timeout(
                 )
                 last_log_time = time.time()
 
-            if "terminating" in status_text.lower():
+            if "terminating" in status_text.lower() or "stopping" in status_text.lower():
                 if not terminating_found:
-                    logger.info("Found 'terminating' status")
+                    logger.info("Found 'terminating' or 'stopping' status")
                 terminating_found = True
 
             if "error" in status_text.lower():
