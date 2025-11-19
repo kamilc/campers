@@ -240,6 +240,20 @@ class ConfigLoader:
             if not isinstance(config["ansible_playbooks"], list):
                 raise ValueError("ansible_playbooks must be a list")
 
+        if "playbooks" in config:
+            if not isinstance(config["playbooks"], dict):
+                raise ValueError("playbooks must be a dictionary")
+
+            for playbook_name, playbook_content in config["playbooks"].items():
+                if not isinstance(playbook_name, str):
+                    raise ValueError("playbook names must be strings")
+
+                if not isinstance(playbook_content, list):
+                    raise ValueError(
+                        f"playbook '{playbook_name}' content must be a list of tasks, "
+                        f"got {type(playbook_content).__name__}"
+                    )
+
         if "on_exit" in config:
             if not isinstance(config["on_exit"], str):
                 raise ValueError("on_exit must be a string")
