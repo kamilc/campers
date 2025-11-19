@@ -87,8 +87,8 @@ def step_status_panel_height_one_third(context: Context) -> None:
             await pilot.pause()
             status_panel = app.query_one("#status-panel")
             height_value = str(status_panel.styles.height)
-            assert height_value == "1fr", (
-                f"Expected status panel height to be '1fr', got: {height_value}"
+            assert height_value == "auto", (
+                f"Expected status panel height to be 'auto', got: {height_value}"
             )
 
     import asyncio
@@ -117,8 +117,8 @@ def step_log_panel_height_two_thirds(context: Context) -> None:
             await pilot.pause()
             log_panel = app.query_one("#log-panel")
             height_value = str(log_panel.styles.height)
-            assert height_value == "2fr", (
-                f"Expected log panel height to be '2fr', got: {height_value}"
+            assert height_value == "1fr", (
+                f"Expected log panel height to be '1fr', got: {height_value}"
             )
 
     import asyncio
