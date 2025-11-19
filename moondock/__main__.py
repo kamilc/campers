@@ -854,6 +854,9 @@ class MoondockTUI(App):
         ):
             self.moondock._resources["ssh_manager"].abort_active_command()
 
+        if not self.moondock._cleanup_in_progress:
+            self.moondock._cleanup_resources()
+
 
 class Moondock:
     """Main CLI interface for moondock.
