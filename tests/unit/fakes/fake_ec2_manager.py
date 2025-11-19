@@ -87,13 +87,17 @@ class FakeEC2Manager:
         }
         return sg_id
 
-    def launch_instance(self, config: dict[str, Any]) -> dict[str, Any]:
+    def launch_instance(
+        self, config: dict[str, Any], instance_name: str | None = None
+    ) -> dict[str, Any]:
         """Launch a fake EC2 instance.
 
         Parameters
         ----------
         config : dict[str, Any]
             Configuration dict with instance_type, disk_size, etc.
+        instance_name : str | None
+            Optional instance name for Name tag. If None, uses timestamp-based name.
 
         Returns
         -------
