@@ -178,6 +178,80 @@ class FakeEC2Manager:
             if inst["instance_id"] == name_or_id or inst["machine_config"] == name_or_id
         ]
 
+    def stop_instance(self, instance_id: str) -> dict[str, Any]:
+        """Stop a fake EC2 instance.
+
+        Parameters
+        ----------
+        instance_id : str
+            Instance ID to stop
+
+        Returns
+        -------
+        dict[str, Any]
+            Instance details with state set to stopped and public_ip cleared
+        """
+        if instance_id not in self.instances:
+            raise RuntimeError(f"Instance {instance_id} not found")
+
+        instance = self.instances[instance_id]
+        instance["state"] = "stopped"
+        instance["public_ip"] = None
+
+        return {
+            "instance_id": instance_id,
+            "public_ip": None,
+            "private_ip": "10.0.0.1",
+            "state": "stopped",
+            "instance_type": "t3.medium",
+        }
+
+    def start_instance(self, instance_id: str) -> dict[str, Any]:
+        """Start a fake EC2 instance.
+
+        Parameters
+        ----------
+        instance_id : str
+            Instance ID to start
+
+        Returns
+        -------
+        dict[str, Any]
+            Instance details with state set to running and new public_ip assigned
+        """
+        if instance_id not in self.instances:
+            raise RuntimeError(f"Instance {instance_id} not found")
+
+        instance = self.instances[instance_id]
+        instance["state"] = "running"
+        instance["public_ip"] = "203.0.113.2"
+
+        return {
+            "instance_id": instance_id,
+            "public_ip": "203.0.113.2",
+            "private_ip": "10.0.0.1",
+            "state": "running",
+            "instance_type": "t3.medium",
+        }
+
+    def get_volume_size(self, instance_id: str) -> int:
+        """Get root volume size for a fake instance.
+
+        Parameters
+        ----------
+        instance_id : str
+            Instance ID to get volume size for
+
+        Returns
+        -------
+        int
+            Fake volume size in GB
+        """
+        if instance_id not in self.instances:
+            raise RuntimeError(f"Instance {instance_id} not found")
+
+        return 100
+
     def terminate_instance(self, instance_id: str) -> None:
         """Terminate a fake instance.
 
