@@ -1,5 +1,6 @@
 """Utility functions for moondock."""
 
+import logging
 import os
 import re
 import subprocess
@@ -34,8 +35,14 @@ def get_git_project_name() -> str | None:
                 project = url.split("/")[-1]
                 if project.endswith(".git"):
                     project = project[:-4]
-                if project:
-                    return project
+
+                if not project:
+                    logging.debug(
+                        "Could not extract project name from git remote, using directory name"
+                    )
+                    return os.path.basename(os.getcwd())
+
+                return project
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 

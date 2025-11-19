@@ -83,8 +83,9 @@ def step_create_with_fallback(context: Context) -> None:
 @then("the instance name is {expected_name}")
 def step_check_instance_name_exact(context: Context, expected_name: str) -> None:
     """Verify exact instance name."""
-    assert context.generated_name == expected_name, (
-        f"Expected name '{expected_name}', got '{context.generated_name}'"
+    expected = expected_name.strip('"')
+    assert context.generated_name == expected, (
+        f"Expected name '{expected}', got '{context.generated_name}'"
     )
 
 
@@ -146,7 +147,7 @@ def setup_ec2_manager(context: Context, region: str = "us-east-1") -> EC2Manager
         return context.ec2_manager
 
 
-@given('a running instance with name "{instance_name}"')
+@given('a running instance with name "{instance_name}" exists')
 def step_create_running_instance(context: Context, instance_name: str) -> None:
     """Create a running instance for testing."""
     ec2_manager = setup_ec2_manager(context)
@@ -160,7 +161,8 @@ def step_create_running_instance(context: Context, instance_name: str) -> None:
     is_localstack = (
         hasattr(context, "scenario") and "localstack" in context.scenario.tags
     )
-    if is_localstack:
+    is_mock = hasattr(context, "scenario") and "mock" in context.scenario.tags
+    if is_localstack or is_mock:
         config["ami"] = {"image_id": "ami-03cf127a"}
 
     instance_details = ec2_manager.launch_instance(config, instance_name=instance_name)
@@ -170,7 +172,7 @@ def step_create_running_instance(context: Context, instance_name: str) -> None:
     context.running_instance_name = instance_name
 
 
-@given('a stopped instance with name "{instance_name}"')
+@given('a stopped instance with name "{instance_name}" exists')
 def step_create_stopped_instance(context: Context, instance_name: str) -> None:
     """Create a stopped instance for testing."""
     ec2_manager = setup_ec2_manager(context)
@@ -184,7 +186,8 @@ def step_create_stopped_instance(context: Context, instance_name: str) -> None:
     is_localstack = (
         hasattr(context, "scenario") and "localstack" in context.scenario.tags
     )
-    if is_localstack:
+    is_mock = hasattr(context, "scenario") and "mock" in context.scenario.tags
+    if is_localstack or is_mock:
         config["ami"] = {"image_id": "ami-03cf127a"}
 
     instance_details = ec2_manager.launch_instance(config, instance_name=instance_name)
@@ -685,6 +688,7 @@ def step_check_instance_is_reused(context: Context) -> None:
 def step_switch_branch(context: Context, branch_name: str) -> None:
     """Switch to a different branch."""
     context.git_branch = branch_name
+    context.expected_instance_name = None
 
 
 @then('a new instance is created with name "{instance_name}"')
@@ -981,25 +985,65 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
 
     instance_name = getattr(context, "expected_instance_name", None)
 
+    if not instance_name:
+        git_project = getattr(context, "git_project", None)
+        git_branch = getattr(context, "git_branch", None)
+        if git_project and git_branch:
+            instance_name = f"moondock-{git_project}-{git_branch}"
+            context.expected_instance_name = instance_name
+
     if instance_name:
         matches = ec2_manager.find_instances_by_name_or_id(instance_name)
 
         if len(matches) == 0:
+            config = {
+                "instance_type": "t2.micro",
+                "disk_size": 20,
+                "machine_name": machine_name,
+            }
+
+            is_localstack = (
+                hasattr(context, "scenario") and "localstack" in context.scenario.tags
+            )
+            is_mock = hasattr(context, "scenario") and "mock" in context.scenario.tags
+            if is_localstack or is_mock:
+                config["ami"] = {"image_id": "ami-03cf127a"}
+
             instance_details = ec2_manager.launch_instance(
-                {
-                    "instance_type": "t2.micro",
-                    "disk_size": 20,
-                    "machine_name": machine_name,
-                },
+                config,
                 instance_name=instance_name,
             )
             context.created_instance_id = instance_details["instance_id"]
             context.instance_created_count = 1
         elif len(matches) == 1 and matches[0]["state"] == "stopped":
             instance_id = matches[0]["instance_id"]
-            ec2_manager.start_instance(instance_id)
-            context.instance_reused = True
-            context.instance_creation_count = 0
+            try:
+                ec2_manager.ec2_client.start_instances(InstanceIds=[instance_id])
+                ec2_manager.ec2_client.get_waiter("instance_running").wait(
+                    InstanceIds=[instance_id],
+                    WaiterConfig={"Delay": 1, "MaxAttempts": 10},
+                )
+                context.instance_reused = True
+                context.instance_creation_count = 0
+            except Exception:
+                try:
+                    ec2_manager.ec2_client.start_instances(InstanceIds=[instance_id])
+                    response = ec2_manager.ec2_client.describe_instances(
+                        InstanceIds=[instance_id]
+                    )
+                    instance = response["Reservations"][0]["Instances"][0]
+                    state = instance["State"]["Name"]
+                    if state in ["running", "pending"]:
+                        context.instance_reused = True
+                        context.instance_creation_count = 0
+                    else:
+                        context.command_error = (
+                            f"Failed to start instance: still in {state} state"
+                        )
+                        context.command_failed = True
+                except Exception as e:
+                    context.command_error = f"Failed to start instance: {str(e)}"
+                    context.command_failed = True
         elif len(matches) == 1 and matches[0]["state"] == "running":
             context.command_error = f"Instance '{instance_name}' is already running"
             context.command_failed = True

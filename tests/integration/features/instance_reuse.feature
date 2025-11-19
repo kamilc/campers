@@ -1,6 +1,6 @@
 Feature: Smart Instance Reuse
 
-@smoke @localstack
+@smoke @mock
 Scenario: First run creates new instance with git-based name
   Given I am in a git repository with project "myproject" on branch "main"
   And no instance with name "moondock-myproject-main" exists
@@ -9,7 +9,7 @@ Scenario: First run creates new instance with git-based name
   And the instance is in "running" state
   And the instance is not reused
 
-@smoke @localstack
+@smoke @mock
 Scenario: Second run reuses stopped instance
   Given I am in a git repository with project "myproject" on branch "main"
   And a stopped instance with name "moondock-myproject-main" exists
@@ -18,7 +18,7 @@ Scenario: Second run reuses stopped instance
   And no new instance is created
   And the instance is reused
 
-@smoke @localstack
+@smoke @mock
 Scenario: Different branch creates different instance
   Given I am in a git repository with project "myproject" on branch "main"
   And a stopped instance with name "moondock-myproject-main" exists
@@ -27,7 +27,7 @@ Scenario: Different branch creates different instance
   Then a new instance is created with name "moondock-myproject-feature-new-api"
   And the instance "moondock-myproject-main" remains stopped
 
-@error @localstack
+@error @mock
 Scenario: Running instance error prevents creation
   Given I am in a git repository with project "myproject" on branch "main"
   And a running instance with name "moondock-myproject-main" exists

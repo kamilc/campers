@@ -1393,3 +1393,72 @@ class TestConfigLoaderVariableSubstitution:
             loader.validate_config(config)
 
         assert "ansible_playbook must be a string" in str(exc_info.value)
+
+    def test_on_exit_default_value_is_stop(self) -> None:
+        loader = ConfigLoader()
+        config = loader.load_config("/nonexistent/path/moondock.yaml")
+
+        merged = loader.get_machine_config(config)
+        assert merged.get("on_exit", "stop") == "stop"
+
+    def test_on_exit_stop_valid(self) -> None:
+        config = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "on_exit": "stop",
+        }
+
+        loader = ConfigLoader()
+        loader.validate_config(config)
+
+    def test_on_exit_terminate_valid(self) -> None:
+        config = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "on_exit": "terminate",
+        }
+
+        loader = ConfigLoader()
+        loader.validate_config(config)
+
+    def test_on_exit_invalid_value_rejected(self) -> None:
+        config = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "on_exit": "invalid",
+        }
+
+        loader = ConfigLoader()
+        with pytest.raises(ValueError) as exc_info:
+            loader.validate_config(config)
+
+        assert "on_exit must be 'stop' or 'terminate'" in str(exc_info.value)
+
+    def test_on_exit_per_machine_override(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "moondock.yaml"
+        config_data = {
+            "defaults": {
+                "region": "us-east-1",
+                "instance_type": "t3.medium",
+                "disk_size": 50,
+                "on_exit": "stop",
+            },
+            "machines": {
+                "test-machine": {
+                    "on_exit": "terminate",
+                }
+            },
+        }
+        config_file.write_text(yaml.dump(config_data))
+
+        loader = ConfigLoader()
+        full_config = loader.load_config(str(config_file))
+
+        defaults = full_config.get("defaults", {})
+        assert defaults.get("on_exit") == "stop"
+
+        machines = full_config.get("machines", {})
+        assert machines.get("test-machine", {}).get("on_exit") == "terminate"

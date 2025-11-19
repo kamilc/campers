@@ -721,3 +721,333 @@ def test_find_ami_by_query_no_results(ec2_manager):
         ec2_manager.find_ami_by_query(
             name_pattern="nonexistent-pattern-*",
         )
+
+
+def test_stop_instance_success(ec2_manager, cleanup_keys, registered_ami):
+    """Test successful instance stop with waiter and normalized dict return."""
+    config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    with patch("time.time", return_value=1234567890):
+        result = ec2_manager.launch_instance(config)
+        cleanup_keys.append(result["key_file"])
+
+    instance_id = result["instance_id"]
+
+    response = ec2_manager.stop_instance(instance_id)
+
+    assert response["instance_id"] == instance_id
+    assert response["state"] == "stopped"
+    assert "public_ip" in response
+    assert "private_ip" in response
+    assert "instance_type" in response
+
+    instance = ec2_manager.ec2_resource.Instance(instance_id)
+    instance.load()
+    assert instance.state["Name"] == "stopped"
+
+
+def test_stop_instance_waiter_timeout(ec2_manager, cleanup_keys, registered_ami):
+    """Test stop_instance raises RuntimeError on waiter timeout."""
+    from botocore.exceptions import WaiterError
+
+    config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    with patch("time.time", return_value=1234567890):
+        result = ec2_manager.launch_instance(config)
+        cleanup_keys.append(result["key_file"])
+
+    instance_id = result["instance_id"]
+
+    with patch.object(ec2_manager.ec2_client, "get_waiter") as mock_waiter:
+        mock_waiter_instance = mock_waiter.return_value
+        mock_waiter_instance.wait.side_effect = WaiterError(
+            name="instance_stopped",
+            reason="Max attempts exceeded",
+            last_response={"Instances": [{"State": {"Name": "running"}}]},
+        )
+
+        with pytest.raises(RuntimeError, match="Failed to stop instance"):
+            ec2_manager.stop_instance(instance_id)
+
+
+def test_stop_instance_api_error(ec2_manager, cleanup_keys, registered_ami):
+    """Test stop_instance handles ClientError from API."""
+    config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    with patch("time.time", return_value=1234567890):
+        result = ec2_manager.launch_instance(config)
+        cleanup_keys.append(result["key_file"])
+
+    instance_id = result["instance_id"]
+
+    with patch.object(ec2_manager.ec2_client, "stop_instances") as mock_stop:
+        mock_stop.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "InvalidInstanceID.NotFound",
+                    "Message": "Instance not found",
+                }
+            },
+            "StopInstances",
+        )
+
+        with pytest.raises(ClientError):
+            ec2_manager.stop_instance(instance_id)
+
+
+def test_stop_instance_returns_normalized_keys(
+    ec2_manager, cleanup_keys, registered_ami
+):
+    """Test stop_instance returns dict with all expected keys."""
+    config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    with patch("time.time", return_value=1234567890):
+        result = ec2_manager.launch_instance(config)
+        cleanup_keys.append(result["key_file"])
+
+    instance_id = result["instance_id"]
+    response = ec2_manager.stop_instance(instance_id)
+
+    expected_keys = {"instance_id", "public_ip", "private_ip", "state", "instance_type"}
+    assert expected_keys.issubset(response.keys())
+
+
+def test_start_instance_success(ec2_manager, cleanup_keys, registered_ami):
+    """Test successful instance start with waiter and normalized dict return."""
+    config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    with patch("time.time", return_value=1234567890):
+        result = ec2_manager.launch_instance(config)
+        cleanup_keys.append(result["key_file"])
+
+    instance_id = result["instance_id"]
+
+    ec2_manager.stop_instance(instance_id)
+
+    response = ec2_manager.start_instance(instance_id)
+
+    assert response["instance_id"] == instance_id
+    assert response["state"] == "running"
+    assert "public_ip" in response
+    assert "private_ip" in response
+    assert "instance_type" in response
+
+    instance = ec2_manager.ec2_resource.Instance(instance_id)
+    instance.load()
+    assert instance.state["Name"] == "running"
+
+
+def test_start_instance_waiter_timeout(ec2_manager, cleanup_keys, registered_ami):
+    """Test start_instance raises RuntimeError on waiter timeout."""
+    from botocore.exceptions import WaiterError
+
+    config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    with patch("time.time", return_value=1234567890):
+        result = ec2_manager.launch_instance(config)
+        cleanup_keys.append(result["key_file"])
+
+    instance_id = result["instance_id"]
+    ec2_manager.stop_instance(instance_id)
+
+    with patch.object(ec2_manager.ec2_client, "get_waiter") as mock_waiter:
+        mock_waiter_instance = mock_waiter.return_value
+        mock_waiter_instance.wait.side_effect = WaiterError(
+            name="instance_running",
+            reason="Max attempts exceeded",
+            last_response={"Instances": [{"State": {"Name": "pending"}}]},
+        )
+
+        with pytest.raises(RuntimeError, match="Failed to start instance"):
+            ec2_manager.start_instance(instance_id)
+
+
+def test_start_instance_api_error(ec2_manager, cleanup_keys, registered_ami):
+    """Test start_instance handles ClientError from API."""
+    config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    with patch("time.time", return_value=1234567890):
+        result = ec2_manager.launch_instance(config)
+        cleanup_keys.append(result["key_file"])
+
+    instance_id = result["instance_id"]
+
+    with patch.object(ec2_manager.ec2_client, "start_instances") as mock_start:
+        mock_start.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "InvalidInstanceID.NotFound",
+                    "Message": "Instance not found",
+                }
+            },
+            "StartInstances",
+        )
+
+        with pytest.raises(ClientError):
+            ec2_manager.start_instance(instance_id)
+
+
+def test_start_instance_returns_normalized_keys(
+    ec2_manager, cleanup_keys, registered_ami
+):
+    """Test start_instance returns dict with all expected keys."""
+    config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    with patch("time.time", return_value=1234567890):
+        result = ec2_manager.launch_instance(config)
+        cleanup_keys.append(result["key_file"])
+
+    instance_id = result["instance_id"]
+    ec2_manager.stop_instance(instance_id)
+
+    response = ec2_manager.start_instance(instance_id)
+
+    expected_keys = {"instance_id", "public_ip", "private_ip", "state", "instance_type"}
+    assert expected_keys.issubset(response.keys())
+
+
+def test_get_volume_size_success(ec2_manager, cleanup_keys, registered_ami):
+    """Test successful volume size retrieval returns integer GB size."""
+    config = {
+        "instance_type": "t3.medium",
+        "disk_size": 50,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    with patch("time.time", return_value=1234567890):
+        result = ec2_manager.launch_instance(config)
+        cleanup_keys.append(result["key_file"])
+
+    instance_id = result["instance_id"]
+
+    size = ec2_manager.get_volume_size(instance_id)
+
+    assert isinstance(size, int)
+    assert size == 50
+
+
+def test_get_volume_size_no_block_devices(ec2_manager, registered_ami):
+    """Test get_volume_size raises RuntimeError when no block devices."""
+    instances = ec2_manager.ec2_resource.create_instances(
+        ImageId=registered_ami,
+        InstanceType="t3.medium",
+        MinCount=1,
+        MaxCount=1,
+    )
+    instance = instances[0]
+    instance_id = instance.id
+
+    with patch.object(ec2_manager.ec2_client, "describe_instances") as mock_describe:
+        mock_describe.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": instance_id,
+                            "BlockDeviceMappings": [],
+                        }
+                    ]
+                }
+            ]
+        }
+
+        with pytest.raises(RuntimeError, match="has no block device mappings"):
+            ec2_manager.get_volume_size(instance_id)
+
+
+def test_get_volume_size_no_root_volume(ec2_manager, registered_ami):
+    """Test get_volume_size raises RuntimeError when no root volume."""
+    instances = ec2_manager.ec2_resource.create_instances(
+        ImageId=registered_ami,
+        InstanceType="t3.medium",
+        MinCount=1,
+        MaxCount=1,
+    )
+    instance = instances[0]
+    instance_id = instance.id
+
+    with patch.object(ec2_manager.ec2_client, "describe_instances") as mock_describe:
+        mock_describe.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": instance_id,
+                            "BlockDeviceMappings": [{"DeviceName": "/dev/sda1"}],
+                        }
+                    ]
+                }
+            ]
+        }
+
+        with pytest.raises(RuntimeError, match="has no root volume"):
+            ec2_manager.get_volume_size(instance_id)
+
+
+def test_get_volume_size_api_error(ec2_manager, registered_ami):
+    """Test get_volume_size raises RuntimeError with proper error message on API error."""
+    instances = ec2_manager.ec2_resource.create_instances(
+        ImageId=registered_ami,
+        InstanceType="t3.medium",
+        MinCount=1,
+        MaxCount=1,
+    )
+    instance = instances[0]
+    instance_id = instance.id
+
+    with patch.object(
+        ec2_manager.ec2_client, "describe_volumes"
+    ) as mock_describe_volumes:
+        mock_describe_volumes.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "InvalidVolume.NotFound",
+                    "Message": "Volume not found",
+                }
+            },
+            "DescribeVolumes",
+        )
+
+        with pytest.raises(RuntimeError, match="Failed to get volume size"):
+            ec2_manager.get_volume_size(instance_id)

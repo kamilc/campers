@@ -1157,6 +1157,8 @@ def test_cleanup_resources_executes_in_correct_order(moondock_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
+    moondock_instance.merged_config = {"on_exit": "terminate"}
+
     moondock_instance._cleanup_resources()
 
     assert cleanup_order == ["portforward", "mutagen", "ssh", "ec2"]
@@ -1183,6 +1185,8 @@ def test_cleanup_resources_continues_on_error(moondock_module) -> None:
         "ec2_manager": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
     }
+
+    moondock_instance.merged_config = {"on_exit": "terminate"}
 
     moondock_instance._cleanup_resources()
 
@@ -1253,6 +1257,8 @@ def test_cleanup_resources_only_cleans_tracked_resources(moondock_module) -> Non
         "instance_details": {"instance_id": "i-test123"},
         "ssh_manager": mock_ssh,
     }
+
+    moondock_instance.merged_config = {"on_exit": "terminate"}
 
     moondock_instance._cleanup_resources()
 
@@ -1711,6 +1717,8 @@ def test_cleanup_flag_resets_after_cleanup(moondock_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
+    moondock_instance.merged_config = {"on_exit": "terminate"}
+
     assert moondock_instance._cleanup_in_progress is False
 
     moondock_instance._cleanup_resources()
@@ -1810,7 +1818,520 @@ def test_cleanup_flag_resets_even_with_cleanup_errors(moondock_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
+    moondock_instance.merged_config = {"on_exit": "terminate"}
+
     moondock_instance._cleanup_resources()
 
     assert moondock_instance._cleanup_in_progress is False
     mock_ec2.terminate_instance.assert_called_once()
+
+
+def test_get_or_create_stopped_instance_starts_it(moondock_module) -> None:
+    """Test _get_or_create_instance starts stopped instance with reused=True."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    stopped_instance = {
+        "instance_id": "i-stopped123",
+        "state": "stopped",
+        "public_ip": None,
+    }
+    started_instance = {
+        "instance_id": "i-stopped123",
+        "state": "running",
+        "public_ip": "203.0.113.1",
+        "private_ip": "10.0.0.1",
+        "instance_type": "t3.medium",
+    }
+
+    mock_ec2.find_instances_by_name_or_id.return_value = [stopped_instance]
+    mock_ec2.start_instance.return_value = started_instance
+
+    moondock_instance._resources = {"ec2_manager": mock_ec2}
+
+    with patch("builtins.print"):
+        result = moondock_instance._get_or_create_instance(
+            "test-branch", {"region": "us-east-1"}
+        )
+
+    assert result["reused"] is True
+    assert result["instance_id"] == "i-stopped123"
+    assert result["state"] == "running"
+    mock_ec2.start_instance.assert_called_once_with("i-stopped123")
+
+
+def test_get_or_create_running_instance_raises_error(moondock_module) -> None:
+    """Test _get_or_create_instance raises error for already running instance."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    running_instance = {
+        "instance_id": "i-running123",
+        "state": "running",
+        "public_ip": "203.0.113.1",
+    }
+
+    mock_ec2.find_instances_by_name_or_id.return_value = [running_instance]
+
+    moondock_instance._resources = {"ec2_manager": mock_ec2}
+
+    with pytest.raises(RuntimeError, match="already running"):
+        moondock_instance._get_or_create_instance(
+            "test-branch", {"region": "us-east-1"}
+        )
+
+
+def test_get_or_create_pending_instance_raises_error(moondock_module) -> None:
+    """Test _get_or_create_instance raises error for instance in pending state."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    pending_instance = {
+        "instance_id": "i-pending123",
+        "state": "pending",
+    }
+
+    mock_ec2.find_instances_by_name_or_id.return_value = [pending_instance]
+
+    moondock_instance._resources = {"ec2_manager": mock_ec2}
+
+    with pytest.raises(RuntimeError, match="Please wait for stable state"):
+        moondock_instance._get_or_create_instance(
+            "test-branch", {"region": "us-east-1"}
+        )
+
+
+def test_get_or_create_stopping_instance_raises_error(moondock_module) -> None:
+    """Test _get_or_create_instance raises error for instance in stopping state."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    stopping_instance = {
+        "instance_id": "i-stopping123",
+        "state": "stopping",
+    }
+
+    mock_ec2.find_instances_by_name_or_id.return_value = [stopping_instance]
+
+    moondock_instance._resources = {"ec2_manager": mock_ec2}
+
+    with pytest.raises(RuntimeError, match="Please wait for stable state"):
+        moondock_instance._get_or_create_instance(
+            "test-branch", {"region": "us-east-1"}
+        )
+
+
+def test_get_or_create_terminated_creates_new(moondock_module) -> None:
+    """Test _get_or_create_instance creates new instance when terminated."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    terminated_instance = {
+        "instance_id": "i-terminated123",
+        "state": "terminated",
+    }
+    new_instance = {
+        "instance_id": "i-new123",
+        "state": "running",
+        "public_ip": "203.0.113.1",
+        "private_ip": "10.0.0.1",
+        "instance_type": "t3.medium",
+    }
+
+    mock_ec2.find_instances_by_name_or_id.return_value = [terminated_instance]
+    mock_ec2.launch_instance.return_value = new_instance
+
+    moondock_instance._resources = {"ec2_manager": mock_ec2}
+
+    with patch("builtins.print"):
+        result = moondock_instance._get_or_create_instance(
+            "test-branch", {"region": "us-east-1"}
+        )
+
+    assert result["reused"] is False
+    assert result["instance_id"] == "i-new123"
+    mock_ec2.launch_instance.assert_called_once()
+
+
+def test_get_or_create_no_existing_creates_new(moondock_module) -> None:
+    """Test _get_or_create_instance creates new when no existing instances."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    new_instance = {
+        "instance_id": "i-new456",
+        "state": "running",
+        "public_ip": "203.0.113.2",
+        "private_ip": "10.0.0.2",
+        "instance_type": "t3.medium",
+    }
+
+    mock_ec2.find_instances_by_name_or_id.return_value = []
+    mock_ec2.launch_instance.return_value = new_instance
+
+    moondock_instance._resources = {"ec2_manager": mock_ec2}
+
+    with patch("builtins.print"):
+        result = moondock_instance._get_or_create_instance(
+            "test-branch", {"region": "us-east-1"}
+        )
+
+    assert result["reused"] is False
+    assert result["instance_id"] == "i-new456"
+    mock_ec2.launch_instance.assert_called_once()
+
+
+def test_get_or_create_multiple_matches_uses_first(moondock_module) -> None:
+    """Test _get_or_create_instance selects first match when multiple found."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+
+    mock_ec2 = MagicMock()
+    stopped_instance = {
+        "instance_id": "i-first-stopped",
+        "state": "stopped",
+    }
+    started_instance = {
+        "instance_id": "i-first-stopped",
+        "state": "running",
+        "public_ip": "203.0.113.3",
+        "private_ip": "10.0.0.3",
+        "instance_type": "t3.medium",
+    }
+
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        stopped_instance,
+        {"instance_id": "i-second", "state": "stopped"},
+    ]
+    mock_ec2.start_instance.return_value = started_instance
+
+    moondock_instance._resources = {"ec2_manager": mock_ec2}
+
+    with patch("builtins.print"):
+        with patch("logging.warning") as mock_logging:
+            result = moondock_instance._get_or_create_instance(
+                "test-branch", {"region": "us-east-1"}
+            )
+
+    assert result["instance_id"] == "i-first-stopped"
+    mock_logging.assert_called()
+
+
+def test_stop_command_success(moondock_module) -> None:
+    """Test stop() command calls EC2Manager.stop_instance successfully."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        {
+            "instance_id": "i-test123",
+            "state": "running",
+            "machine_config": "test-config",
+            "region": "us-east-1",
+        }
+    ]
+    mock_ec2.stop_instance.return_value = {
+        "instance_id": "i-test123",
+        "state": "stopped",
+    }
+    mock_ec2.get_volume_size.return_value = 50
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with patch("builtins.print"):
+        moondock_instance.stop("i-test123")
+
+    mock_ec2.stop_instance.assert_called_once_with("i-test123")
+    mock_ec2.get_volume_size.assert_called_once_with("i-test123")
+
+
+def test_stop_command_already_stopped_idempotent(moondock_module) -> None:
+    """Test stop() returns cleanly when instance already stopped."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        {
+            "instance_id": "i-test123",
+            "state": "stopped",
+            "machine_config": "test-config",
+            "region": "us-east-1",
+        }
+    ]
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with patch("builtins.print"):
+        moondock_instance.stop("i-test123")
+
+    mock_ec2.stop_instance.assert_not_called()
+
+
+def test_stop_command_no_matches_error(moondock_module) -> None:
+    """Test stop() raises SystemExit when no instances match."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = []
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with pytest.raises(SystemExit) as exc_info:
+        moondock_instance.stop("nonexistent")
+
+    assert exc_info.value.code == 1
+
+
+def test_stop_command_multiple_matches_requires_id(moondock_module) -> None:
+    """Test stop() requires specific ID when multiple instances match."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        {"instance_id": "i-test1", "state": "running", "region": "us-east-1"},
+        {"instance_id": "i-test2", "state": "running", "region": "us-east-1"},
+    ]
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with pytest.raises(SystemExit) as exc_info:
+        moondock_instance.stop("ambiguous-name")
+
+    assert exc_info.value.code == 1
+
+
+def test_stop_command_displays_storage_cost(moondock_module) -> None:
+    """Test stop() displays storage cost in output."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        {
+            "instance_id": "i-test123",
+            "state": "running",
+            "machine_config": "test-config",
+            "region": "us-east-1",
+        }
+    ]
+    mock_ec2.stop_instance.return_value = {
+        "instance_id": "i-test123",
+        "state": "stopped",
+    }
+    mock_ec2.get_volume_size.return_value = 100
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with patch("builtins.print") as mock_print:
+        moondock_instance.stop("i-test123")
+
+    print_output = [call[0][0] for call in mock_print.call_args_list]
+    assert any("storage cost" in str(output).lower() for output in print_output)
+
+
+def test_start_command_success(moondock_module) -> None:
+    """Test start() command calls EC2Manager.start_instance successfully."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        {
+            "instance_id": "i-test123",
+            "state": "stopped",
+            "machine_config": "test-config",
+            "region": "us-east-1",
+        }
+    ]
+    mock_ec2.start_instance.return_value = {
+        "instance_id": "i-test123",
+        "state": "running",
+        "public_ip": "203.0.113.1",
+    }
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with patch("builtins.print"):
+        moondock_instance.start("i-test123")
+
+    mock_ec2.start_instance.assert_called_once_with("i-test123")
+
+
+def test_start_command_already_running_idempotent(moondock_module) -> None:
+    """Test start() returns cleanly when instance already running."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        {
+            "instance_id": "i-test123",
+            "state": "running",
+            "machine_config": "test-config",
+            "region": "us-east-1",
+            "public_ip": "203.0.113.1",
+        }
+    ]
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with patch("builtins.print"):
+        moondock_instance.start("i-test123")
+
+    mock_ec2.start_instance.assert_not_called()
+
+
+def test_start_command_no_matches_error(moondock_module) -> None:
+    """Test start() raises SystemExit when no instances match."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = []
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with pytest.raises(SystemExit) as exc_info:
+        moondock_instance.start("nonexistent")
+
+    assert exc_info.value.code == 1
+
+
+def test_start_command_multiple_matches_requires_id(moondock_module) -> None:
+    """Test start() requires specific ID when multiple instances match."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        {"instance_id": "i-test1", "state": "stopped", "region": "us-east-1"},
+        {"instance_id": "i-test2", "state": "stopped", "region": "us-east-1"},
+    ]
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with pytest.raises(SystemExit) as exc_info:
+        moondock_instance.start("ambiguous-name")
+
+    assert exc_info.value.code == 1
+
+
+def test_start_command_displays_new_ip(moondock_module) -> None:
+    """Test start() displays new IP in output."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        {
+            "instance_id": "i-test123",
+            "state": "stopped",
+            "machine_config": "test-config",
+            "region": "us-east-1",
+        }
+    ]
+    mock_ec2.start_instance.return_value = {
+        "instance_id": "i-test123",
+        "state": "running",
+        "public_ip": "203.0.113.1",
+    }
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with patch("builtins.print") as mock_print:
+        moondock_instance.start("i-test123")
+
+    print_output = [call[0][0] for call in mock_print.call_args_list]
+    assert any("203.0.113.1" in str(output) for output in print_output)
+
+
+def test_destroy_command_success(moondock_module) -> None:
+    """Test destroy() command calls EC2Manager.terminate_instance successfully."""
+    from unittest.mock import MagicMock, patch
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = [
+        {
+            "instance_id": "i-test123",
+            "state": "running",
+            "machine_config": "test-config",
+            "region": "us-east-1",
+        }
+    ]
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with patch("builtins.print"):
+        moondock_instance.destroy("i-test123")
+
+    mock_ec2.terminate_instance.assert_called_once_with("i-test123")
+
+
+def test_destroy_command_no_matches_error(moondock_module) -> None:
+    """Test destroy() raises SystemExit when no instances match."""
+    from unittest.mock import MagicMock
+
+    moondock_instance = moondock_module()
+    moondock_instance._config_loader = MagicMock()
+    moondock_instance._config_loader.BUILT_IN_DEFAULTS = {"region": "us-east-1"}
+
+    mock_ec2 = MagicMock()
+    mock_ec2.find_instances_by_name_or_id.return_value = []
+
+    moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+
+    with pytest.raises(SystemExit) as exc_info:
+        moondock_instance.destroy("nonexistent")
+
+    assert exc_info.value.code == 1

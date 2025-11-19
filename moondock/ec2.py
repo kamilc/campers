@@ -619,7 +619,8 @@ class EC2Manager:
         Returns
         -------
         dict[str, Any]
-            Instance details with state='stopped'
+            Instance details with normalized keys: instance_id, public_ip,
+            private_ip, state, instance_type
 
         Raises
         ------
@@ -642,7 +643,13 @@ class EC2Manager:
         instance = response["Reservations"][0]["Instances"][0]
 
         logger.info(f"Instance {instance_id} stopped")
-        return instance
+        return {
+            "instance_id": instance_id,
+            "public_ip": instance.get("PublicIpAddress"),
+            "private_ip": instance.get("PrivateIpAddress"),
+            "state": instance["State"]["Name"],
+            "instance_type": instance.get("InstanceType"),
+        }
 
     def start_instance(self, instance_id: str) -> dict[str, Any]:
         """Start EC2 instance and wait for running state.
@@ -655,7 +662,8 @@ class EC2Manager:
         Returns
         -------
         dict[str, Any]
-            Instance details with new public IP address
+            Instance details with normalized keys: instance_id, public_ip,
+            private_ip, state, instance_type
 
         Raises
         ------
@@ -680,7 +688,13 @@ class EC2Manager:
         new_ip = instance.get("PublicIpAddress")
         logger.info(f"Instance {instance_id} started with IP {new_ip}")
 
-        return instance
+        return {
+            "instance_id": instance_id,
+            "public_ip": instance.get("PublicIpAddress"),
+            "private_ip": instance.get("PrivateIpAddress"),
+            "state": instance["State"]["Name"],
+            "instance_type": instance.get("InstanceType"),
+        }
 
     def get_volume_size(self, instance_id: str) -> int:
         """Get root volume size for instance in GB.
@@ -693,20 +707,24 @@ class EC2Manager:
         Returns
         -------
         int
-            Volume size in GB, or 0 if volume not found
+            Volume size in GB
+
+        Raises
+        ------
+        RuntimeError
+            If instance has no block device mappings, no root volume, or
+            volume information cannot be retrieved
         """
         response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
         instance = response["Reservations"][0]["Instances"][0]
 
         block_device_mappings = instance.get("BlockDeviceMappings", [])
         if not block_device_mappings:
-            logger.warning(f"No block device mappings found for instance {instance_id}")
-            return 0
+            raise RuntimeError(f"Instance {instance_id} has no block device mappings")
 
         volume_id = block_device_mappings[0].get("Ebs", {}).get("VolumeId")
         if not volume_id:
-            logger.warning(f"No volume ID found for instance {instance_id}")
-            return 0
+            raise RuntimeError(f"Instance {instance_id} has no root volume")
 
         try:
             volumes_response = self.ec2_client.describe_volumes(VolumeIds=[volume_id])
@@ -715,8 +733,9 @@ class EC2Manager:
             logger.info(f"Instance {instance_id} has root volume size {size}GB")
             return size
         except ClientError as e:
-            logger.warning(f"Failed to get volume size for {instance_id}: {e}")
-            return 0
+            raise RuntimeError(
+                f"Failed to get volume size for {instance_id}: {e}"
+            ) from e
 
     def terminate_instance(self, instance_id: str) -> None:
         """Terminate instance and clean up resources.

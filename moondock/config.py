@@ -21,6 +21,7 @@ class ConfigLoader:
         "env_filter": ["AWS_.*"],
         "sync_paths": [],
         "ssh_username": "ubuntu",
+        "on_exit": "stop",
     }
 
     def load_config(self, config_path: str | None = None) -> dict[str, Any]:
@@ -238,3 +239,12 @@ class ConfigLoader:
         if "ansible_playbooks" in config:
             if not isinstance(config["ansible_playbooks"], list):
                 raise ValueError("ansible_playbooks must be a list")
+
+        if "on_exit" in config:
+            if not isinstance(config["on_exit"], str):
+                raise ValueError("on_exit must be a string")
+
+            if config["on_exit"] not in ("stop", "terminate"):
+                raise ValueError(
+                    f"on_exit must be 'stop' or 'terminate', got '{config['on_exit']}'"
+                )
