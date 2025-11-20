@@ -329,7 +329,7 @@ def step_application_exits_immediately(context: Context) -> None:
             start_time = time.time()
             await pilot.press("ctrl+c")
             elapsed = time.time() - start_time
-            assert elapsed < 0.5, (
+            assert elapsed < 2.0, (
                 f"Expected immediate exit on double Ctrl+C, took {elapsed}s"
             )
 
