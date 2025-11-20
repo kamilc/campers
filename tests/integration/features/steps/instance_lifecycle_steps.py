@@ -290,17 +290,12 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
     instance = matches[0]
     instance_id = instance["instance_id"]
 
-    if instance["state"] == "running":
-        context.command_message = "Instance already running"
-        context.current_public_ip = instance.get("public_ip")
-        context.command_failed = False
-        return
-
     try:
         instance_details = ec2_manager.start_instance(instance_id)
         context.started_instance_id = instance_id
         context.new_public_ip = instance_details.get("PublicIpAddress")
         context.command_failed = False
+        context.command_message = "Instance started successfully"
     except Exception as e:
         context.command_error = str(e)
         context.command_failed = True
@@ -330,7 +325,9 @@ def step_check_instance_state(context: Context, expected_state: str) -> None:
             f"Expected state to be one of {allowed_states}, got '{state}'"
         )
     else:
-        assert state == expected_state, f"Expected state '{expected_state}', got '{state}'"
+        assert state == expected_state, (
+            f"Expected state '{expected_state}', got '{state}'"
+        )
 
 
 @then("the command succeeds")
@@ -357,12 +354,27 @@ def step_check_message(context: Context, message: str) -> None:
     )
 
 
-@then("error message includes {error_text}")
-def step_check_error_message(context: Context, error_text: str) -> None:
-    """Verify error message contains text."""
-    expected = error_text.strip('"')
-    actual = getattr(context, "command_error", "")
-    assert expected in actual, f"Expected error containing '{expected}', got '{actual}'"
+@then('error message includes "{error_text}"')
+def step_check_error_message_in_command_error(
+    context: Context, error_text: str
+) -> None:
+    """Verify error message contains text in command_error or stderr attribute."""
+    command_error = getattr(context, "command_error", "")
+    stderr = getattr(context, "stderr", "")
+
+    if command_error and error_text in command_error:
+        return
+    if stderr and error_text in stderr:
+        return
+
+    error_msg = []
+    if command_error:
+        error_msg.append(f"command_error: {command_error}")
+    if stderr:
+        error_msg.append(f"stderr: {stderr}")
+
+    actual = " | ".join(error_msg) if error_msg else "no error message found"
+    assert False, f"Expected error containing '{error_text}', got: {actual}"
 
 
 @then("the instance public IP is None")
@@ -907,6 +919,26 @@ def step_create_instance_in_state(
         ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
         context.instance_current_state = "stopping"
     elif state == "pending":
+        waiter = ec2_manager.ec2_client.get_waiter("instance_stopped")
+        ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
+        waiter.wait(InstanceIds=[instance_id])
+        ec2_manager.ec2_client.start_instances(InstanceIds=[instance_id])
+
+        original_describe = ec2_manager.ec2_client.describe_instances
+
+        def mock_describe_pending(*args, **kwargs):
+            response = original_describe(*args, **kwargs)
+            if "InstanceIds" in kwargs and instance_id in kwargs["InstanceIds"]:
+                for reservation in response.get("Reservations", []):
+                    for instance in reservation.get("Instances", []):
+                        if instance.get("InstanceId") == instance_id:
+                            instance["State"]["Name"] = "pending"
+            return response
+
+        ec2_manager.ec2_client.describe_instances = mock_describe_pending
+        context.mock_restore_fn = lambda: setattr(
+            ec2_manager.ec2_client, "describe_instances", original_describe
+        )
         context.instance_current_state = "pending"
     elif state == "stopped":
         ec2_manager.stop_instance(instance_id)
@@ -919,35 +951,185 @@ def step_check_command_returns_details(context: Context) -> None:
     context.command_returned_details = True
 
 
+@given('a running instance with name "{instance_name}"')
+def step_create_running_instance_without_exists(
+    context: Context, instance_name: str
+) -> None:
+    """Create a running instance for testing (alias without 'exists' suffix)."""
+    step_create_running_instance(context, instance_name)
+
+
 @given("stop_instance will timeout after 10 minutes")
 def step_mock_stop_timeout(context: Context) -> None:
-    """Mark that stop_instance will timeout."""
+    """Mock waiter to simulate timeout after 10 minutes.
+
+    This step patches the EC2 waiter to raise WaiterError, simulating
+    a timeout scenario where the instance takes too long to stop.
+    """
+    from botocore.exceptions import WaiterError
+
     context.stop_timeout_expected = True
 
-
-@when('I run "moondock stop {instance_id}" with timeout override to 1 second')
-def step_run_stop_with_timeout(context: Context, instance_id: str) -> None:
-    """Run stop with a 1 second timeout override."""
     ec2_manager = getattr(context, "ec2_manager", None)
     if ec2_manager is None:
         setup_ec2_manager(context)
         ec2_manager = context.ec2_manager
 
-    context.command_timeout_value = 1
-    context.timeout_exceeded = True
-    context.command_error = "timeout"
-    context.command_failed = True
+    original_get_waiter = ec2_manager.ec2_client.get_waiter
+
+    def mock_get_waiter(waiter_name: str):
+        waiter = original_get_waiter(waiter_name)
+
+        if waiter_name == "instance_stopped":
+
+            def timeout_wait(*args, **kwargs):
+                raise WaiterError(
+                    name="instance_stopped",
+                    reason="Waiter timeout: Max attempts exceeded",
+                    last_response={"Instances": [{"State": {"Name": "stopping"}}]},
+                )
+
+            waiter.wait = timeout_wait
+
+        return waiter
+
+    ec2_manager.ec2_client.get_waiter = mock_get_waiter
+    context.mock_get_waiter_restore = original_get_waiter
+
+
+@when('I run "moondock stop {instance_id_or_name}" with timeout override to 1 second')
+def step_run_stop_with_timeout(context: Context, instance_id_or_name: str) -> None:
+    """Run stop command and expect it to timeout.
+
+    This step actually executes the stop_instance call which will hit
+    the mocked waiter from the previous step, causing a WaiterError.
+    """
+    ec2_manager = getattr(context, "ec2_manager", None)
+    if ec2_manager is None:
+        setup_ec2_manager(context)
+        ec2_manager = context.ec2_manager
+
+    matches = ec2_manager.find_instances_by_name_or_id(
+        instance_id_or_name, region_filter=ec2_manager.region
+    )
+
+    if not matches:
+        context.command_error = "No moondock-managed instances matched"
+        context.command_failed = True
+        return
+
+    if len(matches) > 1:
+        context.command_error = f"Multiple instances matched: {len(matches)}"
+        context.command_failed = True
+        return
+
+    instance = matches[0]
+    instance_id = instance["instance_id"]
+
+    try:
+        ec2_manager.stop_instance(instance_id)
+        context.command_failed = False
+    except Exception as e:
+        context.command_error = str(e)
+        context.command_failed = True
+
+
+@given('a stopped instance with name "{instance_name}"')
+def step_create_stopped_instance_without_exists(
+    context: Context, instance_name: str
+) -> None:
+    """Create a stopped instance for testing (alias without 'exists' suffix).
+
+    This step creates an instance with default 20GB volume and stops it.
+    Use with 'And the instance has {volume_size}GB root volume' step
+    to create instances with custom volume sizes.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    instance_name : str
+        Name to assign to the instance
+    """
+    default_disk_size = getattr(context, "root_volume_size", 20)
+
+    ec2_manager = setup_ec2_manager(context)
+
+    config = {
+        "instance_type": "t2.micro",
+        "disk_size": default_disk_size,
+        "machine_name": "test-machine",
+    }
+
+    is_localstack = (
+        hasattr(context, "scenario") and "localstack" in context.scenario.tags
+    )
+    is_mock = hasattr(context, "scenario") and "mock" in context.scenario.tags
+    if is_localstack or is_mock:
+        config["ami"] = {"image_id": "ami-03cf127a"}
+
+    instance_details = ec2_manager.launch_instance(config, instance_name=instance_name)
+    instance_id = instance_details["instance_id"]
+
+    ec2_manager.stop_instance(instance_id)
+
+    context.test_instance_id = instance_id
+    context.test_instance_name = instance_name
+    context.existing_instance_id = instance_id
+    context.existing_instance_name = instance_name
+    context.existing_instance_stopped = True
 
 
 @given("the instance has {volume_size}GB root volume")
 def step_set_instance_volume_size(context: Context, volume_size: str) -> None:
-    """Set instance volume size for testing."""
-    context.root_volume_size = int(volume_size)
+    """Set instance volume size for testing.
+
+    This step modifies the volume size of an already-created instance.
+    It extracts the root volume ID and uses modify_volume to resize it.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    volume_size : str
+        Volume size in GB (e.g., "500")
+    """
+    target_size = int(volume_size)
+    context.root_volume_size = target_size
+
+    ec2_manager = getattr(context, "ec2_manager", None)
+    if ec2_manager is None:
+        setup_ec2_manager(context)
+        ec2_manager = context.ec2_manager
+
+    instance_id = getattr(context, "test_instance_id", None)
+    if instance_id is None:
+        instance_id = getattr(context, "state_test_instance_id", None)
+
+    if instance_id is None:
+        return
+
+    response = ec2_manager.ec2_client.describe_instances(InstanceIds=[instance_id])
+    instance = response["Reservations"][0]["Instances"][0]
+
+    block_devices = instance.get("BlockDeviceMappings", [])
+    if not block_devices:
+        return
+
+    volume_id = block_devices[0].get("Ebs", {}).get("VolumeId")
+    if not volume_id:
+        return
+
+    try:
+        ec2_manager.ec2_client.modify_volume(VolumeId=volume_id, Size=target_size)
+        context.volume_modified = True
+    except Exception:
+        pass
 
 
 @when("volume size is retrieved")
 def step_retrieve_volume_size(context: Context) -> None:
-    """Retrieve volume size from instance."""
+    """Retrieve volume size from instance using production code."""
     ec2_manager = getattr(context, "ec2_manager", None)
     if ec2_manager is None:
         setup_ec2_manager(context)
@@ -961,22 +1143,10 @@ def step_retrieve_volume_size(context: Context) -> None:
         context.retrieved_volume_size = 0
         return
 
-    response = ec2_manager.ec2_client.describe_instances(InstanceIds=[instance_id])
-    instance = response["Reservations"][0]["Instances"][0]
-
-    block_devices = instance.get("BlockDeviceMappings", [])
-    if block_devices:
-        volume_id = block_devices[0].get("Ebs", {}).get("VolumeId")
-        if volume_id:
-            volume_response = ec2_manager.ec2_client.describe_volumes(
-                VolumeIds=[volume_id]
-            )
-            volume = volume_response["Volumes"][0]
-            context.retrieved_volume_size = volume["Size"]
-        else:
-            context.retrieved_volume_size = 0
-    else:
-        context.retrieved_volume_size = 0
+    try:
+        context.retrieved_volume_size = ec2_manager.get_volume_size(instance_id)
+    except RuntimeError:
+        context.retrieved_volume_size = None
 
 
 @then("volume size is {expected_size}")
@@ -1027,8 +1197,41 @@ def step_create_instance_generic_exists(context: Context, instance_name: str) ->
 
 @given("the instance has no root volume mapping")
 def step_set_no_volume_mapping(context: Context) -> None:
-    """Mark instance as having no root volume mapping."""
-    context.has_root_volume = False
+    """Remove root volume mapping from instance using LocalStack API manipulation."""
+    ec2_manager = getattr(context, "ec2_manager", None)
+    if ec2_manager is None:
+        setup_ec2_manager(context)
+        ec2_manager = context.ec2_manager
+
+    instance_id = getattr(context, "test_instance_id", None)
+    if instance_id is None:
+        return
+
+    response = ec2_manager.ec2_client.describe_instances(InstanceIds=[instance_id])
+    instance = response["Reservations"][0]["Instances"][0]
+
+    block_devices = instance.get("BlockDeviceMappings", [])
+    if block_devices:
+        for bd in block_devices:
+            volume_id = bd.get("Ebs", {}).get("VolumeId")
+            if volume_id:
+                try:
+                    ec2_manager.ec2_client.detach_volume(
+                        VolumeId=volume_id, InstanceId=instance_id, Force=True
+                    )
+                except Exception:
+                    pass
+
+        import time
+
+        for _ in range(10):
+            response = ec2_manager.ec2_client.describe_instances(
+                InstanceIds=[instance_id]
+            )
+            instance = response["Reservations"][0]["Instances"][0]
+            if not instance.get("BlockDeviceMappings", []):
+                break
+            time.sleep(0.5)
 
 
 @given("AWS credentials lack EC2 permissions")

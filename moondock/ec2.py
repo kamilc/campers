@@ -668,9 +668,30 @@ class EC2Manager:
         Raises
         ------
         RuntimeError
-            If instance fails to reach running state within timeout
+            If instance fails to reach running state within timeout or
+            if instance is not in stopped state
         """
         logger.info(f"Starting instance {instance_id}...")
+
+        response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
+        instance = response["Reservations"][0]["Instances"][0]
+        current_state = instance["State"]["Name"]
+
+        if current_state == "running":
+            logger.info(f"Instance {instance_id} is already running")
+            return {
+                "instance_id": instance_id,
+                "public_ip": instance.get("PublicIpAddress"),
+                "private_ip": instance.get("PrivateIpAddress"),
+                "state": current_state,
+                "instance_type": instance.get("InstanceType"),
+            }
+
+        if current_state != "stopped":
+            raise RuntimeError(
+                f"Instance is not in stopped state. Current state: {current_state}. "
+                "Please wait for instance to reach stopped state."
+            )
 
         self.ec2_client.start_instances(InstanceIds=[instance_id])
 
@@ -696,7 +717,7 @@ class EC2Manager:
             "instance_type": instance.get("InstanceType"),
         }
 
-    def get_volume_size(self, instance_id: str) -> int:
+    def get_volume_size(self, instance_id: str) -> int | None:
         """Get root volume size for instance in GB.
 
         Parameters
@@ -706,21 +727,21 @@ class EC2Manager:
 
         Returns
         -------
-        int
-            Volume size in GB
+        int | None
+            Volume size in GB, or None if instance has no block device mappings
 
         Raises
         ------
         RuntimeError
-            If instance has no block device mappings, no root volume, or
-            volume information cannot be retrieved
+            If instance has no root volume or volume information cannot be retrieved
         """
         response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
         instance = response["Reservations"][0]["Instances"][0]
 
         block_device_mappings = instance.get("BlockDeviceMappings", [])
         if not block_device_mappings:
-            raise RuntimeError(f"Instance {instance_id} has no block device mappings")
+            logger.warning(f"Instance {instance_id} has no block device mappings")
+            return None
 
         volume_id = block_device_mappings[0].get("Ebs", {}).get("VolumeId")
         if not volume_id:

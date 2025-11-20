@@ -163,11 +163,6 @@ def step_file_is_not_modified(context, path: str) -> None:
     )
 
 
-@then('error message includes "{text}"')
-def step_error_message_includes(context, text: str) -> None:
-    assert text in context.stderr, f"Expected '{text}' in stderr, got: {context.stderr}"
-
-
 @then('"{directory}" directory is created')
 def step_directory_is_created(context, directory: str) -> None:
     if hasattr(context, "env_config_path") and context.env_config_path:

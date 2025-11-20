@@ -2551,8 +2551,9 @@ class Moondock:
 
             if state == "pending":
                 self._log_and_print_error(
-                    "Instance %s is already starting. Please wait for it to reach running state.",
+                    "Instance %s is not in stopped state. Current state: %s. Please wait for instance to reach stopped state.",
                     instance_id,
+                    state,
                 )
                 sys.exit(1)
 
