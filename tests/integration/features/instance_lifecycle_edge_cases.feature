@@ -1,5 +1,8 @@
 Feature: Instance Lifecycle Edge Cases and Error Handling
 
+Background:
+  Given LocalStack is healthy and responding
+
 @error @localstack
 Scenario: Stop instance in stopping state returns current state
   Given an instance in "stopping" state with name "moondock-myproject-main"
