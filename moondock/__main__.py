@@ -1101,6 +1101,11 @@ class Moondock:
         Routes cleanup based on on_exit configuration:
         - on_exit="stop": Preserves instance and resources for restart
         - on_exit="terminate": Removes all resources (full cleanup)
+
+        Exit codes when triggered by signal:
+        - 130: SIGINT (Ctrl+C)
+        - 143: SIGTERM (kill command)
+        - 1: Other signals
         """
         with self._cleanup_lock:
             if self._cleanup_in_progress:
@@ -1159,6 +1164,12 @@ class Moondock:
         Notes
         -----
         Errors are logged and added to errors list but do not halt cleanup.
+
+        Examples
+        --------
+        >>> errors = []
+        >>> self._cleanup_ssh_connections(resources, errors)
+        >>> # SSH connection closed, any errors appended to errors list
         """
         if "ssh_manager" not in resources:
             logging.debug("Skipping SSH cleanup - not initialized")
@@ -1223,6 +1234,12 @@ class Moondock:
         Notes
         -----
         Errors are logged and added to errors list but do not halt cleanup.
+
+        Examples
+        --------
+        >>> errors = []
+        >>> self._cleanup_port_forwarding(resources, errors)
+        >>> # Port forwarding stopped, any errors appended to errors list
         """
         if "portforward_mgr" not in resources:
             logging.debug("Skipping port forwarding cleanup - not initialized")
@@ -1285,6 +1302,12 @@ class Moondock:
         Notes
         -----
         Errors are logged and added to errors list but do not halt cleanup.
+
+        Examples
+        --------
+        >>> errors = []
+        >>> self._cleanup_mutagen_session(resources, errors)
+        >>> # Mutagen session terminated, any errors appended to errors list
         """
         if "mutagen_session_name" not in resources:
             logging.debug("Skipping Mutagen cleanup - not initialized")
