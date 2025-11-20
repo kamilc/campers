@@ -240,8 +240,13 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
         setup_ec2_manager(context)
         ec2_manager = context.ec2_manager
 
+    if hasattr(context, "specific_instance_id"):
+        actual_instance_id = context.specific_instance_id
+    else:
+        actual_instance_id = instance_id_or_name
+
     matches = ec2_manager.find_instances_by_name_or_id(
-        instance_id_or_name, region_filter=ec2_manager.region
+        actual_instance_id, region_filter=ec2_manager.region
     )
 
     if not matches:
@@ -1353,6 +1358,12 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
 
     if instance_name:
         matches = ec2_manager.find_instances_by_name_or_id(instance_name)
+        import logging
+        logging.info(
+            f"DEBUG step_run_moondock_run: instance_name={instance_name}, "
+            f"matches={len(matches)}, "
+            f"states={[m['state'] for m in matches]}"
+        )
 
         if len(matches) == 0:
             config = {
@@ -1376,33 +1387,12 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
             context.instance_created_count = 1
         elif len(matches) == 1 and matches[0]["state"] == "stopped":
             instance_id = matches[0]["instance_id"]
-            try:
-                ec2_manager.ec2_client.start_instances(InstanceIds=[instance_id])
-                ec2_manager.ec2_client.get_waiter("instance_running").wait(
-                    InstanceIds=[instance_id],
-                    WaiterConfig={"Delay": 1, "MaxAttempts": 10},
-                )
-                context.instance_reused = True
-                context.instance_creation_count = 0
-            except Exception:
-                try:
-                    ec2_manager.ec2_client.start_instances(InstanceIds=[instance_id])
-                    response = ec2_manager.ec2_client.describe_instances(
-                        InstanceIds=[instance_id]
-                    )
-                    instance = response["Reservations"][0]["Instances"][0]
-                    state = instance["State"]["Name"]
-                    if state in ["running", "pending"]:
-                        context.instance_reused = True
-                        context.instance_creation_count = 0
-                    else:
-                        context.command_error = (
-                            f"Failed to start instance: still in {state} state"
-                        )
-                        context.command_failed = True
-                except Exception as e:
-                    context.command_error = f"Failed to start instance: {str(e)}"
-                    context.command_failed = True
+            import logging
+            logging.info(f"DEBUG: Calling start_instance for {instance_id}")
+            ec2_manager.start_instance(instance_id)
+            logging.info(f"DEBUG: start_instance completed for {instance_id}")
+            context.instance_reused = True
+            context.instance_creation_count = 0
         elif len(matches) == 1 and matches[0]["state"] == "running":
             context.command_error = f"Instance '{instance_name}' is already running"
             context.command_failed = True
