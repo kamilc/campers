@@ -12,10 +12,11 @@ from moto import mock_aws
 from moondock.ec2 import EC2Manager
 from moondock.utils import (
     generate_instance_name,
+    sanitize_instance_name,
 )
 
 
-@given("I am in a git repository with project {project} on branch {branch}")
+@given('I am in a git repository with project "{project}" on branch "{branch}"')
 def step_setup_git_repo(context: Context, project: str, branch: str) -> None:
     """Set up a mocked git repository context."""
     with (
@@ -1353,7 +1354,8 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
         git_project = getattr(context, "git_project", None)
         git_branch = getattr(context, "git_branch", None)
         if git_project and git_branch:
-            instance_name = f"moondock-{git_project}-{git_branch}"
+            raw_name = f"moondock-{git_project}-{git_branch}"
+            instance_name = sanitize_instance_name(raw_name)
             context.expected_instance_name = instance_name
 
     if instance_name:
@@ -1394,7 +1396,7 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
             context.instance_reused = True
             context.instance_creation_count = 0
         elif len(matches) == 1 and matches[0]["state"] == "running":
-            context.command_error = f"Instance '{instance_name}' is already running"
+            context.command_error = f"Instance '{instance_name}' is already running. Stop or destroy the instance to continue."
             context.command_failed = True
         else:
             context.command_error = f"Multiple instances matched: {len(matches)}"
