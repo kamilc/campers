@@ -968,7 +968,7 @@ def test_get_volume_size_success(ec2_manager, cleanup_keys, registered_ami):
 
 
 def test_get_volume_size_no_block_devices(ec2_manager, registered_ami):
-    """Test get_volume_size raises RuntimeError when no block devices."""
+    """Test get_volume_size returns None when no block devices."""
     instances = ec2_manager.ec2_resource.create_instances(
         ImageId=registered_ami,
         InstanceType="t3.medium",
@@ -992,8 +992,8 @@ def test_get_volume_size_no_block_devices(ec2_manager, registered_ami):
             ]
         }
 
-        with pytest.raises(RuntimeError, match="has no block device mappings"):
-            ec2_manager.get_volume_size(instance_id)
+        result = ec2_manager.get_volume_size(instance_id)
+        assert result is None
 
 
 def test_get_volume_size_no_root_volume(ec2_manager, registered_ami):
