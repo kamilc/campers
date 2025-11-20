@@ -24,7 +24,7 @@ Scenario: on_exit=terminate destroys instance and all resources
 @smoke @localstack
 Scenario: on_exit=stop preserves environment state for restart
   Given on_exit configuration is set to "stop"
-  And a running instance with name "moondock-myproject-main"
+  And a running instance with name "moondock-myproject-main" exists
   And I have created file "/tmp/test.txt" on the instance
   When I send SIGINT (Ctrl+C) during execution
   Then the instance is stopped

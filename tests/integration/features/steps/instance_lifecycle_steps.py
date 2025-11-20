@@ -320,7 +320,13 @@ def step_check_instance_state(context: Context, expected_state: str) -> None:
     instance = response["Reservations"][0]["Instances"][0]
     state = instance["State"]["Name"]
 
-    assert state == expected_state, f"Expected state '{expected_state}', got '{state}'"
+    if '" or "' in expected_state:
+        allowed_states = [s.strip() for s in expected_state.split('" or "')]
+        assert state in allowed_states, (
+            f"Expected state to be one of {allowed_states}, got '{state}'"
+        )
+    else:
+        assert state == expected_state, f"Expected state '{expected_state}', got '{state}'"
 
 
 @then("the command succeeds")
@@ -603,18 +609,137 @@ def step_check_cost_estimate_shown(context: Context) -> None:
 
 @given('I have created file "{file_path}" on the instance')
 def step_create_file_on_instance(context: Context, file_path: str) -> None:
-    """Mark that a file would be created on the instance."""
-    if not hasattr(context, "instance_files"):
-        context.instance_files = []
-    context.instance_files.append(file_path)
-    context.instance_file_created = True
+    """Create a file on the running instance via SSH.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context with test_instance_id or running_instance_id set
+    file_path : str
+        Path to the file to create on the instance (e.g., "/tmp/test.txt")
+
+    Raises
+    ------
+    AssertionError
+        If instance_id is not available or SSH connection fails
+    """
+    instance_id = getattr(context, "test_instance_id", None) or getattr(
+        context, "running_instance_id", None
+    )
+    assert instance_id, "No instance_id found in context"
+
+    is_localstack = (
+        hasattr(context, "scenario") and "localstack" in context.scenario.tags
+    )
+
+    if not is_localstack:
+        if not hasattr(context, "instance_files"):
+            context.instance_files = []
+        context.instance_files.append(file_path)
+        context.instance_file_created = True
+        return
+
+    assert hasattr(context, "harness"), "LocalStack harness not initialized"
+
+    try:
+        context.harness.wait_for_event("ssh-ready", instance_id, timeout_sec=30)
+    except Exception as e:
+        raise AssertionError(
+            f"SSH not ready for instance {instance_id} within 30 seconds: {e}"
+        )
+
+    host, port, key_file = context.harness.get_ssh_details(instance_id)
+
+    assert host and port and key_file, (
+        f"SSH details not available for instance {instance_id}"
+    )
+
+    from moondock.ssh import SSHManager
+
+    ssh_manager = SSHManager(host=host, key_file=str(key_file), port=port)
+
+    try:
+        ssh_manager.connect(max_retries=5)
+
+        touch_command = f"touch {file_path}"
+        exit_code = ssh_manager.execute_command(touch_command)
+
+        assert exit_code == 0, (
+            f"Failed to create file {file_path}, exit code: {exit_code}"
+        )
+
+        if not hasattr(context, "instance_files"):
+            context.instance_files = []
+        context.instance_files.append(file_path)
+        context.instance_file_created = True
+
+    finally:
+        ssh_manager.close()
 
 
 @then('the file "{file_path}" still exists on the instance')
 def step_check_file_exists_on_instance(context: Context, file_path: str) -> None:
-    """Verify file still exists on instance after restart."""
-    instance_files = getattr(context, "instance_files", [])
-    assert file_path in instance_files, f"File {file_path} should still exist"
+    """Verify file still exists on instance after restart via SSH.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context with test_instance_id or started_instance_id set
+    file_path : str
+        Path to the file to verify on the instance (e.g., "/tmp/test.txt")
+
+    Raises
+    ------
+    AssertionError
+        If instance_id is not available, SSH connection fails, or file doesn't exist
+    """
+    instance_id = getattr(context, "started_instance_id", None) or getattr(
+        context, "test_instance_id", None
+    )
+    assert instance_id, "No instance_id found in context"
+
+    is_localstack = (
+        hasattr(context, "scenario") and "localstack" in context.scenario.tags
+    )
+
+    if not is_localstack:
+        instance_files = getattr(context, "instance_files", [])
+        assert file_path in instance_files, f"File {file_path} should still exist"
+        return
+
+    assert hasattr(context, "harness"), "LocalStack harness not initialized"
+
+    host, port, key_file = context.harness.get_ssh_details(instance_id)
+
+    if not (host and port and key_file):
+        try:
+            context.harness.wait_for_event("ssh-ready", instance_id, timeout_sec=30)
+            host, port, key_file = context.harness.get_ssh_details(instance_id)
+        except Exception as e:
+            raise AssertionError(
+                f"SSH not ready for instance {instance_id} within 30 seconds: {e}"
+            )
+
+    assert host and port and key_file, (
+        f"SSH details not available for instance {instance_id}"
+    )
+
+    from moondock.ssh import SSHManager
+
+    ssh_manager = SSHManager(host=host, key_file=str(key_file), port=port)
+
+    try:
+        ssh_manager.connect(max_retries=10)
+
+        test_command = f"test -f {file_path}"
+        exit_code = ssh_manager.execute_command(test_command)
+
+        assert exit_code == 0, (
+            f"File {file_path} does not exist on instance (exit code: {exit_code})"
+        )
+
+    finally:
+        ssh_manager.close()
 
 
 @then("warning is logged about invalid on_exit value")
@@ -775,6 +900,7 @@ def step_create_instance_in_state(
     context.expected_instance_state = state
 
     if state == "stopping":
+        ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
         context.instance_current_state = "stopping"
     elif state == "pending":
         context.instance_current_state = "pending"
@@ -1069,5 +1195,42 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
 
 @then('I run "moondock start {instance_name}"')
 def step_then_run_moondock_start_named(context: Context, instance_name: str) -> None:
-    """Run moondock start command with instance name as a Then step."""
+    """Run moondock start command with instance name as a Then step.
+
+    For LocalStack scenarios, this also waits for the instance to be running
+    and the SSH container to be ready.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context
+    instance_name : str
+        Name of the instance to start
+    """
     step_start_instance(context, instance_name)
+
+    is_localstack = (
+        hasattr(context, "scenario") and "localstack" in context.scenario.tags
+    )
+
+    if is_localstack and hasattr(context, "started_instance_id"):
+        instance_id = context.started_instance_id
+        ec2_manager = context.ec2_manager
+
+        import time
+
+        for attempt in range(30):
+            response = ec2_manager.ec2_client.describe_instances(
+                InstanceIds=[instance_id]
+            )
+            instance = response["Reservations"][0]["Instances"][0]
+            state = instance["State"]["Name"]
+
+            if state == "running":
+                break
+
+            time.sleep(1)
+        else:
+            raise AssertionError(
+                f"Instance {instance_id} did not reach running state after 30 seconds"
+            )

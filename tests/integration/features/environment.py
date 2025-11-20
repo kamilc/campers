@@ -1117,21 +1117,16 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
 def after_feature(context: Context, feature) -> None:
     """Cleanup executed after all scenarios in a feature complete."""
-    has_localstack_scenarios = any(
-        "localstack" in scenario.tags for scenario in feature.scenarios
-    )
-
-    if has_localstack_scenarios:
-        logger.info(
-            f"Feature '{feature.name}' had @localstack scenarios, stopping LocalStack container"
-        )
-        from tests.harness.localstack import LocalStackHarness
-
-        LocalStackHarness.stop_localstack_container()
+    pass
 
 
 def after_all(context: Context) -> None:
     """Cleanup executed after all tests."""
+    from tests.harness.localstack import LocalStackHarness
+
+    LocalStackHarness.stop_localstack_container()
+    logger.info("Stopped LocalStack container after all tests complete")
+
     if hasattr(context, "mock_aws_env") and context.mock_aws_env:
         try:
             context.mock_aws_env.stop()
