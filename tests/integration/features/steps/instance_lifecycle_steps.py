@@ -549,26 +549,38 @@ def step_check_instance_terminated(context: Context) -> None:
 
 @then("the security group is deleted")
 def step_check_sg_deleted(context: Context) -> None:
-    """Verify security group was deleted."""
+    """Verify security group was deleted from AWS."""
     ec2_manager = context.ec2_manager
-    instance_id = context.test_instance_id
+    security_group_id = context.security_group_id
 
-    response = ec2_manager.ec2_client.describe_instances(InstanceIds=[instance_id])
-    instance = response["Reservations"][0]["Instances"][0]
-
-    security_groups = instance.get("SecurityGroups", [])
-    assert len(security_groups) == 0, "Security group should be deleted"
+    try:
+        ec2_manager.ec2_client.describe_security_groups(GroupIds=[security_group_id])
+        raise AssertionError(
+            f"Security group {security_group_id} still exists, should be deleted"
+        )
+    except ec2_manager.ec2_client.exceptions.ClientError as e:
+        if e.response["Error"]["Code"] == "InvalidGroup.NotFound":
+            pass
+        else:
+            raise
 
 
 @then("the key pair is deleted")
 def step_check_key_pair_deleted(context: Context) -> None:
-    """Verify key pair was deleted."""
+    """Verify key pair was deleted from AWS."""
     ec2_manager = context.ec2_manager
+    key_pair_name = context.key_pair_name
 
-    response = ec2_manager.ec2_client.describe_key_pairs()
-    key_pairs = response.get("KeyPairs", [])
-
-    assert len(key_pairs) == 0, "Key pair should be deleted"
+    try:
+        ec2_manager.ec2_client.describe_key_pairs(KeyNames=[key_pair_name])
+        raise AssertionError(
+            f"Key pair {key_pair_name} still exists, should be deleted"
+        )
+    except ec2_manager.ec2_client.exceptions.ClientError as e:
+        if e.response["Error"]["Code"] == "InvalidKeyPair.NotFound":
+            pass
+        else:
+            raise
 
 
 @then("the key file is removed from filesystem")
