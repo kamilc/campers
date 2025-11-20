@@ -228,6 +228,13 @@ def step_verify_stopped_instance_no_public_ip(context: Context) -> None:
 @when('I run "moondock stop {instance_id_or_name}"')
 def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
     """Stop an instance using moondock stop command."""
+    if getattr(context, "missing_permissions", False):
+        context.command_error = getattr(
+            context, "permission_error", "Insufficient AWS permissions"
+        )
+        context.command_failed = True
+        return
+
     ec2_manager = getattr(context, "ec2_manager", None)
     if ec2_manager is None:
         setup_ec2_manager(context)
@@ -268,6 +275,13 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
 @when('I run "moondock start {instance_id_or_name}"')
 def step_start_instance(context: Context, instance_id_or_name: str) -> None:
     """Start an instance using moondock start command."""
+    if getattr(context, "missing_permissions", False):
+        context.command_error = getattr(
+            context, "permission_error", "Insufficient AWS permissions"
+        )
+        context.command_failed = True
+        return
+
     ec2_manager = getattr(context, "ec2_manager", None)
     if ec2_manager is None:
         setup_ec2_manager(context)
