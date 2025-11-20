@@ -314,11 +314,13 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
     try:
         instance_details = ec2_manager.start_instance(instance_id)
         context.started_instance_id = instance_id
-        context.new_public_ip = instance_details.get("PublicIpAddress")
+        public_ip = instance_details.get("public_ip")
+        context.new_public_ip = public_ip
         context.command_failed = False
 
         if current_state == "running":
             context.command_message = "Instance already running"
+            context.current_public_ip = public_ip
         else:
             context.command_message = "Instance started successfully"
     except Exception as e:

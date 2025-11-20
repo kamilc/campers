@@ -694,14 +694,12 @@ class EC2Manager:
             )
 
         self.ec2_client.start_instances(InstanceIds=[instance_id])
-        logger.debug(f"Start request sent for instance {instance_id}")
 
         try:
             waiter = self.ec2_client.get_waiter("instance_running")
             waiter.wait(
                 InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 20}
             )
-            logger.debug(f"Waiter completed for instance {instance_id}")
         except WaiterError as e:
             raise RuntimeError(f"Failed to start instance: {e}") from e
 
@@ -711,9 +709,7 @@ class EC2Manager:
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
             instance = response["Reservations"][0]["Instances"][0]
             state = instance["State"]["Name"]
-            logger.debug(f"Attempt {attempt + 1}: Instance {instance_id} state is {state}")
             if state == "running":
-                logger.debug(f"Instance {instance_id} confirmed as running on attempt {attempt + 1}")
                 break
             if attempt < max_retries - 1:
                 time.sleep(0.5)
