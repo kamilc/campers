@@ -233,7 +233,9 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
         setup_ec2_manager(context)
         ec2_manager = context.ec2_manager
 
-    matches = ec2_manager.find_instances_by_name_or_id(instance_id_or_name)
+    matches = ec2_manager.find_instances_by_name_or_id(
+        instance_id_or_name, region_filter=ec2_manager.region
+    )
 
     if not matches:
         context.command_error = "No moondock-managed instances matched"
@@ -271,7 +273,9 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
         setup_ec2_manager(context)
         ec2_manager = context.ec2_manager
 
-    matches = ec2_manager.find_instances_by_name_or_id(instance_id_or_name)
+    matches = ec2_manager.find_instances_by_name_or_id(
+        instance_id_or_name, region_filter=ec2_manager.region
+    )
 
     if not matches:
         context.command_error = "No moondock-managed instances matched"

@@ -857,20 +857,6 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         )
 
     try:
-        has_state_test_id = hasattr(context, "state_test_instance_id")
-        debug_file = Path("/Users/kamil/projects/digitalinventor/moondock/worktrees/instance-lifecycle-management/tmp/debug_cleanup.log")
-        debug_file.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(debug_file, "a") as f:
-            f.write(f"\n=== after_scenario for {scenario.name} ===\n")
-            f.write(f"has_state_test_instance_id={has_state_test_id}\n")
-
-            if has_state_test_id:
-                state_test_id = context.state_test_instance_id
-                f.write(f"state_test_instance_id={state_test_id}\n")
-                f.write(f"is_localstack_scenario={is_localstack_scenario}\n")
-                f.write(f"has ec2_manager={hasattr(context, 'ec2_manager')}\n")
-
         if hasattr(context, "state_test_instance_id") and context.state_test_instance_id:
             import boto3
 
@@ -882,19 +868,10 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                     context.ec2_manager.ec2_client.terminate_instances(
                         InstanceIds=[context.state_test_instance_id]
                     )
-                    logger.info(
-                        f"Successfully terminated state test instance: {context.state_test_instance_id}"
-                    )
-
-                    with open(debug_file, "a") as f:
-                        f.write(f"Successfully terminated: {context.state_test_instance_id}\n")
                 except Exception as e:
                     logger.warning(
                         f"Failed to terminate state test instance {context.state_test_instance_id}: {e}"
                     )
-
-                    with open(debug_file, "a") as f:
-                        f.write(f"Failed to terminate: {e}\n")
 
             if hasattr(context, "state_test_instance_name"):
                 delattr(context, "state_test_instance_name")
@@ -903,12 +880,8 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
             if hasattr(context, "instance_current_state"):
                 delattr(context, "instance_current_state")
             delattr(context, "state_test_instance_id")
-            logger.info("DEBUG: Cleaned up state test context attributes")
     except Exception as e:
-        logger.warning(f"Error cleaning up state test instance: {e}")
-        debug_file = Path("/Users/kamil/projects/digitalinventor/moondock/worktrees/instance-lifecycle-management/tmp/debug_cleanup.log")
-        with open(debug_file, "a") as f:
-            f.write(f"Exception during cleanup: {e}\n")
+        logger.debug(f"Error cleaning up state test instance: {e}")
 
     try:
         if "localstack" in scenario.tags and hasattr(context, "app_process"):
