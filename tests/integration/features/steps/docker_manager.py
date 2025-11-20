@@ -98,18 +98,16 @@ class EC2ContainerManager:
     def remove_existing_container(self, container_name: str) -> None:
         """Remove existing container with the same name before creating a new one.
 
+        Best-effort removal with retries. Logs warnings but doesn't raise errors
+        if removal fails, allowing the calling code to handle conflicts.
+
         Parameters
         ----------
         container_name : str
             Name of the container to remove if it exists
-
-        Raises
-        ------
-        RuntimeError
-            If container removal fails (except NotFound)
         """
-        max_retries = 3
-        retry_delay = 0.5
+        max_retries = 2
+        retry_delay = 0.1
 
         for attempt in range(max_retries):
             try:
@@ -132,13 +130,10 @@ class EC2ContainerManager:
                     )
                     time.sleep(retry_delay)
                 else:
-                    logger.error(
-                        f"Error removing existing container {container_name} after {max_retries} attempts: {e}",
-                        exc_info=True,
+                    logger.warning(
+                        f"Could not remove existing container {container_name} after {max_retries} attempts: {e}. Continuing anyway..."
                     )
-                    raise RuntimeError(
-                        f"Failed to remove existing container {container_name}: {e}"
-                    ) from e
+                    return
 
     def generate_ssh_key(self, instance_id: str) -> Path:
         """Generate SSH key pair for container.
