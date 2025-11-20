@@ -906,6 +906,7 @@ def test_start_instance_api_error(ec2_manager, cleanup_keys, registered_ami):
         cleanup_keys.append(result["key_file"])
 
     instance_id = result["instance_id"]
+    ec2_manager.stop_instance(instance_id)
 
     with patch.object(ec2_manager.ec2_client, "start_instances") as mock_start:
         mock_start.side_effect = ClientError(
