@@ -857,31 +857,54 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         )
 
     try:
+        instance_ids_to_terminate = []
         if hasattr(context, "state_test_instance_id") and context.state_test_instance_id:
+            instance_ids_to_terminate.append(context.state_test_instance_id)
+
+        if hasattr(context, "test_instance_id") and context.test_instance_id:
+            instance_ids_to_terminate.append(context.test_instance_id)
+
+        if hasattr(context, "existing_instance_id") and context.existing_instance_id:
+            instance_ids_to_terminate.append(context.existing_instance_id)
+
+        if hasattr(context, "started_instance_id") and context.started_instance_id:
+            instance_ids_to_terminate.append(context.started_instance_id)
+
+        if instance_ids_to_terminate:
             import boto3
 
             if is_localstack_scenario and hasattr(context, "ec2_manager"):
-                logger.info(
-                    f"Terminating state test instance: {context.state_test_instance_id}"
-                )
-                try:
-                    context.ec2_manager.ec2_client.terminate_instances(
-                        InstanceIds=[context.state_test_instance_id]
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to terminate state test instance {context.state_test_instance_id}: {e}"
-                    )
+                for instance_id in instance_ids_to_terminate:
+                    logger.info(f"Terminating instance: {instance_id}")
+                    try:
+                        context.ec2_manager.ec2_client.terminate_instances(
+                            InstanceIds=[instance_id]
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to terminate instance {instance_id}: {e}")
 
-            if hasattr(context, "state_test_instance_name"):
-                delattr(context, "state_test_instance_name")
-            if hasattr(context, "expected_instance_state"):
-                delattr(context, "expected_instance_state")
-            if hasattr(context, "instance_current_state"):
-                delattr(context, "instance_current_state")
+        if hasattr(context, "state_test_instance_name"):
+            delattr(context, "state_test_instance_name")
+        if hasattr(context, "expected_instance_state"):
+            delattr(context, "expected_instance_state")
+        if hasattr(context, "instance_current_state"):
+            delattr(context, "instance_current_state")
+        if hasattr(context, "state_test_instance_id"):
             delattr(context, "state_test_instance_id")
+        if hasattr(context, "test_instance_id"):
+            delattr(context, "test_instance_id")
+        if hasattr(context, "test_instance_name"):
+            delattr(context, "test_instance_name")
+        if hasattr(context, "existing_instance_id"):
+            delattr(context, "existing_instance_id")
+        if hasattr(context, "existing_instance_name"):
+            delattr(context, "existing_instance_name")
+        if hasattr(context, "started_instance_id"):
+            delattr(context, "started_instance_id")
+        if hasattr(context, "existing_instance_stopped"):
+            delattr(context, "existing_instance_stopped")
     except Exception as e:
-        logger.debug(f"Error cleaning up state test instance: {e}")
+        logger.debug(f"Error cleaning up instances: {e}")
 
     try:
         if "localstack" in scenario.tags and hasattr(context, "app_process"):
