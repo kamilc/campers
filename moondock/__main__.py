@@ -880,6 +880,8 @@ class Moondock:
         If None, uses the default boto3.resource function.
     """
 
+    EBS_STORAGE_COST_PER_GB_MONTH = 0.08
+
     def __init__(
         self,
         ec2_manager_factory: Any | None = None,
@@ -1153,12 +1155,33 @@ class Moondock:
             Resources dictionary containing ssh_manager
         errors : list[Exception]
             List to accumulate errors during cleanup
-        """
-        if "ssh_manager" in resources:
-            resources["ssh_manager"].abort_active_command()
 
-        if "ssh_manager" in resources:
-            logging.info("Closing SSH connection...")
+        Notes
+        -----
+        Errors are logged and added to errors list but do not halt cleanup.
+        """
+        if "ssh_manager" not in resources:
+            logging.debug("Skipping SSH cleanup - not initialized")
+            return
+
+        resources["ssh_manager"].abort_active_command()
+
+        logging.info("Closing SSH connection...")
+
+        if self._update_queue is not None:
+            self._update_queue.put(
+                {
+                    "type": "cleanup_event",
+                    "payload": {
+                        "step": "close_ssh",
+                        "status": "in_progress",
+                    },
+                }
+            )
+
+        try:
+            resources["ssh_manager"].close()
+            logging.info("SSH connection closed successfully")
 
             if self._update_queue is not None:
                 self._update_queue.put(
@@ -1166,38 +1189,24 @@ class Moondock:
                         "type": "cleanup_event",
                         "payload": {
                             "step": "close_ssh",
-                            "status": "in_progress",
+                            "status": "completed",
                         },
                     }
                 )
+        except Exception as e:
+            logging.error("Error closing SSH: %s", e)
+            errors.append(e)
 
-            try:
-                resources["ssh_manager"].close()
-
-                if self._update_queue is not None:
-                    self._update_queue.put(
-                        {
-                            "type": "cleanup_event",
-                            "payload": {
-                                "step": "close_ssh",
-                                "status": "completed",
-                            },
-                        }
-                    )
-            except Exception as e:
-                logging.error("Error closing SSH: %s", e)
-                errors.append(e)
-
-                if self._update_queue is not None:
-                    self._update_queue.put(
-                        {
-                            "type": "cleanup_event",
-                            "payload": {
-                                "step": "close_ssh",
-                                "status": "failed",
-                            },
-                        }
-                    )
+            if self._update_queue is not None:
+                self._update_queue.put(
+                    {
+                        "type": "cleanup_event",
+                        "payload": {
+                            "step": "close_ssh",
+                            "status": "failed",
+                        },
+                    }
+                )
 
     def _cleanup_port_forwarding(
         self, resources: dict[str, Any], errors: list[Exception]
@@ -1210,9 +1219,31 @@ class Moondock:
             Resources dictionary containing portforward_mgr
         errors : list[Exception]
             List to accumulate errors during cleanup
+
+        Notes
+        -----
+        Errors are logged and added to errors list but do not halt cleanup.
         """
-        if "portforward_mgr" in resources:
-            logging.info("Stopping SSH port forwarding tunnels...")
+        if "portforward_mgr" not in resources:
+            logging.debug("Skipping port forwarding cleanup - not initialized")
+            return
+
+        logging.info("Stopping port forwarding...")
+
+        if self._update_queue is not None:
+            self._update_queue.put(
+                {
+                    "type": "cleanup_event",
+                    "payload": {
+                        "step": "stop_tunnels",
+                        "status": "in_progress",
+                    },
+                }
+            )
+
+        try:
+            resources["portforward_mgr"].stop_all_tunnels()
+            logging.info("Port forwarding stopped successfully")
 
             if self._update_queue is not None:
                 self._update_queue.put(
@@ -1220,38 +1251,24 @@ class Moondock:
                         "type": "cleanup_event",
                         "payload": {
                             "step": "stop_tunnels",
-                            "status": "in_progress",
+                            "status": "completed",
                         },
                     }
                 )
+        except Exception as e:
+            logging.error("Error stopping port forwarding: %s", e)
+            errors.append(e)
 
-            try:
-                resources["portforward_mgr"].stop_all_tunnels()
-
-                if self._update_queue is not None:
-                    self._update_queue.put(
-                        {
-                            "type": "cleanup_event",
-                            "payload": {
-                                "step": "stop_tunnels",
-                                "status": "completed",
-                            },
-                        }
-                    )
-            except Exception as e:
-                logging.error("Error stopping tunnels: %s", e)
-                errors.append(e)
-
-                if self._update_queue is not None:
-                    self._update_queue.put(
-                        {
-                            "type": "cleanup_event",
-                            "payload": {
-                                "step": "stop_tunnels",
-                                "status": "failed",
-                            },
-                        }
-                    )
+            if self._update_queue is not None:
+                self._update_queue.put(
+                    {
+                        "type": "cleanup_event",
+                        "payload": {
+                            "step": "stop_tunnels",
+                            "status": "failed",
+                        },
+                    }
+                )
 
     def _cleanup_mutagen_session(
         self, resources: dict[str, Any], errors: list[Exception]
@@ -1264,9 +1281,39 @@ class Moondock:
             Resources dictionary containing mutagen_mgr and mutagen_session_name
         errors : list[Exception]
             List to accumulate errors during cleanup
+
+        Notes
+        -----
+        Errors are logged and added to errors list but do not halt cleanup.
         """
-        if "mutagen_session_name" in resources:
-            logging.info("Terminating Mutagen sync session...")
+        if "mutagen_session_name" not in resources:
+            logging.debug("Skipping Mutagen cleanup - not initialized")
+            return
+
+        logging.info("Stopping Mutagen session...")
+
+        if self._update_queue is not None:
+            self._update_queue.put(
+                {
+                    "type": "cleanup_event",
+                    "payload": {
+                        "step": "terminate_mutagen",
+                        "status": "in_progress",
+                    },
+                }
+            )
+
+        try:
+            moondock_dir = os.environ.get(
+                "MOONDOCK_DIR", str(Path.home() / ".moondock")
+            )
+            host = resources.get("instance_details", {}).get("public_ip")
+            resources["mutagen_mgr"].terminate_session(
+                resources["mutagen_session_name"],
+                ssh_wrapper_dir=moondock_dir,
+                host=host,
+            )
+            logging.info("Mutagen session stopped successfully")
 
             if self._update_queue is not None:
                 self._update_queue.put(
@@ -1274,46 +1321,24 @@ class Moondock:
                         "type": "cleanup_event",
                         "payload": {
                             "step": "terminate_mutagen",
-                            "status": "in_progress",
+                            "status": "completed",
                         },
                     }
                 )
+        except Exception as e:
+            logging.error("Error stopping Mutagen session: %s", e)
+            errors.append(e)
 
-            try:
-                moondock_dir = os.environ.get(
-                    "MOONDOCK_DIR", str(Path.home() / ".moondock")
+            if self._update_queue is not None:
+                self._update_queue.put(
+                    {
+                        "type": "cleanup_event",
+                        "payload": {
+                            "step": "terminate_mutagen",
+                            "status": "failed",
+                        },
+                    }
                 )
-                host = resources.get("instance_details", {}).get("public_ip")
-                resources["mutagen_mgr"].terminate_session(
-                    resources["mutagen_session_name"],
-                    ssh_wrapper_dir=moondock_dir,
-                    host=host,
-                )
-
-                if self._update_queue is not None:
-                    self._update_queue.put(
-                        {
-                            "type": "cleanup_event",
-                            "payload": {
-                                "step": "terminate_mutagen",
-                                "status": "completed",
-                            },
-                        }
-                    )
-            except Exception as e:
-                logging.error("Error terminating Mutagen session: %s", e)
-                errors.append(e)
-
-                if self._update_queue is not None:
-                    self._update_queue.put(
-                        {
-                            "type": "cleanup_event",
-                            "payload": {
-                                "step": "terminate_mutagen",
-                                "status": "failed",
-                            },
-                        }
-                    )
 
     def _stop_instance_cleanup(self, signum: int | None = None) -> None:
         """Stop instance while preserving resources for later restart.
@@ -1322,6 +1347,18 @@ class Moondock:
         ----------
         signum : int | None
             Signal number if triggered by signal handler (unused but kept for consistency)
+
+        Notes
+        -----
+        Thread-safe, idempotent cleanup that preserves instance for restart.
+        Cleanup order is critical:
+        1. Port forwarding first (releases network resources)
+        2. Mutagen session second (stops file synchronization)
+        3. SSH connection third (closes remote connection)
+        4. EC2 instance fourth (stops instance, preserving data)
+
+        Handles partial initialization gracefully by checking resource existence
+        before attempting cleanup. Individual component failures do not halt cleanup.
         """
         try:
             errors = []
@@ -1330,90 +1367,94 @@ class Moondock:
                 resources_to_clean = dict(self._resources)
                 self._resources.clear()
 
-            if resources_to_clean:
-                logging.info(
-                    "Shutdown requested - stopping instance and preserving resources..."
-                )
+            if not resources_to_clean:
+                logging.info("No resources to clean up")
+                return
+
+            logging.info(
+                "Shutdown requested - stopping instance and preserving resources..."
+            )
 
             if "ssh_manager" in resources_to_clean:
                 resources_to_clean["ssh_manager"].abort_active_command()
 
-            try:
-                self._cleanup_port_forwarding(resources_to_clean, errors)
-                self._cleanup_mutagen_session(resources_to_clean, errors)
-                self._cleanup_ssh_connections(resources_to_clean, errors)
+            self._cleanup_port_forwarding(resources_to_clean, errors)
+            self._cleanup_mutagen_session(resources_to_clean, errors)
+            self._cleanup_ssh_connections(resources_to_clean, errors)
 
-                if "instance_details" in resources_to_clean:
-                    instance_details = resources_to_clean["instance_details"]
-                    instance_id = instance_details.get(
-                        "InstanceId"
-                    ) or instance_details.get("instance_id")
-                    logging.info("Stopping EC2 instance %s...", instance_id)
+            if "instance_details" not in resources_to_clean:
+                logging.debug(
+                    "No instance to stop - launch may not have completed"
+                )
+            else:
+                instance_details = resources_to_clean["instance_details"]
+                instance_id = instance_details.get(
+                    "InstanceId"
+                ) or instance_details.get("instance_id")
+                logging.info("Stopping EC2 instance %s...", instance_id)
+
+                if self._update_queue is not None:
+                    self._update_queue.put(
+                        {
+                            "type": "status_update",
+                            "payload": {"status": "stopping"},
+                        }
+                    )
+                    time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
+                    self._update_queue.put(
+                        {
+                            "type": "cleanup_event",
+                            "payload": {
+                                "step": "stop_instance",
+                                "status": "in_progress",
+                            },
+                        }
+                    )
+
+                try:
+                    ec2_manager = resources_to_clean.get("ec2_manager")
+                    if ec2_manager:
+                        ec2_manager.stop_instance(instance_id)
+                        logging.info("EC2 instance stopped successfully")
+                        volume_size = ec2_manager.get_volume_size(instance_id)
+                        storage_cost = volume_size * self.EBS_STORAGE_COST_PER_GB_MONTH
+
+                        print("\nInstance stopped successfully")
+                        print(f"  Instance ID: {instance_id}")
+                        print(
+                            f"  Estimated storage cost: ~${storage_cost:.2f}/month"
+                        )
+                        print(f"  Restart with: moondock start {instance_id}")
 
                     if self._update_queue is not None:
-                        self._update_queue.put(
-                            {
-                                "type": "status_update",
-                                "payload": {"status": "stopping"},
-                            }
-                        )
-                        time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
                         self._update_queue.put(
                             {
                                 "type": "cleanup_event",
                                 "payload": {
                                     "step": "stop_instance",
-                                    "status": "in_progress",
+                                    "status": "completed",
+                                },
+                            }
+                        )
+                except Exception as e:
+                    logging.error("Error stopping instance: %s", e)
+                    errors.append(e)
+
+                    if self._update_queue is not None:
+                        self._update_queue.put(
+                            {
+                                "type": "cleanup_event",
+                                "payload": {
+                                    "step": "stop_instance",
+                                    "status": "failed",
                                 },
                             }
                         )
 
-                    try:
-                        ec2_manager = resources_to_clean.get("ec2_manager")
-                        if ec2_manager:
-                            ec2_manager.stop_instance(instance_id)
-                            volume_size = ec2_manager.get_volume_size(instance_id)
-                            storage_cost = volume_size * 0.08
-
-                            print("\nInstance stopped successfully")
-                            print(f"  Instance ID: {instance_id}")
-                            print(
-                                f"  Estimated storage cost: ~${storage_cost:.2f}/month"
-                            )
-                            print(f"  Restart with: moondock start {instance_id}")
-
-                        if self._update_queue is not None:
-                            self._update_queue.put(
-                                {
-                                    "type": "cleanup_event",
-                                    "payload": {
-                                        "step": "stop_instance",
-                                        "status": "completed",
-                                    },
-                                }
-                            )
-                    except Exception as e:
-                        logging.error("Error stopping instance: %s", e)
-                        errors.append(e)
-
-                        if self._update_queue is not None:
-                            self._update_queue.put(
-                                {
-                                    "type": "cleanup_event",
-                                    "payload": {
-                                        "step": "stop_instance",
-                                        "status": "failed",
-                                    },
-                                }
-                            )
-
-                if errors:
-                    logging.info("Cleanup completed with %s errors", len(errors))
-                else:
-                    logging.info("Cleanup completed successfully")
-
-            finally:
-                pass
+            if errors:
+                logging.info("Cleanup completed with %s errors", len(errors))
+            else:
+                logging.info("Cleanup completed successfully")
 
         except Exception as e:
             logging.error("Unexpected error during stop cleanup: %s", e)
@@ -1425,6 +1466,18 @@ class Moondock:
         ----------
         signum : int | None
             Signal number if triggered by signal handler (unused but kept for consistency)
+
+        Notes
+        -----
+        Thread-safe, idempotent cleanup that fully removes instance and all resources.
+        Cleanup order is critical:
+        1. Port forwarding first (releases network resources)
+        2. Mutagen session second (stops file synchronization)
+        3. SSH connection third (closes remote connection)
+        4. EC2 instance fourth (terminates instance, removing all data)
+
+        Handles partial initialization gracefully by checking resource existence
+        before attempting cleanup. Individual component failures do not halt cleanup.
         """
         try:
             errors = []
@@ -1433,79 +1486,83 @@ class Moondock:
                 resources_to_clean = dict(self._resources)
                 self._resources.clear()
 
-            if resources_to_clean:
-                logging.info("Shutdown requested - beginning cleanup...")
+            if not resources_to_clean:
+                logging.info("No resources to clean up")
+                return
+
+            logging.info("Shutdown requested - beginning cleanup...")
 
             if "ssh_manager" in resources_to_clean:
                 resources_to_clean["ssh_manager"].abort_active_command()
 
-            try:
-                self._cleanup_port_forwarding(resources_to_clean, errors)
-                self._cleanup_mutagen_session(resources_to_clean, errors)
-                self._cleanup_ssh_connections(resources_to_clean, errors)
+            self._cleanup_port_forwarding(resources_to_clean, errors)
+            self._cleanup_mutagen_session(resources_to_clean, errors)
+            self._cleanup_ssh_connections(resources_to_clean, errors)
 
-                if "instance_details" in resources_to_clean:
-                    instance_details = resources_to_clean["instance_details"]
-                    instance_id = instance_details.get(
-                        "InstanceId"
-                    ) or instance_details.get("instance_id")
-                    logging.info("Terminating EC2 instance %s...", instance_id)
+            if "instance_details" not in resources_to_clean:
+                logging.debug(
+                    "No instance to terminate - launch may not have completed"
+                )
+            else:
+                instance_details = resources_to_clean["instance_details"]
+                instance_id = instance_details.get(
+                    "InstanceId"
+                ) or instance_details.get("instance_id")
+                logging.info("Terminating EC2 instance %s...", instance_id)
+
+                if self._update_queue is not None:
+                    self._update_queue.put(
+                        {
+                            "type": "status_update",
+                            "payload": {"status": "terminating"},
+                        }
+                    )
+                    time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
+                    self._update_queue.put(
+                        {
+                            "type": "cleanup_event",
+                            "payload": {
+                                "step": "terminate_instance",
+                                "status": "in_progress",
+                            },
+                        }
+                    )
+
+                try:
+                    ec2_manager = resources_to_clean.get("ec2_manager")
+                    if ec2_manager:
+                        ec2_manager.terminate_instance(instance_id)
+                        logging.info("EC2 instance terminated successfully")
 
                     if self._update_queue is not None:
-                        self._update_queue.put(
-                            {
-                                "type": "status_update",
-                                "payload": {"status": "terminating"},
-                            }
-                        )
-                        time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
                         self._update_queue.put(
                             {
                                 "type": "cleanup_event",
                                 "payload": {
                                     "step": "terminate_instance",
-                                    "status": "in_progress",
+                                    "status": "completed",
+                                },
+                            }
+                        )
+                except Exception as e:
+                    logging.error("Error terminating instance: %s", e)
+                    errors.append(e)
+
+                    if self._update_queue is not None:
+                        self._update_queue.put(
+                            {
+                                "type": "cleanup_event",
+                                "payload": {
+                                    "step": "terminate_instance",
+                                    "status": "failed",
                                 },
                             }
                         )
 
-                    try:
-                        resources_to_clean["ec2_manager"].terminate_instance(
-                            instance_id
-                        )
-
-                        if self._update_queue is not None:
-                            self._update_queue.put(
-                                {
-                                    "type": "cleanup_event",
-                                    "payload": {
-                                        "step": "terminate_instance",
-                                        "status": "completed",
-                                    },
-                                }
-                            )
-                    except Exception as e:
-                        logging.error("Error terminating instance: %s", e)
-                        errors.append(e)
-
-                        if self._update_queue is not None:
-                            self._update_queue.put(
-                                {
-                                    "type": "cleanup_event",
-                                    "payload": {
-                                        "step": "terminate_instance",
-                                        "status": "failed",
-                                    },
-                                }
-                            )
-
-                if errors:
-                    logging.info("Cleanup completed with %s errors", len(errors))
-                else:
-                    logging.info("Cleanup completed successfully")
-
-            finally:
-                pass
+            if errors:
+                logging.info("Cleanup completed with %s errors", len(errors))
+            else:
+                logging.info("Cleanup completed successfully")
 
         except Exception as e:
             logging.error("Unexpected error during terminate cleanup: %s", e)
@@ -2453,7 +2510,7 @@ class Moondock:
             regional_manager.stop_instance(instance_id)
 
             volume_size = regional_manager.get_volume_size(instance_id)
-            storage_cost = volume_size * 0.08
+            storage_cost = volume_size * self.EBS_STORAGE_COST_PER_GB_MONTH
 
             print(f"\nInstance {instance_id} has been successfully stopped.")
             print(f"  Estimated storage cost: ~${storage_cost:.2f}/month")

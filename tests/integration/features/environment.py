@@ -871,8 +871,6 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
             instance_ids_to_terminate.append(context.started_instance_id)
 
         if instance_ids_to_terminate:
-            import boto3
-
             if is_localstack_scenario and hasattr(context, "ec2_manager"):
                 for instance_id in instance_ids_to_terminate:
                     logger.info(f"Terminating instance: {instance_id}")
