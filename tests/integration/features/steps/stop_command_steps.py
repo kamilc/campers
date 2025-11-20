@@ -110,66 +110,86 @@ def step_run_stop_command_impl(
         if inst.get("state") in ACTIVE_INSTANCE_STATES
     ]
 
+    def mock_stop_instance_impl(instance_id: str):
+        instance = next(
+            (inst for inst in filtered_instances if inst["instance_id"] == instance_id),
+            None,
+        )
+        if instance is None:
+            return {}
+        return {
+            "instance_id": instance_id,
+            "public_ip": None,
+            "private_ip": None,
+            "state": "stopped",
+            "instance_type": instance.get("instance_type", "t3.medium"),
+        }
+
     with patch("moondock.ec2.EC2Manager.list_instances") as mock_list:
         if context.aws_permission_error is not None:
             mock_list.side_effect = context.aws_permission_error
         else:
             mock_list.return_value = filtered_instances
 
-        with patch("moondock.ec2.EC2Manager.terminate_instance") as mock_terminate:
-            if context.terminate_runtime_error is not None:
-                mock_terminate.side_effect = context.terminate_runtime_error
-            elif context.terminate_client_error is not None:
-                mock_terminate.side_effect = context.terminate_client_error
-
-            context.mock_terminate = mock_terminate
-
-            captured_stdout = StringIO()
-            captured_stderr = StringIO()
-            original_stdout = sys.stdout
-            original_stderr = sys.stderr
-            sys.stdout = captured_stdout
-            sys.stderr = captured_stderr
-
-            try:
-                if region:
-                    moondock.stop(actual_name_or_id, region=region)
+        with patch("moondock.ec2.EC2Manager.stop_instance") as mock_stop:
+            with patch("moondock.ec2.EC2Manager.get_volume_size") as mock_get_volume:
+                if context.terminate_runtime_error is not None:
+                    mock_stop.side_effect = context.terminate_runtime_error
+                elif context.terminate_client_error is not None:
+                    mock_stop.side_effect = context.terminate_client_error
                 else:
-                    moondock.stop(actual_name_or_id)
+                    mock_stop.side_effect = mock_stop_instance_impl
 
-                context.exit_code = 0
-            except SystemExit as e:
-                context.exit_code = e.code
-            except Exception as e:
-                context.exception = e
-                context.exit_code = 1
-            finally:
-                sys.stdout = original_stdout
-                sys.stderr = original_stderr
-                context.stdout = captured_stdout.getvalue()
-                context.stderr = captured_stderr.getvalue()
+                mock_get_volume.return_value = 50
 
-                log_messages = [
-                    record.getMessage()
-                    for record in context.log_records
-                    if record.levelname in ("ERROR", "WARNING")
-                ]
+                context.mock_terminate = mock_stop
 
-                error_parts = []
-                if log_messages:
-                    error_parts.append("\n".join(log_messages))
-                if context.stderr:
-                    error_parts.append(context.stderr)
+                captured_stdout = StringIO()
+                captured_stderr = StringIO()
+                original_stdout = sys.stdout
+                original_stderr = sys.stderr
+                sys.stdout = captured_stdout
+                sys.stderr = captured_stderr
 
-                if error_parts:
-                    context.error = "\n".join(error_parts)
+                try:
+                    if region:
+                        moondock.stop(actual_name_or_id, region=region)
+                    else:
+                        moondock.stop(actual_name_or_id)
+
+                    context.exit_code = 0
+                except SystemExit as e:
+                    context.exit_code = e.code
+                except Exception as e:
+                    context.exception = e
+                    context.exit_code = 1
+                finally:
+                    sys.stdout = original_stdout
+                    sys.stderr = original_stderr
+                    context.stdout = captured_stdout.getvalue()
+                    context.stderr = captured_stderr.getvalue()
+
+                    log_messages = [
+                        record.getMessage()
+                        for record in context.log_records
+                        if record.levelname in ("ERROR", "WARNING")
+                    ]
+
+                    error_parts = []
+                    if log_messages:
+                        error_parts.append("\n".join(log_messages))
+                    if context.stderr:
+                        error_parts.append(context.stderr)
+
+                    if error_parts:
+                        context.error = "\n".join(error_parts)
 
     root_logger.removeHandler(context.log_handler)
 
 
 @then('instance "{instance_id}" is terminated')
 def step_instance_is_terminated(context: Context, instance_id: str) -> None:
-    """Verify instance was terminated."""
+    """Verify stop command was called for the instance."""
     assert context.mock_terminate is not None
     assert context.mock_terminate.called
 
@@ -192,7 +212,7 @@ def step_instance_is_terminated(context: Context, instance_id: str) -> None:
 @then("success message is printed to stdout")
 def step_success_message_printed(context: Context) -> None:
     """Verify success message was printed to stdout."""
-    assert "has been successfully terminated" in context.stdout
+    assert "has been successfully stopped" in context.stdout
 
 
 @then("command exits with status {expected_code:d}")

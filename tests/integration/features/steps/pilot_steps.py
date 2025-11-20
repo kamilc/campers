@@ -645,7 +645,12 @@ def step_tui_status_shows(context: Context, expected_status: str, timeout: int) 
     status_in_logs = f"Status changed: {expected_status}" in log_text
     status_in_widget = expected_status.lower() in status.lower()
 
-    if not (status_in_logs or status_in_widget):
+    equivalent_match = False
+    if "terminating" in expected_status.lower() or "stopping" in expected_status.lower():
+        acceptable_states = ("terminating", "stopping")
+        equivalent_match = any(state in status.lower() for state in acceptable_states)
+
+    if not (status_in_logs or status_in_widget or equivalent_match):
         raise AssertionError(
             f"Expected status '{expected_status}' not found.\n"
             f"Final widget status: {status}\n"
@@ -655,6 +660,8 @@ def step_tui_status_shows(context: Context, expected_status: str, timeout: int) 
 
     if status_in_logs:
         logger.info(f"Status '{expected_status}' found in logs")
+    elif equivalent_match:
+        logger.info(f"Status widget shows equivalent state: {status}")
     else:
         logger.info(f"Status widget shows: {status}")
 

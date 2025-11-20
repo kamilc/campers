@@ -34,12 +34,12 @@ Scenario: Ambiguous MachineConfig name
   And disambiguation help lists instance IDs "i-first" and "i-second"
   And error is printed to stderr
 
-@smoke @dry_run
+@error @dry_run
 Scenario: Stop instance in stopping state
   Given instance "i-stopping" in state "stopping" with MachineConfig "test-machine"
   When I run stop command with "i-stopping"
-  Then instance "i-stopping" is terminated
-  And command exits with status 0
+  Then command fails with exit code 1
+  And error is printed to stderr
 
 @error @dry_run
 Scenario: Already terminated instance not found
