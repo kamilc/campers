@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 from behave.model import Scenario
 from behave.runner import Context
@@ -399,6 +400,38 @@ def before_all(context: Context) -> None:
     moondock_dir = project_root / "tmp" / "test-moondock"
     moondock_dir.mkdir(parents=True, exist_ok=True)
 
+    try:
+        import boto3
+
+        logger.info("Cleaning up any stale instances from LocalStack...")
+        from tests.integration.features.steps.instance_lifecycle_steps import (
+            EC2Manager,
+        )
+
+        def localstack_client_factory(service: str, **kwargs: Any) -> Any:
+            kwargs.setdefault("endpoint_url", "http://localhost:4566")
+            return boto3.client(service, **kwargs)
+
+        try:
+            ec2_manager = EC2Manager(
+                region="us-east-1", boto3_client_factory=localstack_client_factory
+            )
+            all_instances = ec2_manager.list_instances(region_filter=None)
+            if all_instances:
+                logger.info(f"Cleaning up {len(all_instances)} stale instances from LocalStack")
+                for instance in all_instances:
+                    try:
+                        ec2_manager.terminate_instance(instance["instance_id"])
+                        logger.info(f"Terminated stale instance: {instance['instance_id']}")
+                    except Exception as e:
+                        logger.warning(f"Failed to terminate stale instance: {e}")
+            else:
+                logger.info("LocalStack is clean - no stale instances found")
+        except Exception as e:
+            logger.debug(f"Could not connect to LocalStack yet (may not be running): {e}")
+    except Exception as e:
+        logger.warning(f"Failed to clean up LocalStack before tests: {e}")
+
     keys_dir = moondock_dir / "keys"
 
     if keys_dir.exists():
@@ -488,6 +521,32 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         context.harness = LocalStackHarness(context, scenario)
         context.harness.setup()
         logger.info(f"Initialized LocalStackHarness for scenario: {scenario.name}")
+
+        import time
+        time.sleep(0.5)
+
+        try:
+            from tests.integration.features.steps.instance_lifecycle_steps import (
+                setup_ec2_manager,
+            )
+
+            context.ec2_manager = None
+            ec2_manager = setup_ec2_manager(context)
+            all_instances = ec2_manager.list_instances(region_filter=None)
+            if all_instances:
+                logger.info(
+                    f"Cleaning up {len(all_instances)} stale instances from LocalStack"
+                )
+                for instance in all_instances:
+                    try:
+                        ec2_manager.terminate_instance(instance["instance_id"])
+                        logger.info(f"Terminated stale instance: {instance['instance_id']}")
+                    except Exception as e:
+                        logger.warning(f"Failed to terminate stale instance: {e}")
+            else:
+                logger.info("LocalStack is clean - no stale instances found")
+        except Exception as e:
+            logger.error(f"Error during stale instance cleanup: {e}", exc_info=True)
 
     elif is_dry_run:
         from tests.harness.dry_run import DryRunHarness
@@ -1170,6 +1229,62 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
             delattr(context, "saved_env")
     except Exception as e:
         logger.error(f"Error restoring environment: {e}", exc_info=True)
+
+
+def before_feature(context: Context, feature) -> None:
+    """Cleanup stale LocalStack instances before feature starts."""
+    scenarios = getattr(feature, "scenarios", [])
+    has_localstack_scenario = any(
+        "localstack" in getattr(scenario, "tags", []) for scenario in scenarios
+    )
+
+    print(f"DEBUG: before_feature - has_localstack_scenario={has_localstack_scenario}")
+
+    if not has_localstack_scenario:
+        print("DEBUG: skipping before_feature - no localstack scenarios")
+        return
+
+    try:
+        import time
+        import boto3
+
+        print("DEBUG: before_feature - starting cleanup")
+        time.sleep(1)
+
+        logger.info("Cleaning up stale instances before feature starts...")
+        from tests.integration.features.steps.instance_lifecycle_steps import (
+            EC2Manager,
+        )
+
+        def localstack_client_factory(service: str, **kwargs: Any) -> Any:
+            kwargs.setdefault("endpoint_url", "http://localhost:4566")
+            return boto3.client(service, **kwargs)
+
+        try:
+            print("DEBUG: creating EC2Manager")
+            ec2_manager = EC2Manager(
+                region="us-east-1", boto3_client_factory=localstack_client_factory
+            )
+            print("DEBUG: listing instances")
+            all_instances = ec2_manager.list_instances(region_filter=None)
+            print(f"DEBUG: found {len(all_instances)} instances")
+            if all_instances:
+                logger.info(
+                    f"Cleaning up {len(all_instances)} stale instances from LocalStack before feature"
+                )
+                for instance in all_instances:
+                    try:
+                        ec2_manager.terminate_instance(instance["instance_id"])
+                        logger.info(f"Terminated stale instance: {instance['instance_id']}")
+                    except Exception as e:
+                        logger.warning(f"Failed to terminate stale instance: {e}")
+            else:
+                logger.info("LocalStack is clean - no stale instances found at feature start")
+        except Exception as e:
+            print(f"DEBUG: exception in cleanup: {e}")
+            logger.debug(f"Could not connect to LocalStack: {e}")
+    except Exception as e:
+        logger.warning(f"Error in before_feature cleanup: {e}", exc_info=True)
 
 
 def after_feature(context: Context, feature) -> None:

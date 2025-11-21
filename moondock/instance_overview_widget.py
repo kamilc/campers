@@ -1,10 +1,13 @@
-"""Instance overview widget for TUI displaying aggregate instance counts and daily burn rate."""
+"""TUI widget for displaying aggregate instance counts and daily burn rate."""
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from textual.widgets import Static
+
+if TYPE_CHECKING:
+    from moondock import Moondock
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,7 @@ class InstanceOverviewWidget(Static):
 
     DEFAULT_CLASSES = "instance-overview"
 
-    def __init__(self, moondock_instance) -> None:
+    def __init__(self, moondock_instance: "Moondock") -> None:
         super().__init__(id="instance-overview-widget")
         from moondock.config import ConfigLoader
         from moondock.pricing import PricingService
@@ -44,13 +47,17 @@ class InstanceOverviewWidget(Static):
         self.stopped_count = 0
         self.daily_cost: Optional[float] = None
         self.last_update: Optional[datetime] = None
-
-        self.update(self.render_stats())
+        self._interval_timer = None
 
     async def on_mount(self) -> None:
         """Initialize widget: refresh stats immediately and start 30-second interval."""
         await self.refresh_stats()
-        self.set_interval(30, self.refresh_stats)
+        self._interval_timer = self.set_interval(30, self.refresh_stats)
+
+    async def on_unmount(self) -> None:
+        """Clean up interval timer when widget is unmounted."""
+        if self._interval_timer is not None:
+            self._interval_timer.stop()
 
     async def refresh_stats(self) -> None:
         """Query EC2 API for all instances across regions and calculate costs.
@@ -80,7 +87,8 @@ class InstanceOverviewWidget(Static):
                     for i in running
                 ]
                 total_monthly = sum(c for c in monthly_costs if c is not None)
-                self.daily_cost = total_monthly / 30 if monthly_costs else None
+                has_valid_pricing = any(c is not None for c in monthly_costs)
+                self.daily_cost = total_monthly / 30 if has_valid_pricing else None
             else:
                 self.daily_cost = None
 
@@ -96,7 +104,10 @@ class InstanceOverviewWidget(Static):
         Returns
         -------
         str
-            Formatted string: "Running: X  Stopped: Y  $Z/day" or "Running: X  Stopped: Y  N/A"
+            Formatted string "Running: X  Stopped: Y  $Z/day"
+            or "Running: X  Stopped: Y  N/A"
         """
         cost_str = f"${self.daily_cost:.2f}/day" if self.daily_cost else "N/A"
-        return f"Running: {self.running_count}  Stopped: {self.stopped_count}  {cost_str}"
+        return (
+            f"Running: {self.running_count}  Stopped: {self.stopped_count}  {cost_str}"
+        )

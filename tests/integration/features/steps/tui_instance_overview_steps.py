@@ -19,10 +19,16 @@ def step_create_running_instances(context: Context, count: int) -> None:
     if not hasattr(context, "running_instances"):
         context.running_instances = []
 
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+
     for i in range(count):
         instance_name = f"test-running-{i}"
         step_create_running_instance(context, instance_name)
         context.running_instances.append(instance_name)
+        if hasattr(context, "test_instance_id"):
+            if context.test_instance_id not in context.created_instance_ids:
+                context.created_instance_ids.append(context.test_instance_id)
 
 
 @given("I have {count:d} stopped instances")
@@ -35,21 +41,66 @@ def step_create_stopped_instances(context: Context, count: int) -> None:
     if not hasattr(context, "stopped_instances"):
         context.stopped_instances = []
 
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+
     for i in range(count):
         instance_name = f"test-stopped-{i}"
         step_create_stopped_instance(context, instance_name)
         context.stopped_instances.append(instance_name)
+        if hasattr(context, "test_instance_id"):
+            if context.test_instance_id not in context.created_instance_ids:
+                context.created_instance_ids.append(context.test_instance_id)
 
 
 @given("I have {count:d} instances")
 def step_have_zero_instances(context: Context, count: int) -> None:
-    """Handle zero instances case."""
+    """Handle zero instances case and clean up existing instances.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    count : int
+        Expected number of instances (must be 0)
+    """
+    import logging
+    from tests.integration.features.steps.instance_lifecycle_steps import (
+        setup_ec2_manager,
+    )
+
+    logger = logging.getLogger(__name__)
+
+    if count != 0:
+        return
+
+    try:
+        ec2_manager = setup_ec2_manager(context)
+        all_instances = ec2_manager.list_instances(region_filter=None)
+        for instance in all_instances:
+            try:
+                ec2_manager.terminate_instance(instance["instance_id"])
+                logger.debug(f"Terminated instance {instance['instance_id']}")
+            except Exception as e:
+                logger.debug(
+                    f"Failed to terminate instance {instance['instance_id']}: {e}"
+                )
+    except Exception as e:
+        logger.debug(f"Error cleaning up instances: {e}")
+
     context.running_instances = []
     context.stopped_instances = []
 
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+    else:
+        context.created_instance_ids = []
+
 
 @given("I have {count:d} running instance in {region}")
-def step_create_running_instance_in_region(context: Context, count: int, region: str) -> None:
+def step_create_running_instance_in_region(
+    context: Context, count: int, region: str
+) -> None:
     """Create running instance in specified region."""
     step_create_running_instances(context, count)
 
@@ -74,12 +125,34 @@ def step_create_running_instances_of_type(
 @when("I view the TUI")
 def step_view_tui(context: Context) -> None:
     """Launch TUI and verify widget is visible."""
+    import boto3
+    from moondock.ec2 import EC2Manager
 
     async def launch_and_capture() -> None:
         MoondockTUI = context.moondock_module.MoondockTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
 
-        moondock = context.moondock_module.Moondock()
+        is_localstack = (
+            hasattr(context, "scenario") and "localstack" in context.scenario.tags
+        )
+
+        if is_localstack:
+            def localstack_client_factory(service: str, **kwargs: Any) -> Any:
+                kwargs.setdefault("endpoint_url", "http://localhost:4566")
+                return boto3.client(service, **kwargs)
+
+            def localstack_ec2_factory(region: str = "us-east-1", **kwargs: Any) -> EC2Manager:
+                return EC2Manager(
+                    region=region,
+                    boto3_client_factory=localstack_client_factory,
+                    **kwargs
+                )
+
+            moondock = context.moondock_module.Moondock(
+                ec2_manager_factory=localstack_ec2_factory
+            )
+        else:
+            moondock = context.moondock_module.Moondock()
 
         app = MoondockTUI(
             moondock_instance=moondock,
@@ -133,7 +206,13 @@ def step_launch_new_instance(context: Context) -> None:
         step_create_running_instance,
     )
 
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+
     step_create_running_instance(context, "test-new-instance")
+    if hasattr(context, "test_instance_id"):
+        if context.test_instance_id not in context.created_instance_ids:
+            context.created_instance_ids.append(context.test_instance_id)
 
 
 @then('overview widget shows "{expected_text}"')

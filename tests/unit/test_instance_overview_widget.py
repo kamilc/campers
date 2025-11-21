@@ -272,3 +272,36 @@ def test_widget_queries_all_regions(
         asyncio.run(widget.refresh_stats())
 
         mock_ec2_manager.list_instances.assert_called_once_with(region_filter=None)
+
+
+def test_refresh_stats_shows_na_when_all_prices_none(
+    mock_moondock, mock_ec2_manager
+):
+    """Test widget shows N/A when all running instances return None for pricing."""
+    from moondock.instance_overview_widget import InstanceOverviewWidget
+
+    mock_ec2_manager.list_instances.return_value = [
+        {
+            "instance_id": "i-1",
+            "state": "running",
+            "instance_type": "t3.medium",
+            "region": "us-east-1",
+            "volume_size": 100,
+        },
+    ]
+
+    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+
+    with patch("moondock.pricing.PricingService") as MockPricing, patch(
+        "moondock.pricing.calculate_monthly_cost"
+    ) as mock_calc:
+        mock_pricing = Mock()
+        mock_pricing.pricing_available = True
+        MockPricing.return_value = mock_pricing
+        mock_calc.return_value = None
+
+        widget = InstanceOverviewWidget(mock_moondock)
+        asyncio.run(widget.refresh_stats())
+
+        assert widget.daily_cost is None
+        assert widget.render_stats() == "Running: 1  Stopped: 0  N/A"
