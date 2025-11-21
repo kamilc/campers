@@ -144,12 +144,15 @@ class FakeEC2Manager:
             instances_list.append(
                 {
                     "instance_id": instance["instance_id"],
-                    "name": f"moondock-{instance['unique_id']}",
+                    "name": instance.get("name", f"moondock-{instance['unique_id']}"),
                     "state": instance["state"],
                     "region": self.region,
-                    "instance_type": "t3.medium",
-                    "launch_time": "2024-01-01T00:00:00+00:00",
-                    "machine_config": "test",
+                    "instance_type": instance.get("instance_type", "t3.medium"),
+                    "launch_time": instance.get(
+                        "launch_time", "2024-01-01T00:00:00+00:00"
+                    ),
+                    "machine_config": instance.get("machine_config", "test"),
+                    "volume_size": instance.get("volume_size", 30),
                 }
             )
         return instances_list
@@ -203,7 +206,7 @@ class FakeEC2Manager:
             "public_ip": None,
             "private_ip": "10.0.0.1",
             "state": "stopped",
-            "instance_type": "t3.medium",
+            "instance_type": instance.get("instance_type", "t3.medium"),
         }
 
     def start_instance(self, instance_id: str) -> dict[str, Any]:
@@ -231,7 +234,7 @@ class FakeEC2Manager:
             "public_ip": "203.0.113.2",
             "private_ip": "10.0.0.1",
             "state": "running",
-            "instance_type": "t3.medium",
+            "instance_type": instance.get("instance_type", "t3.medium"),
         }
 
     def get_volume_size(self, instance_id: str) -> int:
@@ -249,6 +252,11 @@ class FakeEC2Manager:
         """
         if instance_id not in self.instances:
             raise RuntimeError(f"Instance {instance_id} not found")
+
+        instance = self.instances[instance_id]
+
+        if "volume_size" in instance:
+            return instance["volume_size"]
 
         return 100
 

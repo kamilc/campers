@@ -2045,6 +2045,7 @@ def test_stop_command_success(moondock_module) -> None:
             "state": "running",
             "machine_config": "test-config",
             "region": "us-east-1",
+            "instance_type": "t3.medium",
         }
     ]
     mock_ec2.stop_instance.return_value = {
@@ -2144,6 +2145,7 @@ def test_stop_command_displays_storage_cost(moondock_module) -> None:
             "state": "running",
             "machine_config": "test-config",
             "region": "us-east-1",
+            "instance_type": "t3.medium",
         }
     ]
     mock_ec2.stop_instance.return_value = {
@@ -2154,11 +2156,13 @@ def test_stop_command_displays_storage_cost(moondock_module) -> None:
 
     moondock_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
 
-    with patch("builtins.print") as mock_print:
+    with patch("builtins.print") as mock_print, \
+         patch("moondock.pricing.calculate_monthly_cost") as mock_cost:
+        mock_cost.side_effect = [100.0, 50.0]
         moondock_instance.stop("i-test123")
 
     print_output = [call[0][0] for call in mock_print.call_args_list]
-    assert any("storage cost" in str(output).lower() for output in print_output)
+    assert any("cost" in str(output).lower() for output in print_output)
 
 
 def test_start_command_success(moondock_module) -> None:
@@ -2176,6 +2180,7 @@ def test_start_command_success(moondock_module) -> None:
             "state": "stopped",
             "machine_config": "test-config",
             "region": "us-east-1",
+            "instance_type": "t3.medium",
         }
     ]
     mock_ec2.start_instance.return_value = {
@@ -2275,6 +2280,7 @@ def test_start_command_displays_new_ip(moondock_module) -> None:
             "state": "stopped",
             "machine_config": "test-config",
             "region": "us-east-1",
+            "instance_type": "t3.medium",
         }
     ]
     mock_ec2.start_instance.return_value = {

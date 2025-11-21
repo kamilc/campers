@@ -74,6 +74,11 @@ from moondock.ec2 import EC2Manager  # noqa: E402
 from moondock.portforward import PortForwardManager  # noqa: E402
 from moondock.ssh import SSHManager, get_ssh_connection_info  # noqa: E402
 from moondock.sync import MutagenManager  # noqa: E402
+from moondock.pricing import (  # noqa: E402
+    PricingService,
+    calculate_monthly_cost,
+    format_cost,
+)
 from moondock.utils import (  # noqa: E402
     format_time_ago,
     generate_instance_name,
@@ -2395,38 +2400,73 @@ class Moondock:
             self._validate_region(region)
 
         try:
-            ec2_manager = self._create_ec2_manager(region=region or default_region)
+            ec2_manager = self.ec2_manager_factory(region=region or default_region)
             instances = ec2_manager.list_instances(region_filter=region)
 
             if not instances:
                 print("No moondock-managed instances found")
                 return
 
+            pricing_service = PricingService()
+
+            if not pricing_service.pricing_available:
+                print("\u2139\ufe0f  Pricing unavailable\n")
+
+            total_monthly_cost = 0.0
+            costs_available = False
+
+            for inst in instances:
+                regional_manager = self.ec2_manager_factory(region=inst["region"])
+                volume_size = regional_manager.get_volume_size(inst["instance_id"])
+
+                if volume_size is None:
+                    volume_size = 0
+
+                monthly_cost = calculate_monthly_cost(
+                    instance_type=inst["instance_type"],
+                    region=inst["region"],
+                    state=inst["state"],
+                    volume_size_gb=volume_size,
+                    pricing_service=pricing_service,
+                )
+
+                if monthly_cost is not None:
+                    total_monthly_cost += monthly_cost
+                    costs_available = True
+
+                inst["monthly_cost"] = monthly_cost
+                inst["volume_size"] = volume_size
+
             if region:
                 print(f"Instances in {region}:")
                 print(
-                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} {'LAUNCHED':<12}"
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
                 )
-                print("-" * 79)
+                print("-" * 100)
 
                 for inst in instances:
                     name = self._truncate_name(inst["machine_config"])
                     launched = format_time_ago(inst["launch_time"])
+                    cost_str = format_cost(inst["monthly_cost"])
                     print(
-                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['instance_type']:<15} {launched:<12}"
+                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
                     )
             else:
                 print(
-                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} {'TYPE':<15} {'LAUNCHED':<12}"
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} {'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
                 )
-                print("-" * 94)
+                print("-" * 115)
 
                 for inst in instances:
                     name = self._truncate_name(inst["machine_config"])
                     launched = format_time_ago(inst["launch_time"])
+                    cost_str = format_cost(inst["monthly_cost"])
                     print(
-                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['region']:<15} {inst['instance_type']:<15} {launched:<12}"
+                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['region']:<15} {inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
                     )
+
+            if costs_available:
+                print(f"\nTotal estimated cost: {format_cost(total_monthly_cost)}")
 
         except NoCredentialsError:
             print("Error: AWS credentials not found. Please configure AWS credentials.")
@@ -2530,14 +2570,45 @@ class Moondock:
             )
 
             regional_manager = self._create_ec2_manager(region=target["region"])
+            volume_size = regional_manager.get_volume_size(instance_id)
+
+            if volume_size is None:
+                volume_size = 0
+
+            pricing_service = PricingService()
+
+            running_cost = calculate_monthly_cost(
+                instance_type=target["instance_type"],
+                region=target["region"],
+                state="running",
+                volume_size_gb=volume_size,
+                pricing_service=pricing_service,
+            )
+
+            stopped_cost = calculate_monthly_cost(
+                instance_type=target["instance_type"],
+                region=target["region"],
+                state="stopped",
+                volume_size_gb=volume_size,
+                pricing_service=pricing_service,
+            )
+
             regional_manager.stop_instance(instance_id)
 
-            volume_size = regional_manager.get_volume_size(instance_id)
-            storage_cost = volume_size * self.EBS_STORAGE_COST_PER_GB_MONTH
-
             print(f"\nInstance {instance_id} has been successfully stopped.")
-            print(f"  Estimated storage cost: ~${storage_cost:.2f}/month")
-            print(f"  Restart with: moondock start {instance_id}")
+
+            if running_cost is not None and stopped_cost is not None:
+                savings = running_cost - stopped_cost
+                savings_pct = (savings / running_cost * 100) if running_cost > 0 else 0
+
+                print("\n\U0001f4b0 Cost Impact:")
+                print(f"  Previous: {format_cost(running_cost)}")
+                print(f"  New: {format_cost(stopped_cost)}")
+                print(f"  Savings: {format_cost(savings)} (~{savings_pct:.0f}% reduction)")
+            else:
+                print("\n(Cost information unavailable)")
+
+            print(f"\n  Restart with: moondock start {instance_id}")
 
         except RuntimeError as e:
             if target is not None:
@@ -2662,12 +2733,46 @@ class Moondock:
             )
 
             regional_manager = self._create_ec2_manager(region=target["region"])
+            volume_size = regional_manager.get_volume_size(instance_id)
+
+            if volume_size is None:
+                volume_size = 0
+
+            pricing_service = PricingService()
+
+            stopped_cost = calculate_monthly_cost(
+                instance_type=target["instance_type"],
+                region=target["region"],
+                state="stopped",
+                volume_size_gb=volume_size,
+                pricing_service=pricing_service,
+            )
+
+            running_cost = calculate_monthly_cost(
+                instance_type=target["instance_type"],
+                region=target["region"],
+                state="running",
+                volume_size_gb=volume_size,
+                pricing_service=pricing_service,
+            )
+
             instance_details = regional_manager.start_instance(instance_id)
 
             new_ip = instance_details.get("public_ip", "N/A")
             print(f"\nInstance {instance_id} has been successfully started.")
             print(f"  Public IP: {new_ip}")
-            print("  To establish SSH/Mutagen/ports: moondock run <machine>")
+
+            if stopped_cost is not None and running_cost is not None:
+                increase = running_cost - stopped_cost
+
+                print("\n\U0001f4b0 Cost Impact:")
+                print(f"  Previous: {format_cost(stopped_cost)}")
+                print(f"  New: {format_cost(running_cost)}")
+                print(f"  Increase: {format_cost(increase)}/month")
+            else:
+                print("\n(Cost information unavailable)")
+
+            print("\n  To establish SSH/Mutagen/ports: moondock run <machine>")
 
         except RuntimeError as e:
             if target is not None:

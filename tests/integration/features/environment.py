@@ -845,6 +845,10 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
     context.diagnostic_artifacts = []
 
+    if hasattr(context, "pricing_client_patch"):
+        context.pricing_client_patch.stop()
+        delattr(context, "pricing_client_patch")
+
     if hasattr(context, "harness"):
         context.harness.cleanup()
         logger.info(f"Cleaned up new harness for scenario: {scenario.name}")

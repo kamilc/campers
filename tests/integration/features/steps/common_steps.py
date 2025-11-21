@@ -69,9 +69,18 @@ def execute_command_direct(
 
             return boto3.client(service_name, region_name=region_name)
 
+    def ec2_manager_factory(region: str) -> FakeEC2Manager:
+        if not hasattr(context, "fake_ec2_managers"):
+            context.fake_ec2_managers = {}
+
+        if region not in context.fake_ec2_managers:
+            context.fake_ec2_managers[region] = FakeEC2Manager(region)
+
+        return context.fake_ec2_managers[region]
+
     try:
         moondock = Moondock(
-            ec2_manager_factory=FakeEC2Manager,
+            ec2_manager_factory=ec2_manager_factory,
             ssh_manager_factory=FakeSSHManager,
             boto3_client_factory=mock_boto3_client_factory,
         )
