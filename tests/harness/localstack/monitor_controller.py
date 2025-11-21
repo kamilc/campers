@@ -349,7 +349,9 @@ class MonitorController:
                 "action-provider-error",
                 {"error": str(exc), "error_type": type(exc).__name__},
             )
-            logger.debug("Action provider failed, likely due to connection loss: %s", exc)
+            logger.debug(
+                "Action provider failed, likely due to connection loss: %s", exc
+            )
             return
 
         for action in actions:
