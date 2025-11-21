@@ -341,7 +341,18 @@ class MonitorController:
 
     def _poll_once(self) -> None:
         """Execute a single polling iteration."""
-        for action in self._action_provider():
+        try:
+            actions = self._action_provider()
+        except Exception as exc:  # pylint: disable=broad-except
+            self._diagnostics.record(
+                "monitor",
+                "action-provider-error",
+                {"error": str(exc), "error_type": type(exc).__name__},
+            )
+            logger.debug("Action provider failed, likely due to connection loss: %s", exc)
+            return
+
+        for action in actions:
             if action.state not in {"pending", "running"}:
                 continue
             if action.instance_id in self._seen_instances:
