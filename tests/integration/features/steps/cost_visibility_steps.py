@@ -342,39 +342,85 @@ def step_instance_in_unsupported_region(context: Context, region: str) -> None:
 @given("I have a running instance")
 def step_running_instance_generic(context: Context) -> None:
     """Create a generic running instance."""
-    if not hasattr(context, "instances") or context.instances is None:
-        context.instances = []
+    from tests.unit.fakes.fake_ec2_manager import FakeEC2Manager
 
-    instance = {
-        "instance_id": f"i-{len(context.instances):08x}",
+    if not hasattr(context, "fake_ec2_managers"):
+        context.fake_ec2_managers = {}
+
+    region = "us-east-1"
+
+    if region not in context.fake_ec2_managers:
+        context.fake_ec2_managers[region] = FakeEC2Manager(region)
+
+    fake_manager = context.fake_ec2_managers[region]
+
+    instance_id = f"i-{len(fake_manager.instances):08x}"
+    unique_id = "test-generic"
+
+    fake_manager.instances[instance_id] = {
+        "instance_id": instance_id,
+        "unique_id": unique_id,
         "name": "moondock-test",
         "state": "running",
-        "region": "us-east-1",
+        "region": region,
         "instance_type": "t3.medium",
         "launch_time": datetime.now(timezone.utc),
         "machine_config": "test-generic",
+        "volume_size": 50,
     }
 
-    context.instances.append(instance)
+    if not hasattr(context, "instances") or context.instances is None:
+        context.instances = []
+
+    context.instances.append(fake_manager.instances[instance_id])
+    context.instance = instance_id
+
+    if not hasattr(context, "test_instances"):
+        context.test_instances = []
+
+    context.test_instances.append(instance_id)
 
 
 @given("I have a stopped instance")
 def step_stopped_instance_generic(context: Context) -> None:
     """Create a generic stopped instance."""
-    if not hasattr(context, "instances") or context.instances is None:
-        context.instances = []
+    from tests.unit.fakes.fake_ec2_manager import FakeEC2Manager
 
-    instance = {
-        "instance_id": f"i-{len(context.instances):08x}",
+    if not hasattr(context, "fake_ec2_managers"):
+        context.fake_ec2_managers = {}
+
+    region = "us-east-1"
+
+    if region not in context.fake_ec2_managers:
+        context.fake_ec2_managers[region] = FakeEC2Manager(region)
+
+    fake_manager = context.fake_ec2_managers[region]
+
+    instance_id = f"i-{len(fake_manager.instances):08x}"
+    unique_id = "test-generic"
+
+    fake_manager.instances[instance_id] = {
+        "instance_id": instance_id,
+        "unique_id": unique_id,
         "name": "moondock-test",
         "state": "stopped",
-        "region": "us-east-1",
+        "region": region,
         "instance_type": "t3.medium",
         "launch_time": datetime.now(timezone.utc),
         "machine_config": "test-generic",
+        "volume_size": 50,
     }
 
-    context.instances.append(instance)
+    if not hasattr(context, "instances") or context.instances is None:
+        context.instances = []
+
+    context.instances.append(fake_manager.instances[instance_id])
+    context.instance = instance_id
+
+    if not hasattr(context, "test_instances"):
+        context.test_instances = []
+
+    context.test_instances.append(instance_id)
 
 
 @when('I run "moondock list" twice within 24 hours')
