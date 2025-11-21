@@ -74,9 +74,15 @@ def execute_command_direct(
             context.fake_ec2_managers = {}
 
         if region not in context.fake_ec2_managers:
-            context.fake_ec2_managers[region] = FakeEC2Manager(region)
+            manager = FakeEC2Manager(region)
+            if hasattr(context, "instances") and context.instances:
+                for instance in context.instances:
+                    if instance.get("region") == region:
+                        manager.instances[instance["instance_id"]] = instance
+            context.fake_ec2_managers[region] = manager
 
-        return context.fake_ec2_managers[region]
+        manager = context.fake_ec2_managers[region]
+        return manager
 
     try:
         moondock = Moondock(
@@ -84,6 +90,8 @@ def execute_command_direct(
             ssh_manager_factory=FakeSSHManager,
             boto3_client_factory=mock_boto3_client_factory,
         )
+
+        moondock._create_ec2_manager = ec2_manager_factory
 
         ec2_client = getattr(context, "patched_ec2_client", None)
 
@@ -113,6 +121,14 @@ def execute_command_direct(
             name_or_id = args["name_or_id"]
             region = args.get("region")
             moondock.stop(name_or_id=name_or_id, region=region)
+            context.exit_code = 0
+
+        elif command == "start":
+            if not args or "name_or_id" not in args:
+                raise ValueError("start command requires name_or_id argument")
+            name_or_id = args["name_or_id"]
+            region = args.get("region")
+            moondock.start(name_or_id=name_or_id, region=region)
             context.exit_code = 0
 
         elif command == "run":

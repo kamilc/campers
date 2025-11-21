@@ -236,46 +236,61 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
         context.command_failed = True
         return
 
-    ec2_manager = getattr(context, "ec2_manager", None)
-    if ec2_manager is None:
-        setup_ec2_manager(context)
-        ec2_manager = context.ec2_manager
-
-    if hasattr(context, "specific_instance_id"):
+    if instance_id_or_name == "{instance}":
+        actual_instance_id = getattr(context, "instance", "{instance}")
+    elif hasattr(context, "specific_instance_id"):
         actual_instance_id = context.specific_instance_id
     else:
         actual_instance_id = instance_id_or_name
 
-    matches = ec2_manager.find_instances_by_name_or_id(
-        actual_instance_id, region_filter=ec2_manager.region
-    )
+    if getattr(context, "use_direct_instantiation", False):
+        from tests.integration.features.steps.common_steps import (
+            execute_command_direct,
+        )
 
-    if not matches:
-        context.command_error = "No moondock-managed instances matched"
-        context.command_failed = True
-        return
+        try:
+            execute_command_direct(
+                context, "stop", args={"name_or_id": actual_instance_id}
+            )
+            context.command_failed = context.exit_code != 0
+        except Exception as e:
+            context.command_error = str(e)
+            context.command_failed = True
+            context.stdout = ""
+            context.stderr = str(e)
+            context.exit_code = 1
+    else:
+        try:
+            from pathlib import Path
 
-    if len(matches) > 1:
-        context.command_error = f"Multiple instances matched: {len(matches)}"
-        context.command_failed = True
-        return
+            cmd = ["moondock", "stop", actual_instance_id]
+            project_root = Path(__file__).parent.parent.parent.parent.parent
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=project_root,
+            )
+            context.stdout = result.stdout
+            context.stderr = result.stderr
+            context.exit_code = result.returncode
+            context.command_failed = result.returncode != 0
 
-    instance = matches[0]
-    instance_id = instance["instance_id"]
-
-    if instance["state"] == "stopped":
-        context.command_message = "Instance already stopped"
-        context.command_failed = False
-        context.stopped_instance_id = instance_id
-        return
-
-    try:
-        ec2_manager.stop_instance(instance_id)
-        context.stopped_instance_id = instance_id
-        context.command_failed = False
-    except Exception as e:
-        context.command_error = str(e)
-        context.command_failed = True
+            if result.returncode == 0:
+                ec2_manager = getattr(context, "ec2_manager", None)
+                if ec2_manager is not None:
+                    matches = ec2_manager.find_instances_by_name_or_id(
+                        actual_instance_id, region_filter=ec2_manager.region
+                    )
+                    if matches:
+                        context.stopped_instance_id = matches[0]["instance_id"]
+        except Exception as e:
+            context.command_error = str(e)
+            context.command_failed = True
+            context.stdout = ""
+            context.stderr = str(e)
+            context.exit_code = 1
 
 
 @when('I run "moondock start {instance_id_or_name}"')
@@ -288,44 +303,59 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
         context.command_failed = True
         return
 
-    ec2_manager = getattr(context, "ec2_manager", None)
-    if ec2_manager is None:
-        setup_ec2_manager(context)
-        ec2_manager = context.ec2_manager
+    if instance_id_or_name == "{instance}":
+        actual_instance_id = getattr(context, "instance", "{instance}")
+    else:
+        actual_instance_id = instance_id_or_name
 
-    matches = ec2_manager.find_instances_by_name_or_id(
-        instance_id_or_name, region_filter=ec2_manager.region
-    )
+    if getattr(context, "use_direct_instantiation", False):
+        from tests.integration.features.steps.common_steps import (
+            execute_command_direct,
+        )
 
-    if not matches:
-        context.command_error = "No moondock-managed instances matched"
-        context.command_failed = True
-        return
+        try:
+            execute_command_direct(
+                context, "start", args={"name_or_id": actual_instance_id}
+            )
+            context.command_failed = context.exit_code != 0
+        except Exception as e:
+            context.command_error = str(e)
+            context.command_failed = True
+            context.stdout = ""
+            context.stderr = str(e)
+            context.exit_code = 1
+    else:
+        try:
+            from pathlib import Path
 
-    if len(matches) > 1:
-        context.command_error = f"Multiple instances matched: {len(matches)}"
-        context.command_failed = True
-        return
+            cmd = ["moondock", "start", actual_instance_id]
+            project_root = Path(__file__).parent.parent.parent.parent.parent
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=project_root,
+            )
+            context.stdout = result.stdout
+            context.stderr = result.stderr
+            context.exit_code = result.returncode
+            context.command_failed = result.returncode != 0
 
-    instance = matches[0]
-    instance_id = instance["instance_id"]
-    current_state = instance.get("state", "unknown")
-
-    try:
-        instance_details = ec2_manager.start_instance(instance_id)
-        context.started_instance_id = instance_id
-        public_ip = instance_details.get("public_ip")
-        context.new_public_ip = public_ip
-        context.command_failed = False
-
-        if current_state == "running":
-            context.command_message = "Instance already running"
-            context.current_public_ip = public_ip
-        else:
-            context.command_message = "Instance started successfully"
-    except Exception as e:
-        context.command_error = str(e)
-        context.command_failed = True
+            if result.returncode == 0:
+                ec2_manager = getattr(context, "ec2_manager", None)
+                if ec2_manager is not None:
+                    matches = ec2_manager.find_instances_by_name_or_id(
+                        actual_instance_id, region_filter=ec2_manager.region
+                    )
+                    if matches:
+                        context.started_instance_id = matches[0]["instance_id"]
+        except Exception as e:
+            context.command_error = str(e)
+            context.command_failed = True
+            context.stdout = ""
+            context.stderr = str(e)
+            context.exit_code = 1
 
 
 @then('the instance state is "{expected_state}"')

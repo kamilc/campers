@@ -15,7 +15,7 @@ Scenario: List command shows pricing unavailable in LocalStack
   Given AWS Pricing API is not accessible
   And I have a running instance of type "t3.medium"
   When I run "moondock list"
-  Then I see "ℹ️ Pricing unavailable" at top
+  Then I see "ℹ️  Pricing unavailable" at top
   And cost column shows "Pricing unavailable"
   And no total cost is displayed
 
@@ -27,7 +27,7 @@ Scenario: Stop command shows cost savings with pricing
   Then I see "💰 Cost Impact"
   And I see "Previous: $871.20/month"
   And I see "New: $8.00/month"
-  And I see "Savings: $863.20 (~99% reduction)"
+  And I see "Savings: $863.20/month (~99% reduction)"
 
 @smoke @localstack
 Scenario: Stop command handles unavailable pricing gracefully

@@ -22,7 +22,7 @@ SAMPLE_EC2_PRICING_G5_2XLARGE = {
     "terms": {
         "OnDemand": {
             "OFFER789": {
-                "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "1.212"}}}
+                "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "1.21"}}}
             }
         }
     }
@@ -45,16 +45,18 @@ def step_mock_pricing_api_with_sample_rates(context: Context) -> None:
     import boto3
     original_boto3_client = boto3.client
 
+    context.use_direct_instantiation = True
+
     mock_pricing_client = Mock()
 
     def mock_get_products(**kwargs):
         filters = {f["Field"]: f["Value"] for f in kwargs.get("Filters", [])}
 
-        if filters.get("instanceType") == "t3.medium":
+        if filters.get("instanceType") == "t3.medium" and filters.get("location") == "US East (N. Virginia)":
             return {"PriceList": [json.dumps(SAMPLE_EC2_PRICING_T3_MEDIUM)]}
-        elif filters.get("instanceType") == "g5.2xlarge":
+        elif filters.get("instanceType") == "g5.2xlarge" and filters.get("location") == "US East (N. Virginia)":
             return {"PriceList": [json.dumps(SAMPLE_EC2_PRICING_G5_2XLARGE)]}
-        elif filters.get("productFamily") == "Storage" and filters.get("volumeApiName") == "gp3":
+        elif filters.get("productFamily") == "Storage" and filters.get("volumeApiName") == "gp3" and filters.get("location") == "US East (N. Virginia)":
             return {"PriceList": [json.dumps(SAMPLE_EBS_PRICING_GP3)]}
 
         return {"PriceList": []}
@@ -64,10 +66,10 @@ def step_mock_pricing_api_with_sample_rates(context: Context) -> None:
     context.pricing_client_patch = patch("boto3.client")
     mock_boto_client = context.pricing_client_patch.start()
 
-    def client_factory(service_name, region_name=None):
+    def client_factory(service_name, region_name=None, **kwargs):
         if service_name == "pricing":
             return mock_pricing_client
-        return original_boto3_client(service_name, region_name=region_name)
+        return original_boto3_client(service_name, region_name=region_name, **kwargs)
 
     mock_boto_client.side_effect = client_factory
 
@@ -77,6 +79,8 @@ def step_mock_pricing_api_with_call_counter(context: Context) -> None:
     """Mock AWS Pricing API and track number of API calls."""
     import boto3
     original_boto3_client = boto3.client
+
+    context.use_direct_instantiation = True
 
     mock_pricing_client = Mock()
     context.pricing_api_call_count = {}
@@ -100,10 +104,10 @@ def step_mock_pricing_api_with_call_counter(context: Context) -> None:
     context.pricing_client_patch = patch("boto3.client")
     mock_boto_client = context.pricing_client_patch.start()
 
-    def client_factory(service_name, region_name=None):
+    def client_factory(service_name, region_name=None, **kwargs):
         if service_name == "pricing":
             return mock_pricing_client
-        return original_boto3_client(service_name, region_name=region_name)
+        return original_boto3_client(service_name, region_name=region_name, **kwargs)
 
     mock_boto_client.side_effect = client_factory
 
@@ -114,13 +118,15 @@ def step_pricing_api_not_accessible(context: Context) -> None:
     import boto3
     original_boto3_client = boto3.client
 
+    context.use_direct_instantiation = True
+
     context.pricing_client_patch = patch("boto3.client")
     mock_boto_client = context.pricing_client_patch.start()
 
-    def client_factory(service_name, region_name=None):
+    def client_factory(service_name, region_name=None, **kwargs):
         if service_name == "pricing":
             raise Exception("Pricing API not available in LocalStack")
-        return original_boto3_client(service_name, region_name=region_name)
+        return original_boto3_client(service_name, region_name=region_name, **kwargs)
 
     mock_boto_client.side_effect = client_factory
 
@@ -130,6 +136,8 @@ def step_pricing_api_available(context: Context) -> None:
     """Set up AWS Pricing API as available."""
     import boto3
     original_boto3_client = boto3.client
+
+    context.use_direct_instantiation = True
 
     mock_pricing_client = Mock()
 
@@ -146,10 +154,10 @@ def step_pricing_api_available(context: Context) -> None:
     context.pricing_client_patch = patch("boto3.client")
     mock_boto_client = context.pricing_client_patch.start()
 
-    def client_factory(service_name, region_name=None):
+    def client_factory(service_name, region_name=None, **kwargs):
         if service_name == "pricing":
             return mock_pricing_client
-        return original_boto3_client(service_name, region_name=region_name)
+        return original_boto3_client(service_name, region_name=region_name, **kwargs)
 
     mock_boto_client.side_effect = client_factory
 
@@ -231,22 +239,42 @@ def step_running_instance_with_type_and_volume(
     context: Context, instance_type: str, volume_size: int
 ) -> None:
     """Create a running instance with specified type and volume size."""
-    if not hasattr(context, "instances") or context.instances is None:
-        context.instances = []
+    context.use_direct_instantiation = True
 
-    instance = {
-        "instance_id": f"i-{len(context.instances):08x}",
-        "name": f"moondock-test-{instance_type}",
+    from tests.unit.fakes.fake_ec2_manager import FakeEC2Manager
+
+    if not hasattr(context, "fake_ec2_managers"):
+        context.fake_ec2_managers = {}
+
+    region = "us-east-1"
+
+    if region not in context.fake_ec2_managers:
+        context.fake_ec2_managers[region] = FakeEC2Manager(region)
+
+    fake_manager = context.fake_ec2_managers[region]
+
+    instance_id = f"i-{len(fake_manager.instances):08x}"
+    instance_name = f"moondock-test-{instance_type}"
+    unique_id = f"test-{instance_type}"
+
+    fake_manager.instances[instance_id] = {
+        "instance_id": instance_id,
+        "unique_id": unique_id,
+        "name": instance_name,
         "state": "running",
-        "region": "us-east-1",
+        "region": region,
         "instance_type": instance_type,
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": f"test-{instance_type}",
+        "machine_config": instance_name,
         "volume_size": volume_size,
     }
 
-    context.instances.append(instance)
+    if not hasattr(context, "test_instances"):
+        context.test_instances = []
+
+    context.test_instances.append(instance_id)
     context.test_volume_size = volume_size
+    context.instance = instance_name
 
 
 @given('I have a stopped instance of type "{instance_type}" with {volume_size:d}GB volume')
@@ -254,22 +282,42 @@ def step_stopped_instance_with_type_and_volume(
     context: Context, instance_type: str, volume_size: int
 ) -> None:
     """Create a stopped instance with specified type and volume size."""
-    if not hasattr(context, "instances") or context.instances is None:
-        context.instances = []
+    context.use_direct_instantiation = True
 
-    instance = {
-        "instance_id": f"i-{len(context.instances):08x}",
-        "name": f"moondock-test-{instance_type}",
+    from tests.unit.fakes.fake_ec2_manager import FakeEC2Manager
+
+    if not hasattr(context, "fake_ec2_managers"):
+        context.fake_ec2_managers = {}
+
+    region = "us-east-1"
+
+    if region not in context.fake_ec2_managers:
+        context.fake_ec2_managers[region] = FakeEC2Manager(region)
+
+    fake_manager = context.fake_ec2_managers[region]
+
+    instance_id = f"i-{len(fake_manager.instances):08x}"
+    instance_name = f"moondock-test-{instance_type}"
+    unique_id = f"test-{instance_type}"
+
+    fake_manager.instances[instance_id] = {
+        "instance_id": instance_id,
+        "unique_id": unique_id,
+        "name": instance_name,
         "state": "stopped",
-        "region": "us-east-1",
+        "region": region,
         "instance_type": instance_type,
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": f"test-{instance_type}",
+        "machine_config": instance_name,
         "volume_size": volume_size,
     }
 
-    context.instances.append(instance)
+    if not hasattr(context, "test_instances"):
+        context.test_instances = []
+
+    context.test_instances.append(instance_id)
     context.test_volume_size = volume_size
+    context.instance = instance_name
 
 
 @given('I have an instance in unsupported region "{region}"')
