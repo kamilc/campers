@@ -17,20 +17,25 @@ class FakeEC2Manager:
     ----------
     region : str
         AWS region (used but does not need to be valid for testing)
+    all_managers : dict[str, FakeEC2Manager] | None
+        Optional dict of all managers for multi-region list operations
     """
 
-    def __init__(self, region: str) -> None:
+    def __init__(self, region: str, all_managers: dict[str, Any] | None = None) -> None:
         """Initialize FakeEC2Manager.
 
         Parameters
         ----------
         region : str
             AWS region name
+        all_managers : dict[str, FakeEC2Manager] | None
+            Optional dict of all managers keyed by region for multi-region queries
         """
         self.region = region
         self.instances: dict[str, dict[str, Any]] = {}
         self.key_pairs: dict[str, str] = {}
         self.security_groups: dict[str, dict[str, Any]] = {}
+        self.all_managers = all_managers
 
     def create_key_pair(self, unique_id: str) -> tuple[str, Path]:
         """Create a fake SSH key pair.
@@ -127,12 +132,12 @@ class FakeEC2Manager:
         return instance
 
     def list_instances(self, region_filter: str | None = None) -> list[dict[str, Any]]:
-        """List all fake instances.
+        """List all fake instances across regions.
 
         Parameters
         ----------
         region_filter : str | None
-            Optional region filter (ignored for fake)
+            Optional region filter. If None, lists instances from all regions.
 
         Returns
         -------
@@ -140,21 +145,40 @@ class FakeEC2Manager:
             List of fake instance details
         """
         instances_list = []
-        for instance in self.instances.values():
-            instances_list.append(
-                {
-                    "instance_id": instance["instance_id"],
-                    "name": instance.get("name", f"moondock-{instance['unique_id']}"),
-                    "state": instance["state"],
-                    "region": self.region,
-                    "instance_type": instance.get("instance_type", "t3.medium"),
-                    "launch_time": instance.get(
-                        "launch_time", "2024-01-01T00:00:00+00:00"
-                    ),
-                    "machine_config": instance.get("machine_config", "test"),
-                    "volume_size": instance.get("volume_size", 30),
-                }
-            )
+
+        if region_filter is None and self.all_managers:
+            for manager in self.all_managers.values():
+                for instance in manager.instances.values():
+                    instances_list.append(
+                        {
+                            "instance_id": instance["instance_id"],
+                            "name": instance.get("name", f"moondock-{instance['unique_id']}"),
+                            "state": instance["state"],
+                            "region": instance.get("region", manager.region),
+                            "instance_type": instance.get("instance_type", "t3.medium"),
+                            "launch_time": instance.get(
+                                "launch_time", "2024-01-01T00:00:00+00:00"
+                            ),
+                            "machine_config": instance.get("machine_config", "test"),
+                            "volume_size": instance.get("volume_size", 30),
+                        }
+                    )
+        else:
+            for instance in self.instances.values():
+                instances_list.append(
+                    {
+                        "instance_id": instance["instance_id"],
+                        "name": instance.get("name", f"moondock-{instance['unique_id']}"),
+                        "state": instance["state"],
+                        "region": instance.get("region", self.region),
+                        "instance_type": instance.get("instance_type", "t3.medium"),
+                        "launch_time": instance.get(
+                            "launch_time", "2024-01-01T00:00:00+00:00"
+                        ),
+                        "machine_config": instance.get("machine_config", "test"),
+                        "volume_size": instance.get("volume_size", 30),
+                    }
+                )
         return instances_list
 
     def find_instances_by_name_or_id(

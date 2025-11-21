@@ -65,6 +65,7 @@ Scenario: Pricing cache prevents redundant API calls
 @error @mock @dry_run
 Scenario: Unknown region returns None for pricing
   Given AWS Pricing API is available
+  And I have a running instance of type "t3.medium"
   And I have an instance in unsupported region "ap-unknown-1"
   When I run "moondock list"
   Then that instance shows "Pricing unavailable" in cost column

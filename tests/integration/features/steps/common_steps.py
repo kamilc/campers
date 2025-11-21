@@ -74,7 +74,7 @@ def execute_command_direct(
             context.fake_ec2_managers = {}
 
         if region not in context.fake_ec2_managers:
-            manager = FakeEC2Manager(region)
+            manager = FakeEC2Manager(region, all_managers=context.fake_ec2_managers)
             if hasattr(context, "instances") and context.instances:
                 for instance in context.instances:
                     if instance.get("region") == region:
