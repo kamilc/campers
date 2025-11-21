@@ -155,8 +155,10 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
 
     try:
         if context.mock_time_instances is not None and context.mock_time_instances:
-            with patch("moondock.ec2.EC2Manager.list_instances") as mock_list:
+            with patch("moondock.ec2.EC2Manager.list_instances") as mock_list, \
+                 patch("moondock.ec2.EC2Manager.get_volume_size") as mock_volume:
                 mock_list.return_value = context.instances
+                mock_volume.return_value = 0
                 moondock.list(region=region)
         else:
             moondock.list(region=region)
