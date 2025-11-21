@@ -211,16 +211,26 @@ def setup_test_environment(
         "MOONDOCK_TEST_MODE": os.environ.get("MOONDOCK_TEST_MODE"),
         "MOONDOCK_CONFIG": os.environ.get("MOONDOCK_CONFIG"),
         "AWS_ENDPOINT_URL": os.environ.get("AWS_ENDPOINT_URL"),
+        "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
+        "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION"),
     }
 
     behave_context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
     behave_context.harness.services.configuration_env.set(
         "MOONDOCK_CONFIG", config_path
     )
-    if original_values["AWS_ENDPOINT_URL"]:
-        behave_context.harness.services.configuration_env.set(
-            "AWS_ENDPOINT_URL", original_values["AWS_ENDPOINT_URL"]
-        )
+
+    for key in [
+        "AWS_ENDPOINT_URL",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]:
+        if original_values[key]:
+            behave_context.harness.services.configuration_env.set(
+                key, original_values[key]
+            )
 
     return original_values
 
@@ -302,7 +312,10 @@ async def poll_tui_with_unified_timeout(
                 )
                 last_log_time = time.time()
 
-            if "terminating" in status_text.lower() or "stopping" in status_text.lower():
+            if (
+                "terminating" in status_text.lower()
+                or "stopping" in status_text.lower()
+            ):
                 if not terminating_found:
                     logger.info("Found 'terminating' or 'stopping' status")
                 terminating_found = True
@@ -646,7 +659,10 @@ def step_tui_status_shows(context: Context, expected_status: str, timeout: int) 
     status_in_widget = expected_status.lower() in status.lower()
 
     equivalent_match = False
-    if "terminating" in expected_status.lower() or "stopping" in expected_status.lower():
+    if (
+        "terminating" in expected_status.lower()
+        or "stopping" in expected_status.lower()
+    ):
         acceptable_states = ("terminating", "stopping")
         equivalent_match = any(state in status.lower() for state in acceptable_states)
 

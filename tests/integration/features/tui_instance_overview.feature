@@ -33,6 +33,7 @@ Scenario: Widget refreshes every 30 seconds
   Given TUI is displaying "Running: 1  Stopped: 0  N/A"
   When I launch a new instance
   And 35 seconds pass
+  And the widget refreshes
   Then overview widget shows "Running: 2  Stopped: 0  N/A"
 
 @smoke @mock

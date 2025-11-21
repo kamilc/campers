@@ -822,6 +822,10 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.terminate_runtime_error = None
     context.terminate_client_error = None
 
+    context.running_instances = []
+    context.stopped_instances = []
+    context.created_instance_ids = []
+
     context.mock_moondock = context.moondock_module.Moondock()
     context.cleanup_order = []
 

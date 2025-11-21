@@ -2543,7 +2543,7 @@ class Moondock:
             state = target.get("state", "unknown")
 
             if state == "stopped":
-                print(f"Instance {instance_id} is already stopped.")
+                print("Instance already stopped")
                 return
 
             if state == "stopping":
@@ -2704,7 +2704,7 @@ class Moondock:
 
             if state == "running":
                 ip = target.get("public_ip", "N/A")
-                print(f"Instance {instance_id} is already running.")
+                print("Instance already running")
                 print(f"  Public IP: {ip}")
                 return
 

@@ -572,9 +572,17 @@ class EC2Manager:
                 logger.warning(f"Failed to query region {region}: {e}")
                 continue
 
-        instances.sort(key=lambda x: x["launch_time"], reverse=True)
+        seen = set()
+        unique_instances = []
+        for instance in instances:
+            instance_id = instance["instance_id"]
+            if instance_id not in seen:
+                seen.add(instance_id)
+                unique_instances.append(instance)
 
-        return instances
+        unique_instances.sort(key=lambda x: x["launch_time"], reverse=True)
+
+        return unique_instances
 
     def find_instances_by_name_or_id(
         self, name_or_id: str, region_filter: str | None = None

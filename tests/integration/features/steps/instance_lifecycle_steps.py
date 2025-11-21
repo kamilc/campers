@@ -300,6 +300,7 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
             context.stderr = result.stderr
             context.exit_code = result.returncode
             context.command_failed = result.returncode != 0
+            context.command_message = result.stdout
 
             if result.returncode != 0:
                 context.command_error = result.stderr
@@ -371,6 +372,7 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
             context.stderr = result.stderr
             context.exit_code = result.returncode
             context.command_failed = result.returncode != 0
+            context.command_message = result.stdout
 
             if result.returncode != 0:
                 context.command_error = result.stderr
@@ -382,6 +384,11 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
                     )
                     if matches:
                         context.started_instance_id = matches[0]["instance_id"]
+
+                import re
+                ip_match = re.search(r"Public IP:\s+([^\s]+)", result.stdout)
+                if ip_match:
+                    context.current_public_ip = ip_match.group(1)
         except Exception as e:
             context.command_error = str(e)
             context.command_failed = True
