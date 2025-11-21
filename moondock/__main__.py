@@ -2710,7 +2710,7 @@ class Moondock:
 
             if state == "pending":
                 self._log_and_print_error(
-                    "Instance %s is not in stopped state. Current state: %s. Please wait for instance to reach stopped state.",
+                    "Instance is not in stopped state (Instance ID: %s, Current state: %s). Please wait for instance to reach stopped state.",
                     instance_id,
                     state,
                 )
@@ -2726,7 +2726,7 @@ class Moondock:
 
             if state != "stopped":
                 self._log_and_print_error(
-                    "Instance %s is in state '%s' and cannot be started. "
+                    "Instance is not in stopped state (Instance ID: %s, Current state: %s). "
                     "Valid state for starting: stopped",
                     instance_id,
                     state,

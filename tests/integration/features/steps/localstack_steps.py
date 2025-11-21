@@ -183,6 +183,13 @@ def step_localstack_is_healthy(context: Context) -> None:
     context : Context
         Behave context object
     """
+    is_localstack = (
+        hasattr(context, "scenario") and "localstack" in context.scenario.tags
+    )
+
+    if not is_localstack:
+        return
+
     services = get_localstack_services(context)
 
     wait_for_localstack_health()

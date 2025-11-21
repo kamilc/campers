@@ -121,12 +121,14 @@ def setup_ec2_manager(context: Context, region: str = "us-east-1") -> EC2Manager
         Configured EC2Manager instance
     """
     import boto3
+    from tests.unit.fakes.fake_ec2_manager import FakeEC2Manager
 
     is_localstack = (
         hasattr(context, "scenario") and "localstack" in context.scenario.tags
     )
+    use_direct = getattr(context, "use_direct_instantiation", False)
 
-    if is_localstack:
+    if is_localstack and not use_direct:
         if not context.ec2_manager:
 
             def localstack_client_factory(service: str, **kwargs: Any) -> Any:
@@ -137,6 +139,16 @@ def setup_ec2_manager(context: Context, region: str = "us-east-1") -> EC2Manager
                 region=region, boto3_client_factory=localstack_client_factory
             )
         return context.ec2_manager
+    elif use_direct:
+        if not hasattr(context, "fake_ec2_managers"):
+            context.fake_ec2_managers = {}
+
+        if region not in context.fake_ec2_managers:
+            context.fake_ec2_managers[region] = FakeEC2Manager(
+                region, all_managers=context.fake_ec2_managers
+            )
+
+        return context.fake_ec2_managers[region]
     else:
         if not hasattr(context, "mock_aws_env") or context.mock_aws_env is None:
             context.mock_aws_env = mock_aws()
@@ -271,7 +283,11 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
         try:
             from pathlib import Path
 
+            ec2_manager = getattr(context, "ec2_manager", None)
             cmd = ["moondock", "stop", actual_instance_id]
+            if ec2_manager is not None:
+                cmd.extend(["--region", ec2_manager.region])
+
             project_root = Path(__file__).parent.parent.parent.parent.parent
             result = subprocess.run(
                 cmd,
@@ -285,8 +301,10 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
             context.exit_code = result.returncode
             context.command_failed = result.returncode != 0
 
+            if result.returncode != 0:
+                context.command_error = result.stderr
+
             if result.returncode == 0:
-                ec2_manager = getattr(context, "ec2_manager", None)
                 if ec2_manager is not None:
                     matches = ec2_manager.find_instances_by_name_or_id(
                         actual_instance_id, region_filter=ec2_manager.region
@@ -336,7 +354,11 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
         try:
             from pathlib import Path
 
+            ec2_manager = getattr(context, "ec2_manager", None)
             cmd = ["moondock", "start", actual_instance_id]
+            if ec2_manager is not None:
+                cmd.extend(["--region", ec2_manager.region])
+
             project_root = Path(__file__).parent.parent.parent.parent.parent
             result = subprocess.run(
                 cmd,
@@ -350,8 +372,10 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
             context.exit_code = result.returncode
             context.command_failed = result.returncode != 0
 
+            if result.returncode != 0:
+                context.command_error = result.stderr
+
             if result.returncode == 0:
-                ec2_manager = getattr(context, "ec2_manager", None)
                 if ec2_manager is not None:
                     matches = ec2_manager.find_instances_by_name_or_id(
                         actual_instance_id, region_filter=ec2_manager.region
@@ -963,6 +987,9 @@ def step_create_instance_in_state(
     context: Context, state: str, instance_name: str
 ) -> None:
     """Create an instance in a specific state."""
+    if state == "pending":
+        context.use_direct_instantiation = True
+
     ec2_manager = setup_ec2_manager(context)
 
     config = {
@@ -974,7 +1001,8 @@ def step_create_instance_in_state(
     is_localstack = (
         hasattr(context, "scenario") and "localstack" in context.scenario.tags
     )
-    if is_localstack:
+    use_direct = getattr(context, "use_direct_instantiation", False)
+    if is_localstack and not use_direct:
         config["ami"] = {"image_id": "ami-03cf127a"}
 
     instance_details = ec2_manager.launch_instance(config, instance_name=instance_name)
@@ -989,29 +1017,36 @@ def step_create_instance_in_state(
     context.created_instance_ids.append(instance_id)
 
     if state == "stopping":
-        ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
+        if hasattr(ec2_manager, "ec2_client"):
+            ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
+        else:
+            ec2_manager.stop_instance(instance_id)
         context.instance_current_state = "stopping"
     elif state == "pending":
-        waiter = ec2_manager.ec2_client.get_waiter("instance_stopped")
-        ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
-        waiter.wait(InstanceIds=[instance_id])
-        ec2_manager.ec2_client.start_instances(InstanceIds=[instance_id])
+        if hasattr(ec2_manager, "ec2_client"):
+            waiter = ec2_manager.ec2_client.get_waiter("instance_stopped")
+            ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
+            waiter.wait(InstanceIds=[instance_id])
+            ec2_manager.ec2_client.start_instances(InstanceIds=[instance_id])
 
-        original_describe = ec2_manager.ec2_client.describe_instances
+            original_describe = ec2_manager.ec2_client.describe_instances
 
-        def mock_describe_pending(*args, **kwargs):
-            response = original_describe(*args, **kwargs)
-            if "InstanceIds" in kwargs and instance_id in kwargs["InstanceIds"]:
-                for reservation in response.get("Reservations", []):
-                    for instance in reservation.get("Instances", []):
-                        if instance.get("InstanceId") == instance_id:
-                            instance["State"]["Name"] = "pending"
-            return response
+            def mock_describe_pending(*args, **kwargs):
+                response = original_describe(*args, **kwargs)
+                if "InstanceIds" in kwargs and instance_id in kwargs["InstanceIds"]:
+                    for reservation in response.get("Reservations", []):
+                        for instance in reservation.get("Instances", []):
+                            if instance.get("InstanceId") == instance_id:
+                                instance["State"]["Name"] = "pending"
+                return response
 
-        ec2_manager.ec2_client.describe_instances = mock_describe_pending
-        context.mock_restore_fn = lambda: setattr(
-            ec2_manager.ec2_client, "describe_instances", original_describe
-        )
+            ec2_manager.ec2_client.describe_instances = mock_describe_pending
+            context.mock_restore_fn = lambda: setattr(
+                ec2_manager.ec2_client, "describe_instances", original_describe
+            )
+        else:
+            if instance_id in ec2_manager.instances:
+                ec2_manager.instances[instance_id]["state"] = "pending"
         context.instance_current_state = "pending"
     elif state == "stopped":
         ec2_manager.stop_instance(instance_id)

@@ -126,6 +126,7 @@ class FakeEC2Manager:
             "key_file": str(key_file),
             "security_group_id": sg_id,
             "unique_id": unique_id,
+            "machine_config": instance_name,
         }
 
         self.instances[instance_id] = instance

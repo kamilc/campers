@@ -163,16 +163,16 @@ def execute_command_direct(
 
     except SystemExit as e:
         context.exit_code = e.code if e.code is not None else 0
-        if e.code not in (None, 0):
-            stderr_capture.write(f"SystemExit: {e}\n")
 
     except KeyboardInterrupt:
         raise
 
     except (ValueError, RuntimeError, ClientError, TypeError, AttributeError) as e:
         context.exit_code = 1
-        stderr_capture.write(f"Error: {str(e)}\n")
+        error_msg = f"Error: {str(e)}\n"
+        stderr_capture.write(error_msg)
         context.error = str(e)
+        context.command_error = error_msg
         context.exception = e
         logger.error("Command execution failed: %s", e, exc_info=True)
 
@@ -184,6 +184,8 @@ def execute_command_direct(
         root_logger.setLevel(original_log_level)
         context.stdout = stdout_capture.getvalue()
         context.stderr = stderr_capture.getvalue()
+        if context.exit_code != 0 and not hasattr(context, "command_error"):
+            context.command_error = context.stderr
         stdout_capture.close()
         stderr_capture.close()
 

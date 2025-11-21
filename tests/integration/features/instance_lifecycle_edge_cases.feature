@@ -10,7 +10,7 @@ Scenario: Stop instance in stopping state returns current state
   Then the command returns instance details
   And the instance state is "stopping" or "stopped"
 
-@error @localstack
+@error
 Scenario: Start instance in pending state returns error
   Given an instance in "pending" state with name "moondock-myproject-main"
   When I run "moondock start moondock-myproject-main"
