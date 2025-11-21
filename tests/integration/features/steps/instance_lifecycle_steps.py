@@ -172,6 +172,10 @@ def step_create_running_instance(context: Context, instance_name: str) -> None:
     context.running_instance_id = instance_details["instance_id"]
     context.running_instance_name = instance_name
 
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+    context.created_instance_ids.append(instance_details["instance_id"])
+
 
 @given('a stopped instance with name "{instance_name}" exists')
 def step_create_stopped_instance(context: Context, instance_name: str) -> None:
@@ -201,6 +205,10 @@ def step_create_stopped_instance(context: Context, instance_name: str) -> None:
     context.existing_instance_id = instance_id
     context.existing_instance_name = instance_name
     context.existing_instance_stopped = True
+
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+    context.created_instance_ids.append(instance_id)
 
 
 @given("the stopped instance has public IP None")
@@ -543,6 +551,10 @@ def step_create_instance_with_resources(context: Context) -> None:
     context.test_instance_id = instance_details["instance_id"]
     context.test_instance_name = "moondock-test-full-resources"
     context.resources_created = True
+
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+    context.created_instance_ids.append(instance_details["instance_id"])
 
     response = ec2_manager.ec2_client.describe_instances(
         InstanceIds=[context.test_instance_id]
@@ -972,6 +984,10 @@ def step_create_instance_in_state(
     context.state_test_instance_name = instance_name
     context.expected_instance_state = state
 
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+    context.created_instance_ids.append(instance_id)
+
     if state == "stopping":
         ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
         context.instance_current_state = "stopping"
@@ -1136,6 +1152,10 @@ def step_create_stopped_instance_without_exists(
     context.existing_instance_name = instance_name
     context.existing_instance_stopped = True
 
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+    context.created_instance_ids.append(instance_id)
+
 
 @given("the instance has {volume_size}GB root volume")
 def step_set_instance_volume_size(context: Context, volume_size: str) -> None:
@@ -1245,6 +1265,10 @@ def step_create_instance_generic(context: Context, instance_name: str) -> None:
     context.test_instance_id = instance_details["instance_id"]
     context.test_instance_name = instance_name
 
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+    context.created_instance_ids.append(instance_details["instance_id"])
+
 
 @given('an instance with name "{instance_name}" exists')
 def step_create_instance_generic_exists(context: Context, instance_name: str) -> None:
@@ -1322,6 +1346,13 @@ def step_create_multiple_instances(context: Context) -> None:
     ]
     context.multiple_instances_created = True
 
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+    context.created_instance_ids.extend([
+        instance_details_1["instance_id"],
+        instance_details_2["instance_id"],
+    ])
+
 
 @given('instance "{instance_id}" is running')
 def step_create_instance_with_id(context: Context, instance_id: str) -> None:
@@ -1340,6 +1371,10 @@ def step_create_instance_with_id(context: Context, instance_id: str) -> None:
         )
         context.test_instance_id = instance_details["instance_id"]
         context.specific_instance_id = instance_id
+
+        if not hasattr(context, "created_instance_ids"):
+            context.created_instance_ids = []
+        context.created_instance_ids.append(instance_details["instance_id"])
     else:
         context.specific_instance_id = context.multiple_instance_ids[0]
 
@@ -1424,6 +1459,10 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
             )
             context.created_instance_id = instance_details["instance_id"]
             context.instance_created_count = 1
+
+            if not hasattr(context, "created_instance_ids"):
+                context.created_instance_ids = []
+            context.created_instance_ids.append(instance_details["instance_id"])
         elif len(matches) == 1 and matches[0]["state"] == "stopped":
             instance_id = matches[0]["instance_id"]
             import logging

@@ -874,6 +874,11 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         if hasattr(context, "started_instance_id") and context.started_instance_id:
             instance_ids_to_terminate.append(context.started_instance_id)
 
+        if hasattr(context, "created_instance_ids") and context.created_instance_ids:
+            instance_ids_to_terminate.extend(context.created_instance_ids)
+
+        instance_ids_to_terminate = list(set(instance_ids_to_terminate))
+
         if instance_ids_to_terminate:
             if is_localstack_scenario and hasattr(context, "ec2_manager"):
                 for instance_id in instance_ids_to_terminate:

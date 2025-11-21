@@ -71,6 +71,7 @@ from textual.widgets import Log, Static  # noqa: E402
 from moondock.ansible import AnsibleManager  # noqa: E402
 from moondock.config import ConfigLoader  # noqa: E402
 from moondock.ec2 import EC2Manager  # noqa: E402
+from moondock.instance_overview_widget import InstanceOverviewWidget  # noqa: E402
 from moondock.portforward import PortForwardManager  # noqa: E402
 from moondock.ssh import SSHManager, get_ssh_connection_info  # noqa: E402
 from moondock.sync import MutagenManager  # noqa: E402
@@ -445,6 +446,12 @@ class MoondockTUI(App):
     #log-panel {
         height: 1fr;
     }
+    InstanceOverviewWidget {
+        height: 1;
+        background: #383838;
+        content-align: center middle;
+        text-style: dim;
+    }
     Log {
         scrollbar-background: #383838;
         scrollbar-color: #606060;
@@ -500,6 +507,7 @@ class MoondockTUI(App):
             Log panel container with log widget
         """
         with Container(id="status-panel"):
+            yield InstanceOverviewWidget(self.moondock)
             yield Static("SSH: loading...", id="ssh-widget")
             yield Static("Status: launching...", id="status-widget")
             yield Static("Uptime: 0s", id="uptime-widget")
