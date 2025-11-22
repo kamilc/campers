@@ -88,15 +88,15 @@ Scenario: Skip port forwarding when no ports configured via TUI
 Scenario: Port forwarding lifecycle via TUI
   Given a config file with machine "test-box" defined
   And machine "test-box" has command "sleep 10"
-  And machine "test-box" has ports [48888]
+  And machine "test-box" has ports [48891]
   And LocalStack is healthy and responding
-  And HTTP server runs on port 48888 in SSH container
+  And HTTP server runs on port 48891 in SSH container
 
   When I launch the Moondock TUI with the config file
   And I simulate running the "test-box" in the TUI
 
-  Then the TUI log panel contains "Creating SSH tunnel for port 48888..."
-  And the TUI log panel contains "SSH tunnel established: localhost:48888 -> remote:48888"
+  Then the TUI log panel contains "Creating SSH tunnel for port 48891..."
+  And the TUI log panel contains "SSH tunnel established: localhost:48891 -> remote:48891"
 
 @smoke @dry_run
 Scenario: Test mode simulates SSH tunnels

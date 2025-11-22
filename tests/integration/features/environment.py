@@ -391,8 +391,89 @@ def append_test_ssh_block(config_path: Path) -> None:
     config_path.write_text(config + get_localhost_config_block())
 
 
+def cleanup_test_ports(port_list: list[int]) -> None:
+    """Forcefully kill processes using test ports.
+
+    Parameters
+    ----------
+    port_list : list[int]
+        List of ports to clean up.
+    """
+    import subprocess
+
+    for port in port_list:
+        try:
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                pids = result.stdout.strip().split()
+                logger.info(f"Cleaning up {len(pids)} process(es) using port {port}: {pids}")
+
+                for pid in pids:
+                    try:
+                        subprocess.run(
+                            ["kill", "-9", pid],
+                            capture_output=True,
+                            timeout=2,
+                        )
+                        logger.debug(f"Killed process {pid} using port {port}")
+                    except subprocess.TimeoutExpired:
+                        logger.warning(f"Timeout killing process {pid} on port {port}")
+                    except Exception as e:
+                        logger.warning(f"Failed to kill process {pid} on port {port}: {e}")
+            else:
+                logger.debug(f"Port {port} is clean - no processes using it")
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Timeout checking port {port} with lsof")
+        except FileNotFoundError:
+            logger.warning("lsof command not found - cannot cleanup stale ports")
+            break
+        except Exception as e:
+            logger.debug(f"Error cleaning up port {port}: {e}")
+
+
 def before_all(context: Context) -> None:
     """Setup executed before all tests."""
+    import subprocess
+
+    test_ports = [48888, 48889, 48890, 48891, 6006]
+    logger.info("Performing forceful cleanup of test ports before all tests...")
+    cleanup_test_ports(test_ports)
+
+    import time
+    logger.info("Waiting 2 seconds for OS to release ports...")
+    time.sleep(2)
+
+    logger.info("Killing any lingering sshtunnel processes before all tests...")
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "sshtunnel|SSHTunnel"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if result.stdout.strip():
+            pids = result.stdout.strip().split()
+            logger.info(f"Found {len(pids)} sshtunnel process(es) to kill: {pids}")
+            for pid in pids:
+                try:
+                    subprocess.run(["kill", "-9", pid], timeout=1)
+                    logger.debug(f"Killed sshtunnel process {pid}")
+                except Exception as e:
+                    logger.debug(f"Error killing sshtunnel process {pid}: {e}")
+        else:
+            logger.debug("No lingering sshtunnel processes found")
+    except FileNotFoundError:
+        logger.debug("pgrep command not found - skipping sshtunnel cleanup")
+    except Exception as e:
+        logger.debug(f"Error during sshtunnel cleanup: {e}")
+
     project_root = Path(__file__).parent.parent.parent.parent
     tmp_dir = project_root / "tmp" / "test-artifacts"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -561,45 +642,38 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         context.use_direct_instantiation = False
 
     if is_localstack_scenario or is_pilot_scenario:
-        import socket
+        import subprocess
         import time
 
-        common_test_ports = [48888, 48889, 48890]
-        max_wait_seconds = 30
+        common_test_ports = [48888, 48889, 48890, 48891, 6006]
+        logger.info("Forcefully cleaning up test ports before scenario...")
+        cleanup_test_ports(common_test_ports)
 
-        for port in common_test_ports:
-            port_released = False
+        logger.info("Killing any lingering sshtunnel processes before scenario...")
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", "sshtunnel|SSHTunnel"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            if result.stdout.strip():
+                pids = result.stdout.strip().split()
+                logger.info(f"Found {len(pids)} sshtunnel process(es) to kill: {pids}")
+                for pid in pids:
+                    try:
+                        subprocess.run(["kill", "-9", pid], timeout=1)
+                        logger.debug(f"Killed sshtunnel process {pid}")
+                    except Exception as e:
+                        logger.debug(f"Error killing sshtunnel process {pid}: {e}")
+            else:
+                logger.debug("No lingering sshtunnel processes found")
+        except FileNotFoundError:
+            logger.debug("pgrep command not found - skipping sshtunnel cleanup")
+        except Exception as e:
+            logger.debug(f"Error during sshtunnel cleanup: {e}")
 
-            for attempt in range(max_wait_seconds * 2):
-                try:
-                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                        sock.bind(("127.0.0.1", port))
-                        port_released = True
-                        logger.debug(f"Port {port} is available")
-                        break
-                except OSError:
-                    if attempt == 0:
-                        logger.warning(
-                            f"Port {port} in use, waiting {max_wait_seconds}s..."
-                        )
-
-                    time.sleep(0.5)
-
-            if not port_released:
-                logger.error(f"Port {port} still in use after {max_wait_seconds}s")
-                try:
-                    import subprocess
-                    result = subprocess.run(
-                        ["lsof", "-i", f":{port}"],
-                        capture_output=True,
-                        text=True,
-                        timeout=3,
-                    )
-                    if result.stdout:
-                        logger.info(f"Processes holding port {port}:\n{result.stdout}")
-                except Exception as e:
-                    logger.debug(f"Failed to get lsof info: {e}")
+        time.sleep(0.5)
 
     if is_localstack_scenario or is_pilot_scenario:
         try:
@@ -1336,6 +1410,36 @@ def after_feature(context: Context, feature) -> None:
 
 def after_all(context: Context) -> None:
     """Cleanup executed after all tests."""
+    import subprocess
+
+    test_ports = [48888, 48889, 48890, 48891, 6006]
+    logger.info("Performing forceful cleanup of test ports after all tests...")
+    cleanup_test_ports(test_ports)
+
+    logger.info("Killing any lingering sshtunnel processes after all tests...")
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "sshtunnel|SSHTunnel"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if result.stdout.strip():
+            pids = result.stdout.strip().split()
+            logger.info(f"Found {len(pids)} sshtunnel process(es) to kill: {pids}")
+            for pid in pids:
+                try:
+                    subprocess.run(["kill", "-9", pid], timeout=1)
+                    logger.debug(f"Killed sshtunnel process {pid}")
+                except Exception as e:
+                    logger.debug(f"Error killing sshtunnel process {pid}: {e}")
+        else:
+            logger.debug("No lingering sshtunnel processes found")
+    except FileNotFoundError:
+        logger.debug("pgrep command not found - skipping sshtunnel cleanup")
+    except Exception as e:
+        logger.debug(f"Error during sshtunnel cleanup: {e}")
+
     from tests.harness.localstack import LocalStackHarness
 
     LocalStackHarness.stop_localstack_container()
