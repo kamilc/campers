@@ -283,6 +283,7 @@ class EC2ContainerManager:
             "PUBLIC_KEY": pub_key_content,
             "USER_NAME": "ubuntu",
             "SUDO_ACCESS": "true",
+            "DOCKER_MODS": "linuxserver/mods:openssh-server-ssh-tunnel",
         }
 
         if ssh_delay > 0:
