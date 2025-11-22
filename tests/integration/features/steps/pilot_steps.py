@@ -210,6 +210,7 @@ def setup_test_environment(
     original_values = {
         "MOONDOCK_TEST_MODE": os.environ.get("MOONDOCK_TEST_MODE"),
         "MOONDOCK_CONFIG": os.environ.get("MOONDOCK_CONFIG"),
+        "MOONDOCK_HARNESS_MANAGED": os.environ.get("MOONDOCK_HARNESS_MANAGED"),
         "AWS_ENDPOINT_URL": os.environ.get("AWS_ENDPOINT_URL"),
         "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
         "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
@@ -217,6 +218,7 @@ def setup_test_environment(
     }
 
     behave_context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
+    behave_context.harness.services.configuration_env.set("MOONDOCK_HARNESS_MANAGED", "1")
     behave_context.harness.services.configuration_env.set(
         "MOONDOCK_CONFIG", config_path
     )

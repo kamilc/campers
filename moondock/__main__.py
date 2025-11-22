@@ -1177,6 +1177,8 @@ class Moondock:
         Notes
         -----
         Errors are logged and added to errors list but do not halt cleanup.
+        When running under test harness control, SSH connection closure is skipped
+        to allow the harness to manage SSH lifecycle separately.
 
         Examples
         --------
@@ -1186,6 +1188,12 @@ class Moondock:
         """
         if "ssh_manager" not in resources:
             logging.debug("Skipping SSH cleanup - not initialized")
+            return
+
+        if os.environ.get("MOONDOCK_HARNESS_MANAGED") == "1":
+            logging.info(
+                "Skipping SSH connection closure - harness will manage SSH lifecycle"
+            )
             return
 
         resources["ssh_manager"].abort_active_command()
@@ -1247,6 +1255,8 @@ class Moondock:
         Notes
         -----
         Errors are logged and added to errors list but do not halt cleanup.
+        When running under test harness control, port forwarding cleanup is skipped
+        to allow the harness to manage tunnel lifecycle separately.
 
         Examples
         --------
@@ -1256,6 +1266,12 @@ class Moondock:
         """
         if "portforward_mgr" not in resources:
             logging.debug("Skipping port forwarding cleanup - not initialized")
+            return
+
+        if os.environ.get("MOONDOCK_HARNESS_MANAGED") == "1":
+            logging.info(
+                "Skipping port forwarding cleanup - harness will manage tunnel lifecycle"
+            )
             return
 
         logging.info("Stopping port forwarding...")
