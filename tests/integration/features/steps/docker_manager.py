@@ -507,7 +507,13 @@ exec /init
 
     def cleanup_all(self) -> None:
         """Clean up all instance containers and orphaned SSH containers."""
+        ports_to_release = []
+
         for instance_id in list(self.instance_map.keys()):
+            if instance_id in self.instance_map:
+                _, port, _ = self.instance_map[instance_id]
+                if port is not None:
+                    ports_to_release.append(port)
             self.terminate_instance_container(instance_id)
 
         try:
@@ -526,6 +532,9 @@ exec /init
         except Exception as e:
             logger.debug(f"Error listing orphaned containers: {e}")
 
+        for port in ports_to_release:
+            self._wait_for_port_available(port, timeout_sec=30)
+
         if self.keys_dir.exists():
             for key_file in self.keys_dir.glob("*.pem"):
                 try:
@@ -540,3 +549,25 @@ exec /init
                     logger.debug(f"Removed orphaned public key file: {pub_key_file}")
                 except Exception as e:
                     logger.debug(f"Error removing public key file {pub_key_file}: {e}")
+
+    def _wait_for_port_available(self, port: int, timeout_sec: int = 5) -> None:
+        """Wait for a port to become available after container removal.
+
+        Parameters
+        ----------
+        port : int
+            Port number to monitor.
+        timeout_sec : int
+            Maximum time to wait in seconds.
+        """
+        start_time = time.time()
+        while time.time() - start_time < timeout_sec:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(("127.0.0.1", port))
+                sock.close()
+                logger.debug(f"Port {port} is available")
+                return
+            except OSError:
+                time.sleep(0.1)

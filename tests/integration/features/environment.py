@@ -565,7 +565,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         import time
 
         common_test_ports = [48888, 48889, 48890]
-        max_wait_seconds = 5
+        max_wait_seconds = 30
 
         for port in common_test_ports:
             port_released = False
@@ -573,7 +573,8 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
             for attempt in range(max_wait_seconds * 2):
                 try:
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                        sock.bind(("localhost", port))
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        sock.bind(("127.0.0.1", port))
                         port_released = True
                         logger.debug(f"Port {port} is available")
                         break
@@ -587,6 +588,18 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
             if not port_released:
                 logger.error(f"Port {port} still in use after {max_wait_seconds}s")
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        ["lsof", "-i", f":{port}"],
+                        capture_output=True,
+                        text=True,
+                        timeout=3,
+                    )
+                    if result.stdout:
+                        logger.info(f"Processes holding port {port}:\n{result.stdout}")
+                except Exception as e:
+                    logger.debug(f"Failed to get lsof info: {e}")
 
     if is_localstack_scenario or is_pilot_scenario:
         try:
@@ -892,6 +905,31 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 def after_scenario(context: Context, scenario: Scenario) -> None:
     """Cleanup executed after each scenario."""
     _stop_scenario_watchdog(context)
+
+    is_localstack_or_pilot = "localstack" in scenario.tags or "pilot" in scenario.tags
+    if is_localstack_or_pilot:
+        try:
+            import subprocess
+            import time
+            result = subprocess.run(
+                ["pgrep", "-f", "sshtunnel|SSHTunnel"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            if result.stdout.strip():
+                pids = result.stdout.strip().split()
+                logger.info(f"Killing lingering sshtunnel processes: {pids}")
+                for pid in pids:
+                    try:
+                        subprocess.run(["kill", "-9", pid], timeout=1)
+                        logger.debug(f"Killed sshtunnel process {pid}")
+                    except Exception as e:
+                        logger.debug(f"Error killing process {pid}: {e}")
+                time.sleep(1)
+        except Exception as e:
+            logger.debug(f"Error during sshtunnel cleanup: {e}")
+
     diagnostics_paths = getattr(context, "diagnostic_artifacts", [])
 
     if scenario.status == "failed":

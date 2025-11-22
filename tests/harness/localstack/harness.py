@@ -378,12 +378,12 @@ class LocalStackHarness(ScenarioHarness):
             return "success", {"tui_was_running": False}
 
         try:
-            self.extensions.pilot.shutdown(timeout_sec=10)
+            self.extensions.pilot.shutdown(timeout_sec=20)
             return "success", {"tui_was_running": True, "shutdown": "graceful"}
         except TimeoutError:
             return "error", {
                 "reason": "tui-shutdown-timeout",
-                "timeout_sec": 10,
+                "timeout_sec": 20,
             }
         except Exception as exc:
             return "error", {

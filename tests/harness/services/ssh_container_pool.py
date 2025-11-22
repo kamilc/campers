@@ -264,9 +264,32 @@ class SSHContainerPool:
         with self._lock:
             instance_count = len(self._allocated_ports)
             container_count = len(self._containers)
+            ports_to_wait = list(self._in_use_ports)
             self._allocated_ports.clear()
             self._in_use_ports.clear()
             self._recycled_ports.clear()
             self._containers.clear()
 
+        for port in ports_to_wait:
+            self._wait_for_port_available(port, timeout_sec=30)
+
         return {"instances": instance_count, "containers": container_count}
+
+    def _wait_for_port_available(self, port: int, timeout_sec: int = 10) -> None:
+        """Wait for a port to become available after release.
+
+        Parameters
+        ----------
+        port : int
+            Port number to monitor.
+        timeout_sec : int
+            Maximum time to wait in seconds.
+        """
+        start_time = time.time()
+        while time.time() - start_time < timeout_sec:
+            try:
+                if self._port_probe(port):
+                    return
+            except Exception:
+                pass
+            time.sleep(0.1)
