@@ -391,8 +391,72 @@ def append_test_ssh_block(config_path: Path) -> None:
     config_path.write_text(config + get_localhost_config_block())
 
 
+def cleanup_sshtunnel_processes() -> None:
+    """Kill any lingering sshtunnel processes with retry logic.
+
+    This function searches for and kills sshtunnel processes using multiple
+    patterns and wait strategies to ensure complete cleanup.
+    """
+    import subprocess
+    import time
+
+    max_retries = 3
+    retry_delay = 1
+
+    patterns = [
+        "sshtunnel",
+        "SSHTunnel",
+        "python.*sshtunnel",
+    ]
+
+    for attempt in range(max_retries):
+        all_pids = set()
+
+        for pattern in patterns:
+            try:
+                result = subprocess.run(
+                    ["pgrep", "-f", pattern],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+
+                if result.returncode == 0 and result.stdout.strip():
+                    pids = result.stdout.strip().split()
+                    all_pids.update(pids)
+
+            except FileNotFoundError:
+                break
+            except Exception as e:
+                logger.debug(f"Error searching for sshtunnel processes ({pattern}): {e}")
+
+        if not all_pids:
+            logger.debug("No lingering sshtunnel processes found")
+            return
+
+        logger.info(
+            f"Attempt {attempt + 1}/{max_retries}: "
+            f"Found {len(all_pids)} sshtunnel process(es) to kill: {all_pids}"
+        )
+
+        for pid in all_pids:
+            try:
+                subprocess.run(
+                    ["kill", "-9", pid],
+                    capture_output=True,
+                    timeout=1,
+                )
+                logger.debug(f"Killed sshtunnel process {pid}")
+            except Exception as e:
+                logger.debug(f"Error killing sshtunnel process {pid}: {e}")
+
+        if attempt < max_retries - 1:
+            logger.info(f"Waiting {retry_delay}s for processes to fully terminate...")
+            time.sleep(retry_delay)
+
+
 def cleanup_test_ports(port_list: list[int]) -> None:
-    """Forcefully kill processes using test ports.
+    """Forcefully kill processes using test ports with retry logic.
 
     Parameters
     ----------
@@ -400,42 +464,67 @@ def cleanup_test_ports(port_list: list[int]) -> None:
         List of ports to clean up.
     """
     import subprocess
+    import time
+
+    max_retries = 5
+    retry_delay = 1
 
     for port in port_list:
-        try:
-            result = subprocess.run(
-                ["lsof", "-ti", f":{port}"],
-                capture_output=True,
-                text=True,
-                timeout=3,
-            )
+        for attempt in range(max_retries):
+            try:
+                result = subprocess.run(
+                    ["lsof", "-ti", f":{port}"],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
 
-            if result.returncode == 0 and result.stdout.strip():
-                pids = result.stdout.strip().split()
-                logger.info(f"Cleaning up {len(pids)} process(es) using port {port}: {pids}")
+                if result.returncode == 0 and result.stdout.strip():
+                    pids = result.stdout.strip().split()
+                    logger.info(
+                        f"Attempt {attempt + 1}/{max_retries}: "
+                        f"Cleaning up {len(pids)} process(es) using port {port}: {pids}"
+                    )
 
-                for pid in pids:
-                    try:
-                        subprocess.run(
-                            ["kill", "-9", pid],
-                            capture_output=True,
-                            timeout=2,
+                    killed_pids = []
+                    for pid in pids:
+                        try:
+                            subprocess.run(
+                                ["kill", "-9", pid],
+                                capture_output=True,
+                                timeout=2,
+                            )
+                            killed_pids.append(pid)
+                            logger.debug(f"Killed process {pid} using port {port}")
+                        except subprocess.TimeoutExpired:
+                            logger.warning(f"Timeout killing process {pid} on port {port}")
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to kill process {pid} on port {port}: {e}"
+                            )
+
+                    if killed_pids and attempt < max_retries - 1:
+                        logger.info(
+                            f"Waiting {retry_delay}s for OS to release port {port}..."
                         )
-                        logger.debug(f"Killed process {pid} using port {port}")
-                    except subprocess.TimeoutExpired:
-                        logger.warning(f"Timeout killing process {pid} on port {port}")
-                    except Exception as e:
-                        logger.warning(f"Failed to kill process {pid} on port {port}: {e}")
-            else:
-                logger.debug(f"Port {port} is clean - no processes using it")
+                        time.sleep(retry_delay)
+                        continue
 
-        except subprocess.TimeoutExpired:
-            logger.warning(f"Timeout checking port {port} with lsof")
-        except FileNotFoundError:
-            logger.warning("lsof command not found - cannot cleanup stale ports")
-            break
-        except Exception as e:
-            logger.debug(f"Error cleaning up port {port}: {e}")
+                    break
+
+                else:
+                    logger.debug(f"Port {port} is clean - no processes using it")
+                    break
+
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Timeout checking port {port} with lsof")
+                break
+            except FileNotFoundError:
+                logger.warning("lsof command not found - cannot cleanup stale ports")
+                break
+            except Exception as e:
+                logger.debug(f"Error cleaning up port {port}: {e}")
+                break
 
 
 def before_all(context: Context) -> None:
@@ -451,28 +540,7 @@ def before_all(context: Context) -> None:
     time.sleep(2)
 
     logger.info("Killing any lingering sshtunnel processes before all tests...")
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", "sshtunnel|SSHTunnel"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        if result.stdout.strip():
-            pids = result.stdout.strip().split()
-            logger.info(f"Found {len(pids)} sshtunnel process(es) to kill: {pids}")
-            for pid in pids:
-                try:
-                    subprocess.run(["kill", "-9", pid], timeout=1)
-                    logger.debug(f"Killed sshtunnel process {pid}")
-                except Exception as e:
-                    logger.debug(f"Error killing sshtunnel process {pid}: {e}")
-        else:
-            logger.debug("No lingering sshtunnel processes found")
-    except FileNotFoundError:
-        logger.debug("pgrep command not found - skipping sshtunnel cleanup")
-    except Exception as e:
-        logger.debug(f"Error during sshtunnel cleanup: {e}")
+    cleanup_sshtunnel_processes()
 
     project_root = Path(__file__).parent.parent.parent.parent
     tmp_dir = project_root / "tmp" / "test-artifacts"
@@ -650,28 +718,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         cleanup_test_ports(common_test_ports)
 
         logger.info("Killing any lingering sshtunnel processes before scenario...")
-        try:
-            result = subprocess.run(
-                ["pgrep", "-f", "sshtunnel|SSHTunnel"],
-                capture_output=True,
-                text=True,
-                timeout=3,
-            )
-            if result.stdout.strip():
-                pids = result.stdout.strip().split()
-                logger.info(f"Found {len(pids)} sshtunnel process(es) to kill: {pids}")
-                for pid in pids:
-                    try:
-                        subprocess.run(["kill", "-9", pid], timeout=1)
-                        logger.debug(f"Killed sshtunnel process {pid}")
-                    except Exception as e:
-                        logger.debug(f"Error killing sshtunnel process {pid}: {e}")
-            else:
-                logger.debug("No lingering sshtunnel processes found")
-        except FileNotFoundError:
-            logger.debug("pgrep command not found - skipping sshtunnel cleanup")
-        except Exception as e:
-            logger.debug(f"Error during sshtunnel cleanup: {e}")
+        cleanup_sshtunnel_processes()
 
         time.sleep(0.5)
 
@@ -982,27 +1029,8 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
     is_localstack_or_pilot = "localstack" in scenario.tags or "pilot" in scenario.tags
     if is_localstack_or_pilot:
-        try:
-            import subprocess
-            import time
-            result = subprocess.run(
-                ["pgrep", "-f", "sshtunnel|SSHTunnel"],
-                capture_output=True,
-                text=True,
-                timeout=3,
-            )
-            if result.stdout.strip():
-                pids = result.stdout.strip().split()
-                logger.info(f"Killing lingering sshtunnel processes: {pids}")
-                for pid in pids:
-                    try:
-                        subprocess.run(["kill", "-9", pid], timeout=1)
-                        logger.debug(f"Killed sshtunnel process {pid}")
-                    except Exception as e:
-                        logger.debug(f"Error killing process {pid}: {e}")
-                time.sleep(1)
-        except Exception as e:
-            logger.debug(f"Error during sshtunnel cleanup: {e}")
+        logger.info("Killing lingering sshtunnel processes after scenario...")
+        cleanup_sshtunnel_processes()
 
     diagnostics_paths = getattr(context, "diagnostic_artifacts", [])
 
@@ -1417,28 +1445,7 @@ def after_all(context: Context) -> None:
     cleanup_test_ports(test_ports)
 
     logger.info("Killing any lingering sshtunnel processes after all tests...")
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", "sshtunnel|SSHTunnel"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        if result.stdout.strip():
-            pids = result.stdout.strip().split()
-            logger.info(f"Found {len(pids)} sshtunnel process(es) to kill: {pids}")
-            for pid in pids:
-                try:
-                    subprocess.run(["kill", "-9", pid], timeout=1)
-                    logger.debug(f"Killed sshtunnel process {pid}")
-                except Exception as e:
-                    logger.debug(f"Error killing sshtunnel process {pid}: {e}")
-        else:
-            logger.debug("No lingering sshtunnel processes found")
-    except FileNotFoundError:
-        logger.debug("pgrep command not found - skipping sshtunnel cleanup")
-    except Exception as e:
-        logger.debug(f"Error during sshtunnel cleanup: {e}")
+    cleanup_sshtunnel_processes()
 
     from tests.harness.localstack import LocalStackHarness
 
