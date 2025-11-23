@@ -401,6 +401,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
             "moondock.yaml", content=yaml_content
         )
         harness_services.configuration_env.set("MOONDOCK_CONFIG", str(config_file))
+        harness_services.configuration_env.set("MOONDOCK_HARNESS_MANAGED", "1")
         context.temp_config_file = str(config_file)
     else:
         import tempfile
@@ -410,6 +411,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
             tmp_file.write(yaml_content)
         context.temp_config_file = path
         os.environ["MOONDOCK_CONFIG"] = path
+        os.environ["MOONDOCK_HARNESS_MANAGED"] = "1"
 
     args = shlex.split(moondock_args)
 
@@ -519,6 +521,12 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
                         logger.error(
                             f"Monitor thread reported error: {context.monitor_error}"
                         )
+
+                    from tests.integration.features.steps.port_forwarding_steps import (
+                        start_http_servers_for_all_configured_ports,
+                    )
+                    logger.info("Starting HTTP servers for configured ports")
+                    start_http_servers_for_all_configured_ports(context)
                 else:
                     raise ValueError(
                         f"Unsupported command for in-process execution: {args[0]}"
