@@ -153,15 +153,15 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
             instance_id = None
         if instance_id:
             context.instance_id = instance_id
+            from tests.integration.features.steps.port_forwarding_steps import (
+                start_http_servers_for_machine_ports,
+            )
+            logger.info(f"Starting HTTP servers for machine: {machine_name}")
+            start_http_servers_for_machine_ports(context)
 
     logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {machine_name} ===")
     logger.info(f"TUI result status: {result.get('status', 'UNKNOWN')}")
     logger.info(f"TUI log length: {len(result.get('log_text', ''))} characters")
-
-    logger.info(
-        "NOTE: HTTP servers are started by LocalStackHarness before the TUI launches. "
-        "Avoid starting HTTP servers in TUI steps because tunnels are managed by the harness."
-    )
 
 
 def derive_timeout_from_scenario(context: Context) -> int:

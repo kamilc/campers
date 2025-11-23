@@ -583,29 +583,7 @@ def step_http_request_succeeds(context: Context, port: int) -> None:
             )
 
             output = get_output_text(context)
-            tunnel_msg = f"SSH tunnel established: localhost:{port} -> remote:{port}"
-
-            if tunnel_msg in output:
-                logger.warning(
-                    "Tunnel was established but connection failed. "
-                    "Tunnel may have closed. Checking if tunnel was created..."
-                )
-                logger.info(f"Tunnel establishment confirmed via logs: {tunnel_msg}")
-                return
-
-            if hasattr(context, "tui_result") and context.tui_result:
-                tui_output = context.tui_result.get("log_text", "")
-                if tunnel_msg in tui_output:
-                    logger.warning(
-                        "Tunnel was established (found in TUI logs) but connection failed. "
-                        "Tunnel may have closed after TUI completion."
-                    )
-                    logger.info(
-                        f"Tunnel establishment confirmed via TUI logs: {tunnel_msg}"
-                    )
-                    return
-
-            logger.error(f"Tunnel not found in output logs. Full output: {output}")
+            logger.error(f"Tunnel status check - Full output: {output}")
             raise AssertionError(
                 f"Failed to connect to localhost:{port} after {max_attempts} attempts: {last_error}"
             ) from e
