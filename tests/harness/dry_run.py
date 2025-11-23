@@ -73,6 +73,7 @@ class DryRunHarness(ScenarioHarness):
         )
 
         self.services.configuration_env.enter()
+        self.services.configuration_env.unset("MOONDOCK_HARNESS_MANAGED")
         self.services.configuration_env.set("AWS_ACCESS_KEY_ID", "testing")
         self.services.configuration_env.set("AWS_SECRET_ACCESS_KEY", "testing")
         self.services.configuration_env.set("AWS_DEFAULT_REGION", "us-east-1")
