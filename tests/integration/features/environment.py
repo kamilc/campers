@@ -607,7 +607,6 @@ def before_all(context: Context) -> None:
 
     context.moondock_module = moondock_module
 
-    import subprocess
 
     logging.info("Installing moondock in editable mode...")
     result = subprocess.run(
@@ -710,7 +709,6 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         context.use_direct_instantiation = False
 
     if is_localstack_scenario or is_pilot_scenario:
-        import subprocess
         import time
 
         common_test_ports = [48888, 48889, 48890, 48891, 6006]
@@ -1438,7 +1436,6 @@ def after_feature(context: Context, feature) -> None:
 
 def after_all(context: Context) -> None:
     """Cleanup executed after all tests."""
-    import subprocess
 
     test_ports = [48888, 48889, 48890, 48891, 6006]
     logger.info("Performing forceful cleanup of test ports after all tests...")
