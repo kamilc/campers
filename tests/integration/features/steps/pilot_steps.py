@@ -233,6 +233,21 @@ def setup_test_environment(
             behave_context.harness.services.configuration_env.set(
                 key, original_values[key]
             )
+        else:
+            fallback_values = {
+                "AWS_ENDPOINT_URL": os.environ.get(
+                    "AWS_ENDPOINT_URL", "http://localhost:4566"
+                ),
+                "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", "testing"),
+                "AWS_SECRET_ACCESS_KEY": os.environ.get(
+                    "AWS_SECRET_ACCESS_KEY", "testing"
+                ),
+                "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+            }
+
+            behave_context.harness.services.configuration_env.set(
+                key, fallback_values[key]
+            )
 
     return original_values
 

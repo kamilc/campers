@@ -29,6 +29,25 @@ def step_setup_two_env_vars(context, var1, var2):
     env.set("MOONDOCK_TEST_MODE", "1")
     env.set("MOONDOCK_CONFIG", context.saved_env.get("MOONDOCK_CONFIG", ""))
 
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
+
+    if is_localstack:
+        baseline_env = {
+            "AWS_ENDPOINT_URL": context.saved_env.get(
+                "AWS_ENDPOINT_URL", "http://localhost:4566"
+            ),
+            "AWS_ACCESS_KEY_ID": context.saved_env.get("AWS_ACCESS_KEY_ID", "testing"),
+            "AWS_SECRET_ACCESS_KEY": context.saved_env.get(
+                "AWS_SECRET_ACCESS_KEY", "testing"
+            ),
+            "AWS_DEFAULT_REGION": context.saved_env.get(
+                "AWS_DEFAULT_REGION", "us-east-1"
+            ),
+        }
+
+        for name, value in baseline_env.items():
+            env.set(name, value)
+
     context.env_vars = {
         var1: f"mock-{var1.lower()}",
         var2: f"mock-{var2.lower()}",
@@ -61,6 +80,25 @@ def step_setup_three_env_vars(context, var1, var2, var3):
     env.set("MOONDOCK_DIR", context.saved_env.get("MOONDOCK_DIR", ""))
     env.set("MOONDOCK_TEST_MODE", "1")
     env.set("MOONDOCK_CONFIG", context.saved_env.get("MOONDOCK_CONFIG", ""))
+
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
+
+    if is_localstack:
+        baseline_env = {
+            "AWS_ENDPOINT_URL": context.saved_env.get(
+                "AWS_ENDPOINT_URL", "http://localhost:4566"
+            ),
+            "AWS_ACCESS_KEY_ID": context.saved_env.get("AWS_ACCESS_KEY_ID", "testing"),
+            "AWS_SECRET_ACCESS_KEY": context.saved_env.get(
+                "AWS_SECRET_ACCESS_KEY", "testing"
+            ),
+            "AWS_DEFAULT_REGION": context.saved_env.get(
+                "AWS_DEFAULT_REGION", "us-east-1"
+            ),
+        }
+
+        for name, value in baseline_env.items():
+            env.set(name, value)
 
     context.env_vars = {
         var1: f"mock-{var1.lower()}",
