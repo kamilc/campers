@@ -275,6 +275,100 @@ class MonitorController:
         """
         return self._statistics
 
+    def _check_connection_error_type(self, exc: Exception) -> str:
+        """Classify connection error type for diagnostics.
+
+        Parameters
+        ----------
+        exc : Exception
+            The exception to classify.
+
+        Returns
+        -------
+        str
+            Classification of the error type.
+        """
+        exc_type_name = type(exc).__name__
+        if "ConnectionRefused" in exc_type_name or "ConnectionError" in exc_type_name:
+            return "connection-refused"
+        if "Timeout" in exc_type_name or "timeout" in str(exc):
+            return "timeout"
+        if "EndpointConnection" in exc_type_name or "endpoint" in str(exc).lower():
+            return "endpoint-unavailable"
+        return "network-error"
+
+    def _action_provider_with_retry(
+        self, max_retries: int = 3, initial_delay: float = 0.1
+    ) -> list[MonitorAction]:
+        """Invoke action provider with exponential backoff retry logic.
+
+        Parameters
+        ----------
+        max_retries : int
+            Maximum number of retry attempts.
+        initial_delay : float
+            Initial delay in seconds before first retry.
+
+        Returns
+        -------
+        list[MonitorAction]
+            Actions returned by the action provider.
+
+        Raises
+        ------
+        Exception
+            If all retry attempts fail.
+        """
+        actions: list[MonitorAction] = []
+        last_exception: Exception | None = None
+        delay = initial_delay
+
+        for attempt in range(max_retries):
+            try:
+                actions = list(self._action_provider())
+                return actions
+            except Exception as exc:  # pylint: disable=broad-except
+                last_exception = exc
+                error_classification = self._check_connection_error_type(exc)
+
+                if attempt < max_retries - 1:
+                    self._diagnostics.record(
+                        "monitor",
+                        "action-provider-retry",
+                        {
+                            "attempt": attempt + 1,
+                            "max_retries": max_retries,
+                            "error": str(exc),
+                            "error_type": type(exc).__name__,
+                            "error_classification": error_classification,
+                        },
+                    )
+                    logger.debug(
+                        "Action provider attempt %d/%d failed (%s): %s. Retrying in %.2f seconds...",
+                        attempt + 1,
+                        max_retries,
+                        error_classification,
+                        exc,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    delay = min(delay * 2, 2.0)
+                else:
+                    self._diagnostics.record(
+                        "monitor",
+                        "action-provider-failed-all-retries",
+                        {
+                            "max_retries": max_retries,
+                            "error": str(exc),
+                            "error_type": type(exc).__name__,
+                            "error_classification": error_classification,
+                        },
+                    )
+
+        if last_exception:
+            raise last_exception
+        return actions
+
     def _run(self) -> None:
         """Execute the monitoring loop until shutdown is requested."""
         while not self._stop_event.is_set():
@@ -342,7 +436,7 @@ class MonitorController:
     def _poll_once(self) -> None:
         """Execute a single polling iteration."""
         try:
-            actions = self._action_provider()
+            actions = self._action_provider_with_retry()
         except Exception as exc:  # pylint: disable=broad-except
             self._diagnostics.record(
                 "monitor",
@@ -350,7 +444,8 @@ class MonitorController:
                 {"error": str(exc), "error_type": type(exc).__name__},
             )
             logger.debug(
-                "Action provider failed, likely due to connection loss: %s", exc
+                "Action provider failed after retries, likely due to connection loss: %s",
+                exc,
             )
             return
 
