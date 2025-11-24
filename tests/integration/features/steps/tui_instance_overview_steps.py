@@ -115,7 +115,26 @@ def step_create_running_instances_of_type(
     context: Context, count: int, instance_type: str
 ) -> None:
     """Create running instances of specified type."""
-    step_create_running_instances(context, count)
+    from tests.integration.features.steps.instance_lifecycle_steps import (
+        step_create_running_instance,
+    )
+
+    context.running_instances = []
+    if not hasattr(context, "created_instance_ids"):
+        context.created_instance_ids = []
+
+    for i in range(count):
+        instance_name = f"test-running-{instance_type}-{i}"
+        context.pending_instance_type = instance_type
+        step_create_running_instance(context, instance_name)
+        context.running_instances.append(instance_name)
+        if hasattr(context, "test_instance_id"):
+            if context.test_instance_id not in context.created_instance_ids:
+                context.created_instance_ids.append(context.test_instance_id)
+
+    if not hasattr(context, "instance_types"):
+        context.instance_types = {}
+    context.instance_types[instance_type] = count
 
 
 @when("I view the TUI")

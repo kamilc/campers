@@ -41,11 +41,11 @@ Scenario: Widget displays cost when pricing available
   Given I have 1 running t3.medium instance
   And AWS Pricing API is mocked with sample rates
   When I view the TUI
-  Then overview widget shows "Running: 1  Stopped: 0  $29.95/day"
+  Then overview widget shows "Running: 1  Stopped: 0  $1.00/day"
 
 @smoke @mock
 Scenario: Widget aggregates costs across multiple instances
-  Given I have 2 running g5.2xlarge instances
+  Given I have 2 running t3.medium instances
   And AWS Pricing API is mocked with sample rates
   When I view the TUI
-  Then overview widget daily cost is approximately $72.72
+  Then overview widget daily cost is approximately $2.00

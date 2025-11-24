@@ -165,8 +165,13 @@ def step_create_running_instance(context: Context, instance_name: str) -> None:
     """Create a running instance for testing."""
     ec2_manager = setup_ec2_manager(context)
 
+    instance_type = "t2.micro"
+    if hasattr(context, "pending_instance_type") and context.pending_instance_type:
+        instance_type = context.pending_instance_type
+        context.pending_instance_type = None
+
     config = {
-        "instance_type": "t2.micro",
+        "instance_type": instance_type,
         "disk_size": 20,
         "machine_name": "test-machine",
     }

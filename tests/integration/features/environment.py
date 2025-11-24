@@ -730,8 +730,15 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         context.harness.setup()
         logger.info(f"Initialized LocalStackHarness for scenario: {scenario.name}")
 
+        os.environ["AWS_ENDPOINT_URL"] = "http://localhost:4566"
+        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+        os.environ["MOONDOCK_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
+        os.environ["MOONDOCK_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
+
         import time
-        time.sleep(0.5)
+        time.sleep(2)
 
         try:
             from tests.integration.features.steps.instance_lifecycle_steps import (
@@ -918,13 +925,6 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         context.mock_aws_env = None
 
     if is_localstack_scenario:
-        os.environ["AWS_ENDPOINT_URL"] = "http://localhost:4566"
-        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-        os.environ["MOONDOCK_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
-        os.environ["MOONDOCK_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
-
         if "error" in scenario.tags:
             os.environ["MOONDOCK_SSH_TIMEOUT"] = "2"
             os.environ["MOONDOCK_SSH_MAX_RETRIES"] = "3"
