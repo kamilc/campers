@@ -6,6 +6,7 @@ import re
 import shlex
 import subprocess
 import sys
+from typing import Any
 from unittest.mock import MagicMock
 
 import yaml
@@ -14,10 +15,82 @@ from behave.runner import Context
 
 from tests.integration.features.steps.common_steps import execute_command_direct
 from moondock.__main__ import MoondockCLI
+from moondock.portforward import PortForwardManager
 
 JSON_OUTPUT_TRUNCATE_LENGTH = 200
 
 logger = logging.getLogger(__name__)
+
+_PORT_FORWARD_MANAGERS: list[Any] = []
+
+
+def _install_portforward_hook() -> None:
+    """Ensure any PortForwardManager registers for teardown tracking."""
+
+    if getattr(PortForwardManager, "_moondock_harness_hooked", False):
+        return
+
+    original_create_tunnels = PortForwardManager.create_tunnels
+
+    def wrapped_create_tunnels(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self not in _PORT_FORWARD_MANAGERS:
+            _PORT_FORWARD_MANAGERS.append(self)
+            logger.info("Registered portforward manager via hook")
+        return original_create_tunnels(self, *args, **kwargs)
+
+    PortForwardManager.create_tunnels = wrapped_create_tunnels  # type: ignore[assignment]
+    PortForwardManager._moondock_harness_hooked = True  # type: ignore[attr-defined]
+
+
+_install_portforward_hook()
+
+
+def _register_portforward_manager(context: Context, manager: Any) -> None:
+    """Register port forwarding manager for harness-managed teardown.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context with optional harness services.
+    manager : Any
+        Port forward manager instance to stop during teardown.
+    """
+    context.port_forward_manager = manager
+
+    if manager not in _PORT_FORWARD_MANAGERS:
+        _PORT_FORWARD_MANAGERS.append(manager)
+        logger.info("Registered portforward manager for teardown tracking")
+
+    harness = getattr(context, "harness", None)
+    services = getattr(harness, "services", None)
+    resource_registry = getattr(services, "resource_registry", None)
+
+    if resource_registry is None:
+        return
+
+    def dispose_portforward(handle: Any) -> None:
+        handle.stop_all_tunnels()
+
+    resource_registry.register(
+        kind="portforward-manager",
+        handle=manager,
+        dispose_fn=dispose_portforward,
+        label="moondock-portforward-manager",
+    )
+
+
+def stop_registered_portforward_managers() -> None:
+    """Stop all registered port forward managers and clear registry."""
+    global _PORT_FORWARD_MANAGERS
+
+    managers = list(_PORT_FORWARD_MANAGERS)
+    logger.info(f"Stopping {len(managers)} registered portforward manager(s)")
+    for mgr in managers:
+        try:
+            mgr.stop_all_tunnels()
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.debug(f"Error stopping portforward manager: {exc}")
+    _PORT_FORWARD_MANAGERS = []
 
 
 def create_cli_test_boto3_factory():
@@ -521,6 +594,11 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
                         logger.error(
                             f"Monitor thread reported error: {context.monitor_error}"
                         )
+
+                    if hasattr(cli, "_resources"):
+                        portforward_mgr = cli._resources.get("portforward_mgr")
+                        if portforward_mgr is not None:
+                            _register_portforward_manager(context, portforward_mgr)
 
                     from tests.integration.features.steps.port_forwarding_steps import (
                         start_http_servers_for_all_configured_ports,

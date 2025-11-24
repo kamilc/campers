@@ -24,7 +24,7 @@ class TimeoutManager:
 
     def __init__(self, budget_seconds: float) -> None:
         self.budget_seconds = budget_seconds
-        self.start_time = time.time()
+        self.start_time = time.monotonic()
         self.deadline = self.start_time + budget_seconds
 
     def elapsed_seconds(self) -> float:
@@ -35,7 +35,7 @@ class TimeoutManager:
         float
             Elapsed seconds
         """
-        return time.time() - self.start_time
+        return time.monotonic() - self.start_time
 
     def remaining_seconds(self) -> float:
         """Get remaining time until deadline.
@@ -45,7 +45,7 @@ class TimeoutManager:
         float
             Remaining seconds (may be negative if deadline passed)
         """
-        return self.deadline - time.time()
+        return self.deadline - time.monotonic()
 
     def checkpoint(self, description: str) -> None:
         """Log elapsed and remaining time at a checkpoint.

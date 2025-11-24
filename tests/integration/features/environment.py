@@ -5,6 +5,8 @@ import logging
 import logging.handlers
 import os
 import signal
+import gc
+import socket
 import sys
 import threading
 import time
@@ -456,7 +458,7 @@ def cleanup_sshtunnel_processes() -> None:
 
 
 def cleanup_test_ports(port_list: list[int]) -> None:
-    """Forcefully kill processes using test ports with retry logic.
+    """Ensure test ports are free by stopping owners without killing the runner.
 
     Parameters
     ----------
@@ -468,6 +470,7 @@ def cleanup_test_ports(port_list: list[int]) -> None:
 
     max_retries = 5
     retry_delay = 1
+    current_pid = str(os.getpid())
 
     for port in port_list:
         for attempt in range(max_retries):
@@ -479,15 +482,17 @@ def cleanup_test_ports(port_list: list[int]) -> None:
                     timeout=3,
                 )
 
-                if result.returncode == 0 and result.stdout.strip():
-                    pids = result.stdout.strip().split()
+                pids = result.stdout.strip().split() if result.stdout.strip() else []
+                filtered_pids = [pid for pid in pids if pid != current_pid]
+
+                if filtered_pids:
                     logger.info(
                         f"Attempt {attempt + 1}/{max_retries}: "
-                        f"Cleaning up {len(pids)} process(es) using port {port}: {pids}"
+                        f"Cleaning up {len(filtered_pids)} process(es) using port {port}: {filtered_pids}"
                     )
 
                     killed_pids = []
-                    for pid in pids:
+                    for pid in filtered_pids:
                         try:
                             subprocess.run(
                                 ["kill", "-9", pid],
@@ -510,10 +515,12 @@ def cleanup_test_ports(port_list: list[int]) -> None:
                         time.sleep(retry_delay)
                         continue
 
-                    break
-
-                else:
-                    logger.debug(f"Port {port} is clean - no processes using it")
+                if not filtered_pids:
+                    if pids and current_pid in pids:
+                        logger.debug(
+                            f"Attempting to stop portforward managers for port {port} owned by current PID {current_pid}"
+                        )
+                        _stop_portforward_managers_via_gc()
                     break
 
             except subprocess.TimeoutExpired:
@@ -525,6 +532,59 @@ def cleanup_test_ports(port_list: list[int]) -> None:
             except Exception as e:
                 logger.debug(f"Error cleaning up port {port}: {e}")
                 break
+
+        if not _port_is_free(port):
+            owner_result = subprocess.run(
+                ["lsof", "-i", f":{port}"], capture_output=True, text=True
+            )
+            owner_info = owner_result.stdout.strip() if owner_result.stdout else ""
+            message = (
+                f"Port {port} remains in use after cleanup attempts. Owner info: {owner_info}"
+            )
+            logger.error(message)
+            raise RuntimeError(message)
+
+
+def _port_is_free(port: int) -> bool:
+    """Check whether a TCP port is free to bind on localhost.
+
+    Parameters
+    ----------
+    port : int
+        Port number to check.
+
+    Returns
+    -------
+    bool
+        True if the port can be bound, False otherwise.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def _stop_portforward_managers_via_gc() -> None:
+    """Best-effort stop of any PortForwardManager instances reachable via GC."""
+    try:
+        from moondock.portforward import PortForwardManager
+    except Exception:  # pragma: no cover - defensive import
+        return
+
+    stopped = 0
+    for obj in gc.get_objects():
+        try:
+            if isinstance(obj, PortForwardManager):
+                obj.stop_all_tunnels()
+                stopped += 1
+        except Exception:
+            continue
+
+    if stopped:
+        logger.info(f"Stopped {stopped} PortForwardManager instance(s) via GC scan")
 
 
 def before_all(context: Context) -> None:
@@ -709,6 +769,23 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         context.use_direct_instantiation = False
 
     if is_localstack_scenario or is_pilot_scenario:
+        try:
+            from tests.integration.features.steps.cli_steps import (
+                stop_registered_portforward_managers,
+            )
+
+            stop_registered_portforward_managers()
+            logger.debug("Stopped registered port-forward managers before port cleanup")
+        except Exception as e:
+            logger.debug(f"Error stopping registered port-forward managers: {e}")
+
+        if hasattr(context, "port_forward_manager") and context.port_forward_manager:
+            try:
+                context.port_forward_manager.stop_all_tunnels()
+                logger.debug("Stopped port forwarding tunnels before port cleanup")
+            except Exception as e:
+                logger.debug(f"Error stopping tunnels before cleanup: {e}")
+
         import time
 
         common_test_ports = [48888, 48889, 48890, 48891, 6006]
@@ -1273,6 +1350,14 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                 logger.debug("Stopped port forwarding tunnels from test scenario")
             except Exception as e:
                 logger.debug(f"Error stopping port forwarding tunnels: {e}")
+        try:
+            from tests.integration.features.steps.cli_steps import (
+                stop_registered_portforward_managers,
+            )
+
+            stop_registered_portforward_managers()
+        except Exception as e:
+            logger.debug(f"Error stopping registered port-forward managers: {e}")
     except Exception as e:
         logger.debug(f"Error during port forwarding cleanup: {e}")
 
