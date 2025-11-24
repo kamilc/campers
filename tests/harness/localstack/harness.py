@@ -164,6 +164,7 @@ class LocalStackHarness(ScenarioHarness):
         configuration_env.set("AWS_ACCESS_KEY_ID", "testing")
         configuration_env.set("AWS_SECRET_ACCESS_KEY", "testing")
         configuration_env.set("AWS_DEFAULT_REGION", "us-east-1")
+        configuration_env.set("MOONDOCK_TEST_MODE", "0")
 
         resource_registry = ResourceRegistry()
         scenario_timeout = getattr(

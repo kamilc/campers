@@ -1259,6 +1259,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     cleanup_env_var("MOONDOCK_TUNNEL_FAIL_PORT", logger)
     cleanup_env_var("MOONDOCK_PORT_IN_USE", logger)
     cleanup_env_var("MOONDOCK_SIMULATE_INTERRUPT", logger)
+    cleanup_env_var("MOONDOCK_TEST_MODE", logger)
     cleanup_env_var("AWS_ENDPOINT_URL", logger)
     cleanup_env_var("MOONDOCK_SSH_DELAY_SECONDS", logger)
     cleanup_env_var("MOONDOCK_SSH_BLOCK_CONNECTIONS", logger)
