@@ -153,6 +153,7 @@ cython_debug/
 
 # Project-specific
 tmp/
+site/
 
 # BDD test artifacts
 features/__pycache__/
