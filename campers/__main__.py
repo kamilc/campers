@@ -1109,6 +1109,17 @@ class Campers:
         if existing:
             state = existing.get("state")
             instance_id = existing["instance_id"]
+            instance_region = existing.get("region")
+            configured_region = config.get("region")
+
+            if instance_region and instance_region != configured_region:
+                raise RuntimeError(
+                    f"Instance '{instance_name}' exists in region '{instance_region}' "
+                    f"but config specifies region '{configured_region}'.\n\n"
+                    f"Options:\n"
+                    f"  - Change config region back to: {instance_region}\n"
+                    f"  - Destroy the old instance: campers destroy {instance_id}\n"
+                )
 
             if state == "stopped":
                 logging.info("Found stopped instance %s, starting...", instance_id)
