@@ -106,7 +106,6 @@ class TestConfigLoader:
                 "region": "us-east-1",
                 "instance_type": "t3.medium",
                 "disk_size": 50,
-                "os_flavor": "ubuntu-22.04",
             },
             "camps": {
                 "jupyter-lab": {
@@ -122,7 +121,6 @@ class TestConfigLoader:
         assert merged["instance_type"] == "m5.xlarge"
         assert merged["disk_size"] == 200
         assert merged["region"] == "us-east-1"
-        assert merged["os_flavor"] == "ubuntu-22.04"
 
     def test_get_camp_config_hierarchy_merging(self) -> None:
         config = {
@@ -312,7 +310,6 @@ class TestConfigLoader:
         assert merged["region"] == "us-east-1"
         assert merged["instance_type"] == "t3.medium"
         assert merged["disk_size"] == 50
-        assert merged["os_flavor"] == "ubuntu-22.04"
         assert merged["ports"] == []
         assert merged["include_vcs"] is False
 
@@ -560,19 +557,6 @@ class TestConfigLoader:
         loader = ConfigLoader()
 
         with pytest.raises(ValueError, match="env_filter entries must be strings"):
-            loader.validate_config(config)
-
-    def test_validate_config_invalid_os_flavor_type(self) -> None:
-        config = {
-            "region": "us-east-1",
-            "instance_type": "t3.medium",
-            "disk_size": 50,
-            "os_flavor": 123,
-        }
-
-        loader = ConfigLoader()
-
-        with pytest.raises(ValueError, match="os_flavor must be a string"):
             loader.validate_config(config)
 
     def test_validate_config_invalid_command_type(self) -> None:

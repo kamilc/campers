@@ -14,7 +14,6 @@ class ConfigLoader:
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "disk_size": 50,
-        "os_flavor": "ubuntu-22.04",
         "ports": [],
         "include_vcs": False,
         "ignore": ["*.pyc", "__pycache__", "*.log", ".DS_Store"],
@@ -152,7 +151,6 @@ class ConfigLoader:
                 raise ValueError(type_msg)
 
         optional_validations = {
-            "os_flavor": (str, "os_flavor must be a string"),
             "include_vcs": (bool, "include_vcs must be a boolean"),
             "ignore": (list, "ignore must be a list"),
             "env_filter": (list, "env_filter must be a list"),
