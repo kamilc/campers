@@ -980,15 +980,15 @@ class Campers:
         self._abort_requested = False
         self._resources: dict[str, Any] = {}
         self._update_queue: queue.Queue | None = None
-        self.boto3_client_factory = boto3_client_factory or boto3.client
-        self.boto3_resource_factory = boto3_resource_factory or boto3.resource
+        self._boto3_client_factory = boto3_client_factory or boto3.client
+        self._boto3_resource_factory = boto3_resource_factory or boto3.resource
 
         if ec2_manager_factory is None:
-            self.ec2_manager_factory = self._create_ec2_manager
+            self._ec2_manager_factory = self._create_ec2_manager
         else:
-            self.ec2_manager_factory = ec2_manager_factory
+            self._ec2_manager_factory = ec2_manager_factory
 
-        self.ssh_manager_factory = ssh_manager_factory or SSHManager
+        self._ssh_manager_factory = ssh_manager_factory or SSHManager
 
         import campers.__main__ as module
 
@@ -1009,8 +1009,8 @@ class Campers:
         """
         return EC2Manager(
             region=region,
-            boto3_client_factory=self.boto3_client_factory,
-            boto3_resource_factory=self.boto3_resource_factory,
+            boto3_client_factory=self._boto3_client_factory,
+            boto3_resource_factory=self._boto3_resource_factory,
         )
 
     def _log_and_print_error(self, message: str, *args: Any) -> None:
@@ -1872,7 +1872,7 @@ class Campers:
             if merged_config.get("sync_paths") and not disable_mutagen:
                 mutagen_mgr.check_mutagen_installed()
 
-            ec2_manager = self.ec2_manager_factory(region=merged_config["region"])
+            ec2_manager = self._ec2_manager_factory(region=merged_config["region"])
 
             with self._resources_lock:
                 self._resources["ec2_manager"] = ec2_manager
@@ -1926,7 +1926,7 @@ class Campers:
                 instance_details["key_file"],
             )
 
-            ssh_manager = self.ssh_manager_factory(
+            ssh_manager = self._ssh_manager_factory(
                 host=ssh_host,
                 key_file=ssh_key_file,
                 username=merged_config.get("ssh_username", "ubuntu"),
@@ -2437,7 +2437,7 @@ class Campers:
             If region is not a valid AWS region
         """
         try:
-            ec2_client = self.boto3_client_factory("ec2", region_name="us-east-1")
+            ec2_client = self._boto3_client_factory("ec2", region_name="us-east-1")
             regions_response = ec2_client.describe_regions()
             valid_regions = {r["RegionName"] for r in regions_response["Regions"]}
 
@@ -2476,7 +2476,7 @@ class Campers:
             self._validate_region(region)
 
         try:
-            ec2_manager = self.ec2_manager_factory(region=region or default_region)
+            ec2_manager = self._ec2_manager_factory(region=region or default_region)
             instances = ec2_manager.list_instances(region_filter=region)
 
             if not instances:
@@ -2492,7 +2492,7 @@ class Campers:
             costs_available = False
 
             for inst in instances:
-                regional_manager = self.ec2_manager_factory(region=inst["region"])
+                regional_manager = self._ec2_manager_factory(region=inst["region"])
                 volume_size = regional_manager.get_volume_size(inst["instance_id"])
 
                 if volume_size is None:
@@ -3038,7 +3038,7 @@ class Campers:
         from botocore.exceptions import ClientError, NoCredentialsError
 
         try:
-            sts_client = self.boto3_client_factory("sts", region_name=effective_region)
+            sts_client = self._boto3_client_factory("sts", region_name=effective_region)
             sts_client.get_caller_identity()
             print("AWS credentials found")
             return True
@@ -3256,7 +3256,7 @@ class Campers:
             sys.exit(1)
 
         if ec2_client is None:
-            ec2_client = self.boto3_client_factory("ec2", region_name=effective_region)
+            ec2_client = self._boto3_client_factory("ec2", region_name=effective_region)
 
         vpc_exists, missing_perms = self._check_infrastructure(
             ec2_client, effective_region
@@ -3315,7 +3315,7 @@ class Campers:
             sys.exit(1)
 
         if ec2_client is None:
-            ec2_client = self.boto3_client_factory("ec2", region_name=effective_region)
+            ec2_client = self._boto3_client_factory("ec2", region_name=effective_region)
 
         vpc_exists, missing_perms = self._check_infrastructure(
             ec2_client, effective_region
