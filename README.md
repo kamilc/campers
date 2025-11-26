@@ -1,5 +1,9 @@
 # Campers
 
+<p align="center">
+  <img src="campers.png" alt="Campers" width="400">
+</p>
+
 Campers is a command-line tool for managing remote development environments on AWS EC2. It handles the full lifecycle of cloud development machines: provisioning instances, synchronizing files, forwarding ports, and executing commands.
 
 ## Features
