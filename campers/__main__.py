@@ -212,8 +212,6 @@ defaults:
     - HF_TOKEN
     - WANDB_API_KEY
 
-  ansible_playbook: base
-
 # ==============================================================================
 # Camps - Named configurations (override defaults as needed)
 # ==============================================================================
