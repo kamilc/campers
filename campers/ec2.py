@@ -725,12 +725,26 @@ class EC2Manager:
         new_ip = instance.get("PublicIpAddress")
         logger.info(f"Instance {instance_id} started with IP {new_ip}")
 
+        unique_id = None
+        tags = instance.get("Tags", [])
+        for tag in tags:
+            if tag["Key"] == "UniqueId":
+                unique_id = tag["Value"]
+                break
+
+        key_file = None
+        if unique_id:
+            campers_dir = Path(os.environ.get("CAMPERS_DIR", "~/.campers")).expanduser()
+            key_file = str(campers_dir / "keys" / f"{unique_id}.pem")
+
         return {
             "instance_id": instance_id,
             "public_ip": instance.get("PublicIpAddress"),
             "private_ip": instance.get("PrivateIpAddress"),
             "state": instance["State"]["Name"],
             "instance_type": instance.get("InstanceType"),
+            "unique_id": unique_id,
+            "key_file": key_file,
         }
 
     def get_volume_size(self, instance_id: str) -> int | None:
