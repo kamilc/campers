@@ -52,6 +52,9 @@ dev = [
 [tool.setuptools]
 packages = ["campers"]
 
+[tool.setuptools.package-data]
+campers = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
 norecursedirs = ["tmp", ".git", ".venv", "__pycache__"]

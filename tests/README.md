@@ -1,6 +1,6 @@
-# Moondock Test Suite
+# Campers Test Suite
 
-This directory contains the complete test suite for the Moondock project, organized into unit tests and integration tests (BDD).
+This directory contains the complete test suite for the Campers project, organized into unit tests and integration tests (BDD).
 
 ## Directory Structure
 
@@ -253,7 +253,7 @@ Corresponding steps:
 ```python
 @given("the campers CLI is available")
 def step_cli_available(context: Context) -> None:
-    context.cli = MoondockCLI()
+    context.cli = CampersCLI()
 
 @when("I run: {command}")
 def step_run_command(context: Context, command: str) -> None:
