@@ -18,7 +18,7 @@ class InstanceOverviewWidget(Static):
     Parameters
     ----------
     campers_instance : Campers
-        Campers instance providing access to ec2_manager_factory for creating
+        Campers instance providing access to EC2 manager factory for creating
         EC2 managers
 
     Attributes
@@ -41,7 +41,7 @@ class InstanceOverviewWidget(Static):
         from campers.pricing import PricingService
 
         default_region = ConfigLoader.BUILT_IN_DEFAULTS["region"]
-        self.ec2_manager = campers_instance.ec2_manager_factory(region=default_region)
+        self.ec2_manager = campers_instance._ec2_manager_factory(region=default_region)
         self.pricing_service = PricingService()
         self.running_count = 0
         self.stopped_count = 0

@@ -11,7 +11,7 @@ import pytest
 def mock_campers():
     """Create mock Campers instance."""
     campers = Mock()
-    campers.ec2_manager_factory = Mock()
+    campers._ec2_manager_factory = Mock()
     return campers
 
 
@@ -35,7 +35,7 @@ def test_widget_initialization(mock_campers, mock_ec2_manager):
     """Test widget initializes with correct attributes."""
     from campers.instance_overview_widget import InstanceOverviewWidget
 
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
     with patch("campers.pricing.PricingService") as MockPricing:
         mock_pricing = Mock()
@@ -95,7 +95,7 @@ def test_refresh_stats_counts_instances_correctly(
         },
     ]
 
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
     with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = mock_pricing_service
@@ -115,7 +115,7 @@ def test_refresh_stats_handles_empty_list(
     from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.return_value = []
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
     with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = mock_pricing_service
@@ -150,7 +150,7 @@ def test_refresh_stats_calculates_daily_cost_when_pricing_available(
         },
     ]
 
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
     with patch("campers.pricing.PricingService") as MockPricing, patch(
         "campers.pricing.calculate_monthly_cost"
@@ -183,7 +183,7 @@ def test_refresh_stats_sets_none_cost_when_pricing_unavailable(
         },
     ]
 
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
     mock_pricing_service.pricing_available = False
 
     with patch("campers.pricing.PricingService") as MockPricing:
@@ -203,7 +203,7 @@ def test_refresh_stats_handles_ec2_api_errors_gracefully(
     from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.side_effect = Exception("EC2 API error")
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
     with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = mock_pricing_service
@@ -222,7 +222,7 @@ def test_render_stats_formats_with_cost(mock_campers, mock_ec2_manager):
     """Test render_stats formats display with cost."""
     from campers.instance_overview_widget import InstanceOverviewWidget
 
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
     with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = Mock()
@@ -241,7 +241,7 @@ def test_render_stats_formats_without_cost(mock_campers, mock_ec2_manager):
     """Test render_stats formats display without cost (N/A)."""
     from campers.instance_overview_widget import InstanceOverviewWidget
 
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
     with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = Mock()
@@ -263,7 +263,7 @@ def test_widget_queries_all_regions(
     from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.return_value = []
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
     with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = mock_pricing_service
@@ -290,7 +290,7 @@ def test_refresh_stats_shows_na_when_all_prices_none(
         },
     ]
 
-    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
     with patch("campers.pricing.PricingService") as MockPricing, patch(
         "campers.pricing.calculate_monthly_cost"

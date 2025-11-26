@@ -90,7 +90,7 @@ def test_run_executes_setup_script_before_command(campers_module) -> None:
             return 0
 
         mock_ssh_instance.execute_command.side_effect = track_execute_command
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         result = campers_instance.run()
 
@@ -136,7 +136,7 @@ def test_run_setup_script_failure_prevents_command(campers_module) -> None:
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command.return_value = 1
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         with pytest.raises(RuntimeError, match="Setup script failed with exit code: 1"):
             campers_instance.run()
@@ -175,7 +175,7 @@ def test_run_skips_ssh_when_no_setup_script_or_command(campers_module) -> None:
         mock_ec2.return_value = mock_ec2_instance
 
         mock_ssh_factory = MagicMock()
-        campers_instance.ssh_manager_factory = mock_ssh_factory
+        campers_instance._ssh_manager_factory = mock_ssh_factory
 
         result = campers_instance.run()
 
@@ -218,7 +218,7 @@ def test_run_only_setup_script_no_command(campers_module) -> None:
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         result = campers_instance.run()
 
@@ -284,7 +284,7 @@ def test_run_with_sync_paths_creates_mutagen_session(campers_module) -> None:
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -336,7 +336,7 @@ def test_run_executes_command_from_synced_directory(campers_module) -> None:
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -388,7 +388,7 @@ def test_run_executes_startup_script_from_synced_directory(campers_module) -> No
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -481,7 +481,7 @@ def test_run_startup_script_failure_prevents_command(campers_module) -> None:
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 42
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -538,7 +538,7 @@ cd src"""
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -589,7 +589,7 @@ def test_run_with_port_forwarding_creates_tunnels(campers_module) -> None:
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_portforward_instance = MagicMock()
         mock_portforward.return_value = mock_portforward_instance
@@ -647,7 +647,7 @@ def test_run_port_forwarding_cleanup_order(campers_module) -> None:
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
         mock_ssh_instance.close.side_effect = lambda: cleanup_order.append("ssh_close")
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_portforward_instance = MagicMock()
         mock_portforward_instance.stop_all_tunnels.side_effect = (
@@ -697,7 +697,7 @@ def test_run_port_forwarding_error_triggers_cleanup(campers_module) -> None:
         mock_ssh_instance.filter_environment_variables.return_value = {}
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_portforward_instance = MagicMock()
         mock_portforward_instance.create_tunnels.side_effect = RuntimeError(
@@ -751,7 +751,7 @@ def test_run_port_forwarding_with_sync_paths(campers_module) -> None:
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -816,7 +816,7 @@ def test_run_port_forwarding_with_startup_script(campers_module) -> None:
             return 0
 
         mock_ssh_instance.execute_command_raw.side_effect = track_execution
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -906,7 +906,7 @@ def test_run_filters_environment_variables_after_ssh_connection(
             "export AWS_REGION='us-west-2' && aws s3 ls"
         )
         mock_ssh_instance.execute_command.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         campers_instance.run()
 
@@ -956,7 +956,7 @@ def test_run_forwards_env_to_setup_script(campers_module) -> None:
             "export AWS_REGION='us-west-2' && aws s3 cp s3://bucket/setup.sh ."
         )
         mock_ssh_instance.execute_command.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         result = campers_instance.run()
 
@@ -1005,7 +1005,7 @@ def test_run_forwards_env_to_startup_script(campers_module) -> None:
         }
         mock_ssh_instance.build_command_with_env.return_value = "export HF_TOKEN='hf_test123' && cd ~/myproject && bash -c 'huggingface-cli login'"
         mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -1056,7 +1056,7 @@ def test_run_forwards_env_to_main_command(campers_module) -> None:
             "export WANDB_API_KEY='test-key' && python train.py"
         )
         mock_ssh_instance.execute_command.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         result = campers_instance.run()
 
@@ -1310,7 +1310,7 @@ def test_run_tracks_resources_incrementally(campers_module) -> None:
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
@@ -1369,7 +1369,7 @@ def test_finally_block_calls_cleanup_if_not_already_done(campers_module) -> None
         mock_ssh_instance.connect.return_value = None
         mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
         mock_ssh_instance.execute_command.return_value = 0
-        campers_instance.ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         campers_instance.run()
 
@@ -1611,7 +1611,7 @@ def test_list_command_invalid_region(campers_module, aws_credentials) -> None:
         ]
     }
 
-    campers_instance.boto3_client_factory = MagicMock(return_value=mock_ec2_client)
+    campers_instance._boto3_client_factory = MagicMock(return_value=mock_ec2_client)
     with pytest.raises(ValueError, match="Invalid AWS region: 'invalid-region-xyz'"):
         campers_instance.list(region="invalid-region-xyz")
 
@@ -1662,7 +1662,7 @@ def test_validate_region_valid(campers_module) -> None:
         ]
     }
 
-    campers_instance.boto3_client_factory = MagicMock(return_value=mock_ec2_client)
+    campers_instance._boto3_client_factory = MagicMock(return_value=mock_ec2_client)
     campers_instance._validate_region("us-east-1")
 
 
@@ -1680,7 +1680,7 @@ def test_validate_region_invalid(campers_module) -> None:
         ]
     }
 
-    campers_instance.boto3_client_factory = MagicMock(return_value=mock_ec2_client)
+    campers_instance._boto3_client_factory = MagicMock(return_value=mock_ec2_client)
     with pytest.raises(ValueError, match="Invalid AWS region"):
         campers_instance._validate_region("invalid-region")
 
