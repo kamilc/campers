@@ -120,111 +120,164 @@ container operations and event processing in integration testing scenarios.
 """
 
 CONFIG_TEMPLATE = """# Campers Configuration File
-# This file defines default settings and named machine configurations.
 # Location: campers.yaml (or set CAMPERS_CONFIG environment variable)
+#
+# Structure:
+#   vars:      - Reusable variables (use ${var_name} to reference)
+#   playbooks: - Ansible playbooks for provisioning (recommended)
+#   defaults:  - Settings inherited by all camps
+#   camps:     - Named configurations that override defaults
 
-# Required: Default settings used when no machine name is specified
+# ==============================================================================
+# Variables - Define once, use everywhere with ${var_name}
+# ==============================================================================
+vars:
+  project: my-project
+  remote_dir: /home/ubuntu/${project}
+  python_version: "3.12"
+
+# ==============================================================================
+# Ansible Playbooks - Recommended for provisioning (idempotent, declarative)
+# ==============================================================================
+# Define playbooks here, reference them in camps with:
+#   ansible_playbook: playbook-name      (single)
+#   ansible_playbooks: [play1, play2]    (multiple, run in order)
+
+playbooks:
+  base:
+    - name: Base system setup
+      hosts: all
+      become: true
+      tasks:
+        - name: Update apt cache
+          apt:
+            update_cache: yes
+            cache_valid_time: 3600
+
+        - name: Install essential packages
+          apt:
+            name:
+              - git
+              - htop
+              - tmux
+              - curl
+              - unzip
+            state: present
+
+  python-dev:
+    - name: Python development environment
+      hosts: all
+      tasks:
+        - name: Install uv package manager
+          shell: curl -LsSf https://astral.sh/uv/install.sh | sh
+          args:
+            creates: ~/.local/bin/uv
+
+        - name: Create project directory
+          file:
+            path: ${remote_dir}
+            state: directory
+
+  jupyter:
+    - name: Jupyter Lab setup
+      hosts: all
+      tasks:
+        - name: Install Jupyter and data science packages
+          shell: |
+            ~/.local/bin/uv pip install --system \
+              jupyter jupyterlab pandas numpy matplotlib
+
+# ==============================================================================
+# Defaults - Inherited by all camps
+# ==============================================================================
 defaults:
-  # AWS Configuration (required)
-  region: us-east-1              # AWS region (e.g., us-east-1, us-west-2, eu-west-1)
-  instance_type: t3.medium       # EC2 instance type (e.g., t3.medium, m5.xlarge, p3.2xlarge)
-  disk_size: 50                  # Root disk size in GB
-  os_flavor: ubuntu-22.04        # Operating system (ubuntu-22.04, amazon-linux-2)
+  region: us-east-1
+  instance_type: t3.medium
+  disk_size: 50
+  os_flavor: ubuntu-22.04
 
-  # File Synchronization (Mutagen)
-  # Single port:
-  # port: 8888
-  # Multiple ports:
   ports:
-    - 8888                       # Local port for port forwarding (e.g., Jupyter, SSH tunnels)
+    - 8888
 
-  include_vcs: false             # Include version control files (.git, .gitignore, etc.)
-  ignore:                        # File patterns to exclude from sync
+  include_vcs: false
+  ignore:
     - "*.pyc"
-    - "__pycache__"
+    - __pycache__
     - "*.log"
-    - ".DS_Store"
-    - "node_modules/"
+    - .DS_Store
+    - node_modules/
+    - .venv/
 
-  # Environment Variable Forwarding
-  env_filter:                    # Regex patterns to match environment variable names
-    - "AWS_.*"                   # Forward all AWS credentials and config
-    - "HF_TOKEN"                 # Hugging Face token
-    - "WANDB_API_KEY"            # Weights & Biases API key
+  env_filter:
+    - AWS_.*
+    - HF_TOKEN
+    - WANDB_API_KEY
 
-  # Sync Paths (optional - configure directories to sync)
-  # sync_paths:
-  #   - local: ~/projects/myproject    # Local directory path
-  #     remote: ~/myproject            # Remote directory path (on EC2 instance)
+  ansible_playbook: base
 
-  # Default Command (optional - runs when using 'campers run' without -c flag)
-  # command: bash                # Default shell or command to execute
+# ==============================================================================
+# Camps - Named configurations (override defaults as needed)
+# ==============================================================================
+camps:
+  dev:
+    instance_type: t3.large
+    disk_size: 100
+    ansible_playbooks:
+      - base
+      - python-dev
+    command: cd ${remote_dir} && bash
 
-  # Setup Script (optional - runs once on instance creation)
-  # setup_script: |
-  #   sudo apt update
-  #   sudo apt install -y python3-pip git htop
-  #   pip3 install uv
+  jupyter:
+    instance_type: m5.xlarge
+    disk_size: 200
+    ports:
+      - 8888
+      - 6006
+    ansible_playbooks:
+      - base
+      - python-dev
+      - jupyter
+    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+    ignore:
+      - "*.pyc"
+      - __pycache__
+      - data/
+      - models/
+      - "*.parquet"
 
-  # Startup Script (optional - runs before each command execution)
-  # startup_script: |
-  #   cd ~/myproject
-  #   source .venv/bin/activate
+  gpu:
+    instance_type: g5.xlarge
+    disk_size: 200
+    region: us-west-2
+    ports:
+      - 8888
+      - 6006
+    env_filter:
+      - AWS_.*
+      - HF_.*
+      - WANDB_.*
+      - CUDA_.*
+    ansible_playbooks:
+      - base
+      - python-dev
+      - jupyter
+    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
 
-# Optional: Named machine configurations
-# Each machine can override any default setting
+# ==============================================================================
+# Alternative: Shell Scripts (simpler, but not idempotent)
+# ==============================================================================
+# Instead of Ansible playbooks, you can use shell scripts:
+#
 # camps:
-#   dev-workstation:
-#     instance_type: t3.large
-#     disk_size: 100
+#   simple-dev:
 #     setup_script: |
 #       sudo apt update
-#       sudo apt install -y python3-pip git htop
-#       pip3 install uv
+#       sudo apt install -y git htop
+#       curl -LsSf https://astral.sh/uv/install.sh | sh
 #     startup_script: |
-#       cd ~/myproject
+#       cd ${remote_dir}
 #       source .venv/bin/activate
-#
-#   jupyter-lab:
-#     instance_type: m5.xlarge
-#     disk_size: 200
-#     region: us-west-2
-#     ports:
-#       - 8888                   # Jupyter
-#       - 6006                   # TensorBoard
-#     include_vcs: true
-#     command: jupyter lab --port=8888 --no-browser
-#     ignore:
-#       - "*.pyc"
-#       - "__pycache__"
-#       - "data/"
-#       - "models/"
-#     setup_script: |
-#       pip install jupyter pandas numpy scipy matplotlib tensorboard
-#     startup_script: |
-#       cd ~/myproject
-#       export JUPYTER_CONFIG_DIR=~/.jupyter
-#
-#   ml-training:
-#     instance_type: p3.2xlarge
-#     disk_size: 200
-#     region: us-west-2
-#     ports:
-#       - 8888                   # Jupyter
-#       - 6006                   # TensorBoard
-#       - 5000                   # MLflow
-#     env_filter:
-#       - "AWS_.*"
-#       - "HF_.*"
-#       - "WANDB_.*"
-#       - "MLFLOW_.*"
-#     command: jupyter lab --port=8888 --no-browser
-#     setup_script: |
-#       pip install jupyter tensorboard mlflow torch
-#     startup_script: |
-#       cd ~/myproject
-#       source .venv/bin/activate
-#       export CUDA_VISIBLE_DEVICES=0
+#     command: bash
 """
 
 
