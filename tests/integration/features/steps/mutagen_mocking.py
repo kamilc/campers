@@ -10,16 +10,16 @@ from unittest.mock import patch
 from behave.runner import Context
 
 from tests.integration.features.steps.docker_helpers import create_synced_directories
-from moondock.portforward import PortForwardManager
+from campers.portforward import PortForwardManager
 
 logger = logging.getLogger(__name__)
 
 
 def apply_timeout_mock_if_needed(context: Context) -> list:
-    """Apply conditional mock for MOONDOCK_SYNC_TIMEOUT environment variable.
+    """Apply conditional mock for CAMPERS_SYNC_TIMEOUT environment variable.
 
     This is a tactical fix for LocalStack tests that need to test timeout behavior.
-    When MOONDOCK_SYNC_TIMEOUT=1 is set in @localstack scenarios, patches
+    When CAMPERS_SYNC_TIMEOUT=1 is set in @localstack scenarios, patches
     MutagenManager.wait_for_initial_sync() to raise timeout error immediately.
 
     Parameters
@@ -32,14 +32,14 @@ def apply_timeout_mock_if_needed(context: Context) -> list:
     list
         List of started patcher objects that need cleanup
     """
-    timeout_value = os.environ.get("MOONDOCK_SYNC_TIMEOUT")
+    timeout_value = os.environ.get("CAMPERS_SYNC_TIMEOUT")
 
     if (
         timeout_value == "1"
         and hasattr(context, "scenario")
         and "localstack" in context.scenario.tags
     ):
-        logger.info("MOONDOCK_SYNC_TIMEOUT=1 detected - applying timeout mock")
+        logger.info("CAMPERS_SYNC_TIMEOUT=1 detected - applying timeout mock")
 
         def mock_wait_for_initial_sync(
             self, instance_id: str, timeout: int | None = None
@@ -47,7 +47,7 @@ def apply_timeout_mock_if_needed(context: Context) -> list:
             raise RuntimeError("Mutagen sync timed out after 1 seconds")
 
         try:
-            from moondock.sync import MutagenManager
+            from campers.sync import MutagenManager
 
             def mock_create(  # type: ignore[override]
                 self,
@@ -124,8 +124,8 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
 
     This context manager either:
     - Patches MutagenManager for @dry_run to simulate sync via mocks
-    - Sets up isolated MOONDOCK_DIR for @localstack to enable real Mutagen execution
-    - Applies conditional timeout mocking for MOONDOCK_SYNC_TIMEOUT=1 in @localstack
+    - Sets up isolated CAMPERS_DIR for @localstack to enable real Mutagen execution
+    - Applies conditional timeout mocking for CAMPERS_SYNC_TIMEOUT=1 in @localstack
 
     Parameters
     ----------
@@ -148,20 +148,20 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
         scenario_name = (
             context.scenario.name.replace(" ", "_").replace("/", "_").replace("'", "")
         )
-        test_dir = Path(f"tmp/test-moondock/{scenario_name}")
+        test_dir = Path(f"tmp/test-campers/{scenario_name}")
         test_dir.mkdir(parents=True, exist_ok=True)
 
-        original_moondock_dir = os.environ.get("MOONDOCK_DIR")
+        original_campers_dir = os.environ.get("CAMPERS_DIR")
 
-        context.harness.services.configuration_env.set("MOONDOCK_DIR", str(test_dir))
+        context.harness.services.configuration_env.set("CAMPERS_DIR", str(test_dir))
 
-        logger.info(f"Set isolated MOONDOCK_DIR: {test_dir}")
+        logger.info(f"Set isolated CAMPERS_DIR: {test_dir}")
 
         timeout_patchers = apply_timeout_mock_if_needed(context)
 
         if not timeout_patchers:
             try:
-                from moondock.sync import MutagenManager
+                from campers.sync import MutagenManager
 
                 original_create = MutagenManager.create_sync_session
                 original_wait = MutagenManager.wait_for_initial_sync
@@ -275,20 +275,20 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 patcher.stop()
                 logger.debug("Stopped timeout patcher")
 
-            if original_moondock_dir:
+            if original_campers_dir:
                 context.harness.services.configuration_env.set(
-                    "MOONDOCK_DIR", original_moondock_dir
+                    "CAMPERS_DIR", original_campers_dir
                 )
             else:
-                context.harness.services.configuration_env.delete("MOONDOCK_DIR")
-            logger.debug("Restored original MOONDOCK_DIR")
+                context.harness.services.configuration_env.delete("CAMPERS_DIR")
+            logger.debug("Restored original CAMPERS_DIR")
     else:
 
         def mock_check_mutagen(self) -> None:
             if getattr(context, "mutagen_not_installed", False):
                 raise RuntimeError(
                     "Mutagen is not installed locally.\n"
-                    "Please install Mutagen to use moondock file synchronization.\n"
+                    "Please install Mutagen to use campers file synchronization.\n"
                     "Visit: https://github.com/mutagen-io/mutagen"
                 )
 
@@ -298,7 +298,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
             if getattr(context, "mutagen_not_installed", False):
                 raise RuntimeError(
                     "Mutagen is not installed locally.\n"
-                    "Please install Mutagen to use moondock file synchronization.\n"
+                    "Please install Mutagen to use campers file synchronization.\n"
                     "Visit: https://github.com/mutagen-io/mutagen"
                 )
 
@@ -310,7 +310,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 f"username={ssh_username}"
             )
             if not hasattr(context, "instance_id") or context.instance_id is None:
-                target_ids = os.environ.get("MOONDOCK_TARGET_INSTANCE_IDS", "")
+                target_ids = os.environ.get("CAMPERS_TARGET_INSTANCE_IDS", "")
                 if target_ids:
                     instance_ids = [
                         id.strip() for id in target_ids.split(",") if id.strip()
@@ -350,7 +350,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
             return True
 
         try:
-            from moondock.sync import MutagenManager
+            from campers.sync import MutagenManager
 
             def mock_validate_key_file(self, key_file: str) -> None:
                 logger.debug("Mocked: validate_key_file skipped for %s", key_file)

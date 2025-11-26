@@ -19,11 +19,11 @@ def step_tui_displays_status_panel(context: Context) -> None:
     """
 
     async def verify_status_panel() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -50,11 +50,11 @@ def step_tui_displays_log_panel(context: Context) -> None:
     """
 
     async def verify_log_panel() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -79,11 +79,11 @@ def step_status_panel_height_one_third(context: Context) -> None:
     """
 
     async def verify_status_height() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -110,11 +110,11 @@ def step_log_panel_height_two_thirds(context: Context) -> None:
     """
 
     async def verify_log_height() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -153,11 +153,11 @@ def step_status_panel_shows_placeholder_instance_id(context: Context) -> None:
     """
 
     async def verify_placeholder() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers,
             run_kwargs={},
             update_queue=update_queue,
             start_worker=False,
@@ -184,11 +184,11 @@ def step_status_panel_shows_placeholder_instance_type(context: Context) -> None:
     """
 
     async def verify_placeholder() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers,
             run_kwargs={},
             update_queue=update_queue,
             start_worker=False,
@@ -215,11 +215,11 @@ def step_status_panel_shows_placeholder_region(context: Context) -> None:
     """
 
     async def verify_placeholder() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers,
             run_kwargs={},
             update_queue=update_queue,
             start_worker=False,
@@ -236,7 +236,7 @@ def step_status_panel_shows_placeholder_region(context: Context) -> None:
 
 
 @then("status panel shows placeholder text for machine name")
-def step_status_panel_shows_placeholder_machine_name(context: Context) -> None:
+def step_status_panel_shows_placeholder_camp_name(context: Context) -> None:
     """Verify machine name widget shows placeholder text.
 
     Parameters
@@ -246,11 +246,11 @@ def step_status_panel_shows_placeholder_machine_name(context: Context) -> None:
     """
 
     async def verify_placeholder() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers,
             run_kwargs={},
             update_queue=update_queue,
             start_worker=False,
@@ -277,11 +277,11 @@ def step_status_panel_shows_placeholder_command(context: Context) -> None:
     """
 
     async def verify_placeholder() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers,
             run_kwargs={},
             update_queue=update_queue,
             start_worker=False,
@@ -325,11 +325,11 @@ def step_status_panel_shows_placeholder_ssh_connection(context: Context) -> None
     """
 
     async def verify_placeholder() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers,
             run_kwargs={},
             update_queue=update_queue,
             start_worker=False,
@@ -374,11 +374,11 @@ def step_status_panel_shows_instance_id(context: Context) -> None:
     """
 
     async def verify_instance_id() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -411,11 +411,11 @@ def step_status_panel_shows_instance_type(context: Context) -> None:
     """
 
     async def verify_instance_type() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -445,11 +445,11 @@ def step_status_panel_shows_aws_region(context: Context) -> None:
     """
 
     async def verify_region() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -469,7 +469,7 @@ def step_status_panel_shows_aws_region(context: Context) -> None:
 
 
 @then("status panel shows machine name")
-def step_status_panel_shows_machine_name(context: Context) -> None:
+def step_status_panel_shows_camp_name(context: Context) -> None:
     """Verify machine name widget shows actual machine name.
 
     Parameters
@@ -478,17 +478,17 @@ def step_status_panel_shows_machine_name(context: Context) -> None:
         Behave context
     """
 
-    async def verify_machine_name() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+    async def verify_camp_name() -> None:
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
             await pilot.pause()
-            test_config = {"machine_name": "test-machine"}
+            test_config = {"camp_name": "test-machine"}
             update_queue.put({"type": "merged_config", "payload": test_config})
             app.check_for_updates()
             await pilot.pause()
@@ -501,7 +501,7 @@ def step_status_panel_shows_machine_name(context: Context) -> None:
 
     import asyncio
 
-    asyncio.run(verify_machine_name())
+    asyncio.run(verify_camp_name())
 
 
 @then("status panel shows command")
@@ -515,11 +515,11 @@ def step_status_panel_shows_command(context: Context) -> None:
     """
 
     async def verify_command() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -566,11 +566,11 @@ def step_status_panel_shows_ssh_connection_string(context: Context) -> None:
     """
 
     async def verify_ssh_string() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -603,11 +603,11 @@ def step_status_panel_shows_static_uptime(context: Context) -> None:
     """
 
     async def verify_static_uptime() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -647,11 +647,11 @@ def step_log_panel_displays_messages(context: Context) -> None:
     """
 
     async def verify_log_messages() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -675,11 +675,11 @@ def step_log_panel_is_scrollable(context: Context) -> None:
     """
 
     async def verify_scrollable() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -704,7 +704,7 @@ def step_queue_receives_updates(context: Context) -> None:
     context.test_config = {
         "instance_type": "t3.large",
         "region": "us-west-2",
-        "machine_name": "test-box",
+        "camp_name": "test-box",
         "command": "python train.py",
         "ports": [8080, 9090],
     }
@@ -728,11 +728,11 @@ def step_status_panel_processes_in_order(context: Context) -> None:
     import asyncio
 
     async def verify_processing_order() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers,
             run_kwargs={},
             update_queue=update_queue,
             start_worker=False,
@@ -784,11 +784,11 @@ def step_widgets_reflect_both_updates(context: Context) -> None:
     import asyncio
 
     async def verify_widgets_updated() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers,
             run_kwargs={},
             update_queue=update_queue,
             start_worker=False,

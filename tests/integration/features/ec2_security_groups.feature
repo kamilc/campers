@@ -5,8 +5,8 @@ Scenario: Security group created before instance launch
   Given valid configuration
   When I launch instance
   Then security group is created in default VPC
-  And security group name starts with "moondock-"
-  And security group has tag "ManagedBy" with value "moondock"
+  And security group name starts with "campers-"
+  And security group has tag "ManagedBy" with value "campers"
 
 @smoke @dry_run
 Scenario: Security group allows SSH access

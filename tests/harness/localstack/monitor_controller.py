@@ -589,9 +589,9 @@ class MonitorController:
             self._ec2_client.create_tags(
                 Resources=[instance_id],
                 Tags=[
-                    {"Key": "MoondockSSHHost", "Value": "localhost"},
-                    {"Key": "MoondockSSHPort", "Value": str(port)},
-                    {"Key": "MoondockSSHKeyFile", "Value": str(key_file)},
+                    {"Key": "CampersSSHHost", "Value": "localhost"},
+                    {"Key": "CampersSSHPort", "Value": str(port)},
+                    {"Key": "CampersSSHKeyFile", "Value": str(key_file)},
                 ],
             )
         except Exception as exc:  # pylint: disable=broad-except

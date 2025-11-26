@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from moondock.sync import MutagenManager
+from campers.sync import MutagenManager
 
 
 @pytest.fixture
@@ -64,7 +64,7 @@ def test_check_mutagen_installed_success(mutagen_manager) -> None:
 
 def test_check_mutagen_not_installed(mutagen_manager) -> None:
     """Test error when mutagen is not installed."""
-    with patch("moondock.sync.subprocess.run", side_effect=FileNotFoundError):
+    with patch("campers.sync.subprocess.run", side_effect=FileNotFoundError):
         with pytest.raises(
             RuntimeError,
             match="Mutagen is not installed locally",
@@ -92,16 +92,16 @@ def test_cleanup_orphaned_session_exists(mutagen_manager) -> None:
             MagicMock(returncode=0),
         ]
 
-        mutagen_manager.cleanup_orphaned_session("moondock-123")
+        mutagen_manager.cleanup_orphaned_session("campers-123")
 
         assert mock_run.call_count == 2
         mock_run.assert_any_call(
-            ["mutagen", "sync", "list", "moondock-123"],
+            ["mutagen", "sync", "list", "campers-123"],
             capture_output=True,
             timeout=5,
         )
         mock_run.assert_any_call(
-            ["mutagen", "sync", "terminate", "moondock-123"],
+            ["mutagen", "sync", "terminate", "campers-123"],
             capture_output=True,
             timeout=10,
         )
@@ -112,10 +112,10 @@ def test_cleanup_orphaned_session_not_exists(mutagen_manager) -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=1)
 
-        mutagen_manager.cleanup_orphaned_session("moondock-123")
+        mutagen_manager.cleanup_orphaned_session("campers-123")
 
         mock_run.assert_called_once_with(
-            ["mutagen", "sync", "list", "moondock-123"],
+            ["mutagen", "sync", "list", "campers-123"],
             capture_output=True,
             timeout=5,
         )
@@ -124,7 +124,7 @@ def test_cleanup_orphaned_session_not_exists(mutagen_manager) -> None:
 def test_cleanup_orphaned_session_error_ignored(mutagen_manager) -> None:
     """Test cleanup ignores errors gracefully."""
     with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("mutagen", 5)):
-        mutagen_manager.cleanup_orphaned_session("moondock-123")
+        mutagen_manager.cleanup_orphaned_session("campers-123")
 
 
 def test_create_sync_session_minimal(mutagen_manager, temp_ssh_setup) -> None:
@@ -133,7 +133,7 @@ def test_create_sync_session_minimal(mutagen_manager, temp_ssh_setup) -> None:
         mock_run.return_value = MagicMock(returncode=0)
 
         mutagen_manager.create_sync_session(
-            session_name="moondock-123",
+            session_name="campers-123",
             local_path="~/myproject",
             remote_path="~/myproject",
             host="203.0.113.1",
@@ -150,7 +150,7 @@ def test_create_sync_session_minimal(mutagen_manager, temp_ssh_setup) -> None:
         assert mutagen_cmd[1] == "sync"
         assert mutagen_cmd[2] == "create"
         assert "--name" in mutagen_cmd
-        assert "moondock-123" in mutagen_cmd
+        assert "campers-123" in mutagen_cmd
         assert "--sync-mode" in mutagen_cmd
         assert "two-way-resolved" in mutagen_cmd
         assert "--ignore" in mutagen_cmd
@@ -166,7 +166,7 @@ def test_create_sync_session_with_ignore_patterns(
         mock_run.return_value = MagicMock(returncode=0)
 
         mutagen_manager.create_sync_session(
-            session_name="moondock-123",
+            session_name="campers-123",
             local_path="~/myproject",
             remote_path="~/myproject",
             host="203.0.113.1",
@@ -189,7 +189,7 @@ def test_create_sync_session_with_include_vcs(mutagen_manager, temp_ssh_setup) -
         mock_run.return_value = MagicMock(returncode=0)
 
         mutagen_manager.create_sync_session(
-            session_name="moondock-123",
+            session_name="campers-123",
             local_path="~/myproject",
             remote_path="~/myproject",
             host="203.0.113.1",
@@ -215,7 +215,7 @@ def test_create_sync_session_failure(mutagen_manager, temp_ssh_setup) -> None:
 
         with pytest.raises(RuntimeError, match="Failed to create Mutagen sync session"):
             mutagen_manager.create_sync_session(
-                session_name="moondock-123",
+                session_name="campers-123",
                 local_path="~/myproject",
                 remote_path="~/myproject",
                 host="203.0.113.1",
@@ -232,10 +232,10 @@ def test_wait_for_initial_sync_success(mutagen_manager) -> None:
             returncode=0, stdout="Status: Watching for changes"
         )
 
-        mutagen_manager.wait_for_initial_sync("moondock-123", timeout=10)
+        mutagen_manager.wait_for_initial_sync("campers-123", timeout=10)
 
         mock_run.assert_called_with(
-            ["mutagen", "sync", "list", "moondock-123"],
+            ["mutagen", "sync", "list", "campers-123"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -249,7 +249,7 @@ def test_wait_for_initial_sync_timeout(mutagen_manager) -> None:
 
         with patch("time.sleep"):
             with pytest.raises(RuntimeError, match="Mutagen sync timed out"):
-                mutagen_manager.wait_for_initial_sync("moondock-123", timeout=1)
+                mutagen_manager.wait_for_initial_sync("campers-123", timeout=1)
 
 
 def test_wait_for_initial_sync_check_failure(mutagen_manager) -> None:
@@ -260,7 +260,7 @@ def test_wait_for_initial_sync_check_failure(mutagen_manager) -> None:
         )
 
         with pytest.raises(RuntimeError, match="Failed to check sync status"):
-            mutagen_manager.wait_for_initial_sync("moondock-123", timeout=10)
+            mutagen_manager.wait_for_initial_sync("campers-123", timeout=10)
 
 
 def test_terminate_session_success(mutagen_manager) -> None:
@@ -268,10 +268,10 @@ def test_terminate_session_success(mutagen_manager) -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
 
-        mutagen_manager.terminate_session("moondock-123")
+        mutagen_manager.terminate_session("campers-123")
 
         mock_run.assert_called_once_with(
-            ["mutagen", "sync", "terminate", "moondock-123"],
+            ["mutagen", "sync", "terminate", "campers-123"],
             capture_output=True,
             timeout=10,
         )
@@ -280,14 +280,14 @@ def test_terminate_session_success(mutagen_manager) -> None:
 def test_terminate_session_error_ignored(mutagen_manager) -> None:
     """Test session termination ignores errors."""
     with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("mutagen", 10)):
-        mutagen_manager.terminate_session("moondock-123")
+        mutagen_manager.terminate_session("campers-123")
 
 
 def test_create_sync_session_invalid_username(mutagen_manager) -> None:
     """Test creating sync session with invalid username."""
     with pytest.raises(ValueError, match="Invalid SSH username"):
         mutagen_manager.create_sync_session(
-            session_name="moondock-123",
+            session_name="campers-123",
             local_path="~/myproject",
             remote_path="~/myproject",
             host="203.0.113.1",
@@ -300,7 +300,7 @@ def test_create_sync_session_invalid_host(mutagen_manager) -> None:
     """Test creating sync session with invalid host format."""
     with pytest.raises(ValueError, match="Invalid host"):
         mutagen_manager.create_sync_session(
-            session_name="moondock-123",
+            session_name="campers-123",
             local_path="~/myproject",
             remote_path="~/myproject",
             host="invalid@host",

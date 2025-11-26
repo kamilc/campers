@@ -1,4 +1,4 @@
-"""Behave environment configuration for moondock tests."""
+"""Behave environment configuration for campers tests."""
 
 import importlib.util
 import logging
@@ -341,8 +341,8 @@ def check_mutagen_daemon_health() -> bool:
     return False
 
 
-SSH_BLOCK_START = "# MOONDOCK_TEST_BLOCK_START"
-SSH_BLOCK_END = "# MOONDOCK_TEST_BLOCK_END"
+SSH_BLOCK_START = "# CAMPERS_TEST_BLOCK_START"
+SSH_BLOCK_END = "# CAMPERS_TEST_BLOCK_END"
 
 
 def get_localhost_config_block() -> str:
@@ -570,7 +570,7 @@ def _port_is_free(port: int) -> bool:
 def _stop_portforward_managers_via_gc() -> None:
     """Best-effort stop of any PortForwardManager instances reachable via GC."""
     try:
-        from moondock.portforward import PortForwardManager
+        from campers.portforward import PortForwardManager
     except Exception:  # pragma: no cover - defensive import
         return
 
@@ -606,8 +606,8 @@ def before_all(context: Context) -> None:
     tmp_dir = project_root / "tmp" / "test-artifacts"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    moondock_dir = project_root / "tmp" / "test-moondock"
-    moondock_dir.mkdir(parents=True, exist_ok=True)
+    campers_dir = project_root / "tmp" / "test-campers"
+    campers_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         import boto3
@@ -641,7 +641,7 @@ def before_all(context: Context) -> None:
     except Exception as e:
         logger.warning(f"Failed to clean up LocalStack before tests: {e}")
 
-    keys_dir = moondock_dir / "keys"
+    keys_dir = campers_dir / "keys"
 
     if keys_dir.exists():
         for pem_file in keys_dir.glob("*.pem"):
@@ -654,21 +654,21 @@ def before_all(context: Context) -> None:
     context.project_root = project_root
     context.tmp_dir = tmp_dir
 
-    os.environ["MOONDOCK_DIR"] = str(moondock_dir)
+    os.environ["CAMPERS_DIR"] = str(campers_dir)
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
-    moondock_script = project_root / "moondock" / "__main__.py"
-    spec = importlib.util.spec_from_file_location("moondock_module", moondock_script)
-    moondock_module = importlib.util.module_from_spec(spec)
-    sys.modules["moondock_module"] = moondock_module
-    spec.loader.exec_module(moondock_module)
+    campers_script = project_root / "campers" / "__main__.py"
+    spec = importlib.util.spec_from_file_location("campers_module", campers_script)
+    campers_module = importlib.util.module_from_spec(spec)
+    sys.modules["campers_module"] = campers_module
+    spec.loader.exec_module(campers_module)
 
-    context.moondock_module = moondock_module
+    context.campers_module = campers_module
 
 
-    logging.info("Installing moondock in editable mode...")
+    logging.info("Installing campers in editable mode...")
     result = subprocess.run(
         ["uv", "pip", "install", "-e", "."],
         capture_output=True,
@@ -678,7 +678,7 @@ def before_all(context: Context) -> None:
 
     if result.returncode != 0:
         error_msg = (
-            "Failed to install moondock in editable mode. "
+            "Failed to install campers in editable mode. "
             "This is required for @localstack graceful shutdown tests.\n"
             f"stderr: {result.stderr}\n"
             f"stdout: {result.stdout}"
@@ -686,7 +686,7 @@ def before_all(context: Context) -> None:
         logging.error(error_msg)
         raise RuntimeError(error_msg)
 
-    logging.info("Moondock installed successfully in editable mode")
+    logging.info("Campers installed successfully in editable mode")
 
     is_healthy = check_mutagen_daemon_health()
     if not is_healthy:
@@ -734,8 +734,8 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         os.environ["AWS_ACCESS_KEY_ID"] = "testing"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-        os.environ["MOONDOCK_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
-        os.environ["MOONDOCK_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
+        os.environ["CAMPERS_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
+        os.environ["CAMPERS_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
 
         import time
         time.sleep(2)
@@ -926,8 +926,8 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
     if is_localstack_scenario:
         if "error" in scenario.tags:
-            os.environ["MOONDOCK_SSH_TIMEOUT"] = "2"
-            os.environ["MOONDOCK_SSH_MAX_RETRIES"] = "3"
+            os.environ["CAMPERS_SSH_TIMEOUT"] = "2"
+            os.environ["CAMPERS_SSH_MAX_RETRIES"] = "3"
             logger.info("Using reduced SSH retry config for @error scenario")
 
     log_handler = LogCapture()
@@ -935,24 +935,24 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.log_handler = log_handler
     context.log_records = log_handler.records
 
-    moondock_ec2_logger = logging.getLogger("moondock.ec2")
-    moondock_ec2_logger.addHandler(log_handler)
-    moondock_ec2_logger.setLevel(logging.DEBUG)
+    campers_ec2_logger = logging.getLogger("campers.ec2")
+    campers_ec2_logger.addHandler(log_handler)
+    campers_ec2_logger.setLevel(logging.DEBUG)
 
-    moondock_ssh_logger = logging.getLogger("moondock.ssh")
-    moondock_ssh_logger.addHandler(log_handler)
-    moondock_ssh_logger.setLevel(logging.DEBUG)
+    campers_ssh_logger = logging.getLogger("campers.ssh")
+    campers_ssh_logger.addHandler(log_handler)
+    campers_ssh_logger.setLevel(logging.DEBUG)
 
     if is_localstack_scenario or "dry_run" in scenario.tags:
-        moondock_portforward_logger = logging.getLogger("moondock.portforward")
-        moondock_portforward_logger.addHandler(log_handler)
-        moondock_portforward_logger.setLevel(logging.INFO)
-        moondock_portforward_logger.propagate = True
+        campers_portforward_logger = logging.getLogger("campers.portforward")
+        campers_portforward_logger.addHandler(log_handler)
+        campers_portforward_logger.setLevel(logging.INFO)
+        campers_portforward_logger.propagate = True
 
-        moondock_sync_logger = logging.getLogger("moondock.sync")
-        moondock_sync_logger.addHandler(log_handler)
-        moondock_sync_logger.setLevel(logging.INFO)
-        moondock_sync_logger.propagate = True
+        campers_sync_logger = logging.getLogger("campers.sync")
+        campers_sync_logger.addHandler(log_handler)
+        campers_sync_logger.setLevel(logging.INFO)
+        campers_sync_logger.propagate = True
 
     root_logger = logging.getLogger()
     root_logger.addHandler(log_handler)
@@ -1000,8 +1000,8 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.infrastructure_check = None
     context.initial_sg_ids = None
     context.keys_dir = None
-    context.machine_name = None
-    context.moondock_path = None
+    context.camp_name = None
+    context.campers_path = None
     context.no_ami_found = None
     context.rapid_test_execution = None
 
@@ -1023,7 +1023,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.mock_terminate = None
     context.time_test_instances = None
     context.test_instance_id_mapping = None
-    context.long_machine_config = None
+    context.long_camp_config = None
     context.filter_region = None
     context.region_patches = None
     context.patches = []
@@ -1035,7 +1035,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.stopped_instances = []
     context.created_instance_ids = []
 
-    context.mock_moondock = context.moondock_module.Moondock()
+    context.mock_campers = context.campers_module.Campers()
     context.cleanup_order = []
 
     if "no_credentials" not in scenario.tags and not is_localstack_scenario:
@@ -1043,11 +1043,11 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
         try:
             security_groups = ec2_client.describe_security_groups(
-                Filters=[{"Name": "group-name", "Values": ["moondock-*"]}]
+                Filters=[{"Name": "group-name", "Values": ["campers-*"]}]
             )
 
             for sg in security_groups.get("SecurityGroups", []):
-                if sg["GroupName"].startswith("moondock-"):
+                if sg["GroupName"].startswith("campers-"):
                     try:
                         ec2_client.delete_security_group(GroupId=sg["GroupId"])
                         logger.debug(f"Cleaned up security group: {sg['GroupName']}")
@@ -1062,7 +1062,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
             key_pairs = ec2_client.describe_key_pairs()
 
             for kp in key_pairs.get("KeyPairs", []):
-                if kp["KeyName"].startswith("moondock-"):
+                if kp["KeyName"].startswith("campers-"):
                     try:
                         ec2_client.delete_key_pair(KeyName=kp["KeyName"])
                         logger.debug(f"Cleaned up key pair: {kp['KeyName']}")
@@ -1205,17 +1205,17 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
     try:
         if hasattr(context, "log_handler") and context.log_handler:
-            moondock_ec2_logger = logging.getLogger("moondock.ec2")
-            moondock_ec2_logger.removeHandler(context.log_handler)
+            campers_ec2_logger = logging.getLogger("campers.ec2")
+            campers_ec2_logger.removeHandler(context.log_handler)
 
-            moondock_ssh_logger = logging.getLogger("moondock.ssh")
-            moondock_ssh_logger.removeHandler(context.log_handler)
+            campers_ssh_logger = logging.getLogger("campers.ssh")
+            campers_ssh_logger.removeHandler(context.log_handler)
 
-            moondock_portforward_logger = logging.getLogger("moondock.portforward")
-            moondock_portforward_logger.removeHandler(context.log_handler)
+            campers_portforward_logger = logging.getLogger("campers.portforward")
+            campers_portforward_logger.removeHandler(context.log_handler)
 
-            moondock_sync_logger = logging.getLogger("moondock.sync")
-            moondock_sync_logger.removeHandler(context.log_handler)
+            campers_sync_logger = logging.getLogger("campers.sync")
+            campers_sync_logger.removeHandler(context.log_handler)
 
             root_logger = logging.getLogger()
             root_logger.removeHandler(context.log_handler)
@@ -1259,8 +1259,8 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         logger.error(f"Unexpected error cleaning key_file: {e}", exc_info=True)
 
     try:
-        moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-        keys_dir = Path(moondock_dir) / "keys"
+        campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+        keys_dir = Path(campers_dir) / "keys"
 
         if keys_dir.exists() and not list(keys_dir.iterdir()):
             keys_dir.rmdir()
@@ -1305,43 +1305,43 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         logger.error(f"Unexpected error deleting env_config_file: {e}", exc_info=True)
 
     try:
-        if "MOONDOCK_CONFIG" in os.environ:
-            del os.environ["MOONDOCK_CONFIG"]
+        if "CAMPERS_CONFIG" in os.environ:
+            del os.environ["CAMPERS_CONFIG"]
     except KeyError as e:
-        logger.debug(f"Expected error removing MOONDOCK_CONFIG: {e}")
+        logger.debug(f"Expected error removing CAMPERS_CONFIG: {e}")
     except Exception as e:
-        logger.error(f"Unexpected error removing MOONDOCK_CONFIG: {e}", exc_info=True)
+        logger.error(f"Unexpected error removing CAMPERS_CONFIG: {e}", exc_info=True)
 
     try:
-        if "MOONDOCK_NO_PUBLIC_IP" in os.environ:
-            del os.environ["MOONDOCK_NO_PUBLIC_IP"]
+        if "CAMPERS_NO_PUBLIC_IP" in os.environ:
+            del os.environ["CAMPERS_NO_PUBLIC_IP"]
     except KeyError as e:
-        logger.debug(f"Expected error removing MOONDOCK_NO_PUBLIC_IP: {e}")
+        logger.debug(f"Expected error removing CAMPERS_NO_PUBLIC_IP: {e}")
     except Exception as e:
         logger.error(
-            f"Unexpected error removing MOONDOCK_NO_PUBLIC_IP: {e}", exc_info=True
+            f"Unexpected error removing CAMPERS_NO_PUBLIC_IP: {e}", exc_info=True
         )
 
     try:
-        if "MOONDOCK_SYNC_TIMEOUT" in os.environ:
-            del os.environ["MOONDOCK_SYNC_TIMEOUT"]
+        if "CAMPERS_SYNC_TIMEOUT" in os.environ:
+            del os.environ["CAMPERS_SYNC_TIMEOUT"]
     except KeyError as e:
-        logger.debug(f"Expected error removing MOONDOCK_SYNC_TIMEOUT: {e}")
+        logger.debug(f"Expected error removing CAMPERS_SYNC_TIMEOUT: {e}")
     except Exception as e:
         logger.error(
-            f"Unexpected error removing MOONDOCK_SYNC_TIMEOUT: {e}", exc_info=True
+            f"Unexpected error removing CAMPERS_SYNC_TIMEOUT: {e}", exc_info=True
         )
 
-    cleanup_env_var("MOONDOCK_MUTAGEN_NOT_INSTALLED", logger)
-    cleanup_env_var("MOONDOCK_TUNNEL_FAIL_PORT", logger)
-    cleanup_env_var("MOONDOCK_PORT_IN_USE", logger)
-    cleanup_env_var("MOONDOCK_SIMULATE_INTERRUPT", logger)
-    cleanup_env_var("MOONDOCK_TEST_MODE", logger)
+    cleanup_env_var("CAMPERS_MUTAGEN_NOT_INSTALLED", logger)
+    cleanup_env_var("CAMPERS_TUNNEL_FAIL_PORT", logger)
+    cleanup_env_var("CAMPERS_PORT_IN_USE", logger)
+    cleanup_env_var("CAMPERS_SIMULATE_INTERRUPT", logger)
+    cleanup_env_var("CAMPERS_TEST_MODE", logger)
     cleanup_env_var("AWS_ENDPOINT_URL", logger)
-    cleanup_env_var("MOONDOCK_SSH_DELAY_SECONDS", logger)
-    cleanup_env_var("MOONDOCK_SSH_BLOCK_CONNECTIONS", logger)
-    cleanup_env_var("MOONDOCK_SSH_TIMEOUT", logger)
-    cleanup_env_var("MOONDOCK_SSH_MAX_RETRIES", logger)
+    cleanup_env_var("CAMPERS_SSH_DELAY_SECONDS", logger)
+    cleanup_env_var("CAMPERS_SSH_BLOCK_CONNECTIONS", logger)
+    cleanup_env_var("CAMPERS_SSH_TIMEOUT", logger)
+    cleanup_env_var("CAMPERS_SSH_MAX_RETRIES", logger)
 
     try:
         if hasattr(context, "port_forward_manager") and context.port_forward_manager:
@@ -1405,7 +1405,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                 sessions_output = list_mutagen_sessions_with_retry(max_attempts=3)
                 if sessions_output:
                     for line in sessions_output.split("\n"):
-                        if "moondock-" in line:
+                        if "campers-" in line:
                             parts = line.split()
                             if parts:
                                 session_name = parts[0]
@@ -1417,12 +1417,12 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                 else:
                     logger.warning("Could not list Mutagen sessions, skipping cleanup")
 
-                moondock_dir = os.environ.get("MOONDOCK_DIR")
-                if moondock_dir and "tmp/test-moondock" in moondock_dir:
-                    test_dir = Path(moondock_dir)
+                campers_dir = os.environ.get("CAMPERS_DIR")
+                if campers_dir and "tmp/test-campers" in campers_dir:
+                    test_dir = Path(campers_dir)
                     if test_dir.exists():
                         shutil.rmtree(test_dir, ignore_errors=True)
-                        logger.debug(f"Cleaned up test MOONDOCK_DIR: {test_dir}")
+                        logger.debug(f"Cleaned up test CAMPERS_DIR: {test_dir}")
 
             if hasattr(context, "orphaned_temp_dir") and context.orphaned_temp_dir:
                 orphan_dir = Path(context.orphaned_temp_dir)
@@ -1549,10 +1549,10 @@ def after_all(context: Context) -> None:
         logger.warning(f"Failed to remove test SSH config block: {e}")
 
     if hasattr(context, "project_root"):
-        moondock_dir = context.project_root / "tmp" / "test-moondock"
+        campers_dir = context.project_root / "tmp" / "test-campers"
 
-        if moondock_dir.exists():
-            keys_dir = moondock_dir / "keys"
+        if campers_dir.exists():
+            keys_dir = campers_dir / "keys"
 
             if keys_dir.exists():
                 for pem_file in keys_dir.glob("*.pem"):
@@ -1562,8 +1562,8 @@ def after_all(context: Context) -> None:
                     except Exception as e:
                         logger.warning(f"Final cleanup failed for {pem_file}: {e}")
 
-    if "MOONDOCK_DIR" in os.environ:
-        del os.environ["MOONDOCK_DIR"]
+    if "CAMPERS_DIR" in os.environ:
+        del os.environ["CAMPERS_DIR"]
 
     for key in [
         "AWS_ACCESS_KEY_ID",

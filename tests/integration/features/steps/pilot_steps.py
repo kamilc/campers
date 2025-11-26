@@ -20,7 +20,7 @@ from textual.widgets import Log
 
 from tests.integration.features.steps.utils import run_async_test
 from tests.harness.utils.system_snapshot import gather_system_snapshot
-from moondock.__main__ import Moondock, MoondockTUI
+from campers.__main__ import Campers, CampersTUI
 
 logger = logging.getLogger(__name__)
 
@@ -68,19 +68,19 @@ def step_config_file_with_defaults_section(context: Context) -> None:
                 "disk_size": 50,
                 "ports": [],
             },
-            "machines": {},
+            "camps": {},
         }
 
 
-@given('a config file with machine "{machine_name}" defined')
-def step_config_file_with_machine(context: Context, machine_name: str) -> None:
+@given('a config file with machine "{camp_name}" defined')
+def step_config_file_with_machine(context: Context, camp_name: str) -> None:
     """Create a config file with a machine definition.
 
     Parameters
     ----------
     context : Context
         Behave context object
-    machine_name : str
+    camp_name : str
         Name of the machine to define
     """
     if not hasattr(context, "config_data") or context.config_data is None:
@@ -91,21 +91,21 @@ def step_config_file_with_machine(context: Context, machine_name: str) -> None:
                 "disk_size": 50,
                 "ports": [],
             },
-            "machines": {},
+            "camps": {},
         }
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    if machine_name not in context.config_data["machines"]:
-        context.config_data["machines"][machine_name] = {}
+    if camp_name not in context.config_data["camps"]:
+        context.config_data["camps"][camp_name] = {}
 
-    context.machine_name = machine_name
+    context.camp_name = camp_name
 
 
-@when("I launch the Moondock TUI with the config file")
+@when("I launch the Campers TUI with the config file")
 def step_launch_tui_with_config(context: Context) -> None:
-    """Launch the Moondock TUI with the config file.
+    """Launch the Campers TUI with the config file.
 
     Parameters
     ----------
@@ -122,27 +122,27 @@ def step_launch_tui_with_config(context: Context) -> None:
     logger.info(f"Created config file: {context.config_path}")
 
 
-@when('I simulate running the "{machine_name}" in the TUI')
-def step_simulate_running_machine_in_tui(context: Context, machine_name: str) -> None:
+@when('I simulate running the "{camp_name}" in the TUI')
+def step_simulate_running_machine_in_tui(context: Context, camp_name: str) -> None:
     """Simulate running a machine in the TUI using Textual Pilot.
 
     Parameters
     ----------
     context : Context
         Behave context object
-    machine_name : str
+    camp_name : str
         Name of the machine to run
     """
     if not hasattr(context, "config_path"):
         raise AssertionError(
-            "No config path found. Run 'I launch the Moondock TUI with the config file' step first."
+            "No config path found. Run 'I launch the Campers TUI with the config file' step first."
         )
 
     max_wait = derive_timeout_from_scenario(context)
-    logger.info(f"=== STARTING TUI TEST FOR MACHINE: {machine_name} ===")
+    logger.info(f"=== STARTING TUI TEST FOR MACHINE: {camp_name} ===")
     logger.info(f"TUI timeout derived from scenario: {max_wait} seconds")
     result = run_tui_test_with_machine(
-        machine_name, context.config_path, max_wait, context
+        camp_name, context.config_path, max_wait, context
     )
     context.tui_result = result
 
@@ -156,10 +156,10 @@ def step_simulate_running_machine_in_tui(context: Context, machine_name: str) ->
             from tests.integration.features.steps.port_forwarding_steps import (
                 start_http_servers_for_machine_ports,
             )
-            logger.info(f"Starting HTTP servers for machine: {machine_name}")
+            logger.info(f"Starting HTTP servers for machine: {camp_name}")
             start_http_servers_for_machine_ports(context)
 
-    logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {machine_name} ===")
+    logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {camp_name} ===")
     logger.info(f"TUI result status: {result.get('status', 'UNKNOWN')}")
     logger.info(f"TUI log length: {len(result.get('log_text', ''))} characters")
 
@@ -208,19 +208,19 @@ def setup_test_environment(
         Dictionary containing original environment variable values
     """
     original_values = {
-        "MOONDOCK_TEST_MODE": os.environ.get("MOONDOCK_TEST_MODE"),
-        "MOONDOCK_CONFIG": os.environ.get("MOONDOCK_CONFIG"),
-        "MOONDOCK_HARNESS_MANAGED": os.environ.get("MOONDOCK_HARNESS_MANAGED"),
+        "CAMPERS_TEST_MODE": os.environ.get("CAMPERS_TEST_MODE"),
+        "CAMPERS_CONFIG": os.environ.get("CAMPERS_CONFIG"),
+        "CAMPERS_HARNESS_MANAGED": os.environ.get("CAMPERS_HARNESS_MANAGED"),
         "AWS_ENDPOINT_URL": os.environ.get("AWS_ENDPOINT_URL"),
         "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
         "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
         "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION"),
     }
 
-    behave_context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
-    behave_context.harness.services.configuration_env.set("MOONDOCK_HARNESS_MANAGED", "1")
+    behave_context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "0")
+    behave_context.harness.services.configuration_env.set("CAMPERS_HARNESS_MANAGED", "1")
     behave_context.harness.services.configuration_env.set(
-        "MOONDOCK_CONFIG", config_path
+        "CAMPERS_CONFIG", config_path
     )
 
     for key in [
@@ -272,7 +272,7 @@ def restore_environment(
 
 
 async def poll_tui_with_unified_timeout(
-    app: MoondockTUI, pilot: Any, max_wait: int, behave_context: Context | None = None
+    app: CampersTUI, pilot: Any, max_wait: int, behave_context: Context | None = None
 ) -> None:
     """Poll TUI with unified timeout budget for all conditions.
 
@@ -283,8 +283,8 @@ async def poll_tui_with_unified_timeout(
 
     Parameters
     ----------
-    app : MoondockTUI
-        The Moondock TUI application instance
+    app : CampersTUI
+        The Campers TUI application instance
     pilot : Any
         Textual Pilot instance for controlling the app
     max_wait : int
@@ -411,13 +411,13 @@ async def poll_tui_with_unified_timeout(
     )
 
 
-def extract_log_lines(app: MoondockTUI) -> tuple[list[str], str]:
+def extract_log_lines(app: CampersTUI) -> tuple[list[str], str]:
     """Extract log content from TUI.
 
     Parameters
     ----------
-    app : MoondockTUI
-        The Moondock TUI application instance
+    app : CampersTUI
+        The Campers TUI application instance
 
     Returns
     -------
@@ -436,7 +436,7 @@ def extract_log_lines(app: MoondockTUI) -> tuple[list[str], str]:
 
 
 def run_tui_test_with_machine(
-    machine_name: str,
+    camp_name: str,
     config_path: str,
     max_wait: int = 90,
     behave_context: Context | None = None,
@@ -449,7 +449,7 @@ def run_tui_test_with_machine(
 
     Parameters
     ----------
-    machine_name : str
+    camp_name : str
         Name of the machine to run
     config_path : str
         Path to the config file
@@ -466,7 +466,7 @@ def run_tui_test_with_machine(
     timeout_triggered = threading.Event()
     test_completed = threading.Event()
     loop_holder: dict[str, asyncio.AbstractEventLoop] = {}
-    app_holder: dict[str, MoondockTUI] = {}
+    app_holder: dict[str, CampersTUI] = {}
 
     def timeout_handler():
         timeout_triggered.set()
@@ -514,7 +514,7 @@ def run_tui_test_with_machine(
     timer = threading.Timer(max_wait, timeout_handler)
 
     async def run_tui_test() -> dict[str, Any]:
-        logger.info("=== TUI TEST START === (machine: %s)", machine_name)
+        logger.info("=== TUI TEST START === (machine: %s)", camp_name)
         logger.info(f"[TIMEOUT-ENFORCER] Starting test with {max_wait}s timeout")
         loop_holder["loop"] = asyncio.get_running_loop()
         timer.start()
@@ -540,12 +540,12 @@ def run_tui_test_with_machine(
 
             try:
                 async with mocking_context_manager():
-                    moondock = Moondock()
+                    campers = Campers()
                     update_queue: queue.Queue = queue.Queue(maxsize=100)
 
-                    app = MoondockTUI(
-                        moondock_instance=moondock,
-                        run_kwargs={"machine_name": machine_name, "json_output": False},
+                    app = CampersTUI(
+                        campers_instance=campers,
+                        run_kwargs={"camp_name": camp_name, "json_output": False},
                         update_queue=update_queue,
                     )
                     app_holder["app"] = app
@@ -574,7 +574,7 @@ def run_tui_test_with_machine(
 
                                 logger.info(
                                     "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
-                                    machine_name,
+                                    camp_name,
                                     final_status,
                                     len(log_text),
                                 )

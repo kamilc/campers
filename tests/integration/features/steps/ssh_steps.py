@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 from behave import given, then, when
 from behave.runner import Context
 
-from moondock.ssh import SSHManager
+from campers.ssh import SSHManager
 
 logger = logging.getLogger(__name__)
 
@@ -57,30 +57,30 @@ def step_ec2_no_ssh_access(context: Context) -> None:
     context.ssh_always_fails = True
 
 
-@given('MOONDOCK_TEST_MODE is "{value}"')
-def step_moondock_test_mode(context: Context, value: str) -> None:
-    """Set MOONDOCK_TEST_MODE environment variable."""
+@given('CAMPERS_TEST_MODE is "{value}"')
+def step_campers_test_mode(context: Context, value: str) -> None:
+    """Set CAMPERS_TEST_MODE environment variable."""
     if hasattr(context, "harness") and context.harness is not None:
-        context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", value)
+        context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", value)
     else:
-        os.environ["MOONDOCK_TEST_MODE"] = value
+        os.environ["CAMPERS_TEST_MODE"] = value
     context.test_mode_enabled = value == "1"
 
 
-@given('machine "{machine_name}" has no public IP')
-def step_machine_no_public_ip(context: Context, machine_name: str) -> None:
+@given('machine "{camp_name}" has no public IP')
+def step_machine_no_public_ip(context: Context, camp_name: str) -> None:
     """Set up machine configuration to return no public IP."""
     if not hasattr(context, "config_data") or context.config_data is None:
-        context.config_data = {"defaults": {}, "machines": {}}
+        context.config_data = {"defaults": {}, "camps": {}}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    if machine_name not in context.config_data["machines"]:
-        context.config_data["machines"][machine_name] = {}
+    if camp_name not in context.config_data["camps"]:
+        context.config_data["camps"][camp_name] = {}
 
     context.no_public_ip = True
-    context.harness.services.configuration_env.set("MOONDOCK_NO_PUBLIC_IP", "1")
+    context.harness.services.configuration_env.set("CAMPERS_NO_PUBLIC_IP", "1")
 
 
 @when("SSH connection is attempted")
@@ -95,9 +95,9 @@ def step_ssh_connection_attempted(context: Context) -> None:
     context.retry_delays = []
 
     with (
-        patch("moondock.ssh.paramiko.SSHClient") as mock_ssh_client,
-        patch("moondock.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
-        patch("moondock.ssh.time.sleep") as mock_sleep,
+        patch("campers.ssh.paramiko.SSHClient") as mock_ssh_client,
+        patch("campers.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch("campers.ssh.time.sleep") as mock_sleep,
     ):
         mock_client = MagicMock()
         mock_ssh_client.return_value = mock_client
@@ -139,9 +139,9 @@ def step_ssh_connection_attempted_with_retries(context: Context, retries: int) -
     context.ssh_manager = ssh_manager
 
     with (
-        patch("moondock.ssh.paramiko.SSHClient") as mock_ssh_client,
-        patch("moondock.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
-        patch("moondock.ssh.time.sleep"),
+        patch("campers.ssh.paramiko.SSHClient") as mock_ssh_client,
+        patch("campers.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch("campers.ssh.time.sleep"),
     ):
         mock_client = MagicMock()
         mock_ssh_client.return_value = mock_client
@@ -365,19 +365,19 @@ def step_setup_script_exit_code(context: Context, exit_code: int) -> None:
         )
 
 
-@given('machine "{machine_name}" has multi-line setup_script with shell features')
+@given('machine "{camp_name}" has multi-line setup_script with shell features')
 def step_machine_has_multiline_setup_script(
-    context: Context, machine_name: str
+    context: Context, camp_name: str
 ) -> None:
     """Set up machine with multi-line setup_script."""
     from tests.integration.features.steps.cli_steps import ensure_machine_exists
 
-    ensure_machine_exists(context, machine_name)
+    ensure_machine_exists(context, camp_name)
     script = """echo "Installing dependencies..."
 sudo apt update > /dev/null
 sudo apt install -y python3-pip
 pip3 install uv"""
-    context.config_data["machines"][machine_name]["setup_script"] = script
+    context.config_data["camps"][camp_name]["setup_script"] = script
 
 
 @then("setup_script executes successfully")
@@ -397,7 +397,7 @@ def step_command_executes_after_setup(context: Context) -> None:
 def step_defaults_have_setup_script(context: Context, script: str) -> None:
     """Set up defaults section with setup_script."""
     if not hasattr(context, "config_data") or context.config_data is None:
-        context.config_data = {"defaults": {}, "machines": {}}
+        context.config_data = {"defaults": {}, "camps": {}}
 
     if "defaults" not in context.config_data:
         context.config_data["defaults"] = {}
@@ -417,12 +417,12 @@ def step_command_does_not_execute(context: Context, command: str) -> None:
     assert context.exit_code != 0
 
 
-@given('machine "{machine_name}" has no setup_script')
-def step_machine_has_no_setup_script(context: Context, machine_name: str) -> None:
+@given('machine "{camp_name}" has no setup_script')
+def step_machine_has_no_setup_script(context: Context, camp_name: str) -> None:
     """Set up machine without setup_script."""
     from tests.integration.features.steps.cli_steps import ensure_machine_exists
 
-    ensure_machine_exists(context, machine_name)
+    ensure_machine_exists(context, camp_name)
 
 
 @then("setup_script execution is skipped")
@@ -450,12 +450,12 @@ def step_status_message_logged(context: Context, message: str) -> None:
     )
 
 
-@given('machine "{machine_name}" has no command')
-def step_machine_has_no_command_field(context: Context, machine_name: str) -> None:
+@given('machine "{camp_name}" has no command')
+def step_machine_has_no_command_field(context: Context, camp_name: str) -> None:
     """Set up machine without command field."""
     from tests.integration.features.steps.cli_steps import ensure_machine_exists
 
-    ensure_machine_exists(context, machine_name)
+    ensure_machine_exists(context, camp_name)
 
 
 @given("SSH container will delay startup by {seconds:d} seconds")
@@ -470,7 +470,7 @@ def step_ssh_container_delayed_startup(context: Context, seconds: int) -> None:
         Number of seconds to delay SSH startup
     """
     context.harness.services.configuration_env.set(
-        "MOONDOCK_SSH_DELAY_SECONDS", str(seconds)
+        "CAMPERS_SSH_DELAY_SECONDS", str(seconds)
     )
     logger.info(f"SSH container will delay startup by {seconds} seconds")
 
@@ -485,7 +485,7 @@ def step_ssh_container_not_accessible(context: Context) -> None:
         Behave context object
     """
     context.harness.services.configuration_env.set(
-        "MOONDOCK_SSH_BLOCK_CONNECTIONS", "1"
+        "CAMPERS_SSH_BLOCK_CONNECTIONS", "1"
     )
     logger.info("SSH container will be created without port mapping (blocked)")
 

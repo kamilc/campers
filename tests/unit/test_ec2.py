@@ -7,7 +7,7 @@ import pytest
 from botocore.exceptions import ClientError
 from moto import mock_aws
 
-from moondock.ec2 import EC2Manager
+from campers.ec2 import EC2Manager
 
 
 @pytest.fixture(scope="function")
@@ -91,8 +91,8 @@ def cleanup_keys() -> list[Path]:
         if Path(key_file).exists():
             Path(key_file).unlink()
 
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    keys_dir = Path(moondock_dir) / "keys"
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    keys_dir = Path(campers_dir) / "keys"
 
     if keys_dir.exists() and not list(keys_dir.iterdir()):
         keys_dir.rmdir()
@@ -116,29 +116,29 @@ def test_create_key_pair(ec2_manager, cleanup_keys):
     key_name, key_file = ec2_manager.create_key_pair(unique_id)
     cleanup_keys.append(key_file)
 
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    expected_key_file = Path(moondock_dir) / "keys" / f"{unique_id}.pem"
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    expected_key_file = Path(campers_dir) / "keys" / f"{unique_id}.pem"
 
-    assert key_name == f"moondock-{unique_id}"
+    assert key_name == f"campers-{unique_id}"
     assert key_file == expected_key_file
     assert key_file.exists()
     assert oct(key_file.stat().st_mode)[-3:] == "600"
 
     key_pairs = ec2_manager.ec2_client.describe_key_pairs()
     assert len(key_pairs["KeyPairs"]) == 1
-    assert key_pairs["KeyPairs"][0]["KeyName"] == f"moondock-{unique_id}"
+    assert key_pairs["KeyPairs"][0]["KeyName"] == f"campers-{unique_id}"
 
 
 def test_create_key_pair_deletes_existing(ec2_manager, cleanup_keys):
     """Test key pair creation deletes existing key with same name."""
     unique_id = str(int(time.time()))
 
-    ec2_manager.ec2_client.create_key_pair(KeyName=f"moondock-{unique_id}")
+    ec2_manager.ec2_client.create_key_pair(KeyName=f"campers-{unique_id}")
 
     key_name, key_file = ec2_manager.create_key_pair(unique_id)
     cleanup_keys.append(key_file)
 
-    assert key_name == f"moondock-{unique_id}"
+    assert key_name == f"campers-{unique_id}"
 
     key_pairs = ec2_manager.ec2_client.describe_key_pairs()
     assert len(key_pairs["KeyPairs"]) == 1
@@ -156,11 +156,11 @@ def test_create_security_group(ec2_manager):
     sgs = ec2_manager.ec2_client.describe_security_groups(GroupIds=[sg_id])
     sg = sgs["SecurityGroups"][0]
 
-    assert sg["GroupName"] == f"moondock-{unique_id}"
-    assert sg["Description"] == f"Moondock security group {unique_id}"
+    assert sg["GroupName"] == f"campers-{unique_id}"
+    assert sg["Description"] == f"Campers security group {unique_id}"
 
     assert any(
-        tag["Key"] == "ManagedBy" and tag["Value"] == "moondock"
+        tag["Key"] == "ManagedBy" and tag["Value"] == "campers"
         for tag in sg.get("Tags", [])
     )
 
@@ -182,7 +182,7 @@ def test_create_security_group_deletes_existing(ec2_manager):
     vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
     response = ec2_manager.ec2_client.create_security_group(
-        GroupName=f"moondock-{unique_id}",
+        GroupName=f"campers-{unique_id}",
         Description="Old SG",
         VpcId=vpc_id,
     )
@@ -194,7 +194,7 @@ def test_create_security_group_deletes_existing(ec2_manager):
 
     sgs = ec2_manager.ec2_client.describe_security_groups()
     sg_names = [sg["GroupName"] for sg in sgs["SecurityGroups"]]
-    assert sg_names.count(f"moondock-{unique_id}") == 1
+    assert sg_names.count(f"campers-{unique_id}") == 1
 
 
 def test_launch_instance_success(ec2_manager, cleanup_keys, registered_ami):
@@ -203,7 +203,7 @@ def test_launch_instance_success(ec2_manager, cleanup_keys, registered_ami):
         "instance_type": "t3.medium",
         "disk_size": 50,
         "region": "us-east-1",
-        "machine_name": "jupyter-lab",
+        "camp_name": "jupyter-lab",
         "ami": {"image_id": registered_ami},
     }
 
@@ -211,8 +211,8 @@ def test_launch_instance_success(ec2_manager, cleanup_keys, registered_ami):
         result = ec2_manager.launch_instance(config)
         cleanup_keys.append(result["key_file"])
 
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    expected_key_file = str(Path(moondock_dir) / "keys" / "1234567890.pem")
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    expected_key_file = str(Path(campers_dir) / "keys" / "1234567890.pem")
 
     assert result["instance_id"].startswith("i-")
     assert result["state"] == "running"
@@ -226,12 +226,12 @@ def test_launch_instance_success(ec2_manager, cleanup_keys, registered_ami):
     assert instance.instance_type == "t3.medium"
 
     tags = {tag["Key"]: tag["Value"] for tag in instance.tags}
-    assert tags["ManagedBy"] == "moondock"
-    assert tags["Name"] == "moondock-1234567890"
-    assert tags["MachineConfig"] == "jupyter-lab"
+    assert tags["ManagedBy"] == "campers"
+    assert tags["Name"] == "campers-1234567890"
+    assert tags["CampConfig"] == "jupyter-lab"
     assert tags["UniqueId"] == "1234567890"
 
-    assert instance.key_name == "moondock-1234567890"
+    assert instance.key_name == "campers-1234567890"
     assert len(instance.security_groups) == 1
 
 
@@ -251,7 +251,7 @@ def test_launch_instance_ad_hoc(ec2_manager, cleanup_keys, registered_ami):
     instance.load()
 
     tags = {tag["Key"]: tag["Value"] for tag in instance.tags}
-    assert tags["MachineConfig"] == "ad-hoc"
+    assert tags["CampConfig"] == "ad-hoc"
 
 
 def test_launch_instance_rollback_on_failure(ec2_manager, cleanup_keys):
@@ -271,8 +271,8 @@ def test_launch_instance_rollback_on_failure(ec2_manager, cleanup_keys):
     key_pairs = ec2_client.describe_key_pairs()
     assert len(key_pairs["KeyPairs"]) == 0
 
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    key_file = Path(moondock_dir) / "keys" / "1234567890.pem"
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    key_file = Path(campers_dir) / "keys" / "1234567890.pem"
     assert not key_file.exists()
 
 
@@ -342,8 +342,8 @@ def test_list_instances_all_regions(ec2_manager, registered_ami) -> None:
             {
                 "ResourceType": "instance",
                 "Tags": [
-                    {"Key": "ManagedBy", "Value": "moondock"},
-                    {"Key": "MachineConfig", "Value": "test-machine"},
+                    {"Key": "ManagedBy", "Value": "campers"},
+                    {"Key": "CampConfig", "Value": "test-machine"},
                 ],
             }
         ],
@@ -355,7 +355,7 @@ def test_list_instances_all_regions(ec2_manager, registered_ami) -> None:
     result = ec2_manager.list_instances()
 
     assert len(result) == 2
-    assert all(inst["machine_config"] == "test-machine" for inst in result)
+    assert all(inst["camp_config"] == "test-machine" for inst in result)
     assert all(inst["region"] == "us-east-1" for inst in result)
     assert all("launch_time" in inst for inst in result)
     assert all(isinstance(inst["launch_time"], datetime) for inst in result)
@@ -374,8 +374,8 @@ def test_list_instances_filtered_by_region(ec2_manager, registered_ami) -> None:
             {
                 "ResourceType": "instance",
                 "Tags": [
-                    {"Key": "ManagedBy", "Value": "moondock"},
-                    {"Key": "MachineConfig", "Value": "filtered-machine"},
+                    {"Key": "ManagedBy", "Value": "campers"},
+                    {"Key": "CampConfig", "Value": "filtered-machine"},
                 ],
             }
         ],
@@ -387,7 +387,7 @@ def test_list_instances_filtered_by_region(ec2_manager, registered_ami) -> None:
     result = ec2_manager.list_instances(region_filter="us-east-1")
 
     assert len(result) == 1
-    assert result[0]["machine_config"] == "filtered-machine"
+    assert result[0]["camp_config"] == "filtered-machine"
     assert result[0]["region"] == "us-east-1"
 
 
@@ -413,8 +413,8 @@ def test_list_instances_sorts_by_launch_time(ec2_manager, registered_ami) -> Non
                 {
                     "ResourceType": "instance",
                     "Tags": [
-                        {"Key": "ManagedBy", "Value": "moondock"},
-                        {"Key": "MachineConfig", "Value": f"machine-{i}"},
+                        {"Key": "ManagedBy", "Value": "campers"},
+                        {"Key": "CampConfig", "Value": f"machine-{i}"},
                     ],
                 }
             ],
@@ -443,7 +443,7 @@ def test_list_instances_handles_missing_tags(ec2_manager, registered_ami) -> Non
             {
                 "ResourceType": "instance",
                 "Tags": [
-                    {"Key": "ManagedBy", "Value": "moondock"},
+                    {"Key": "ManagedBy", "Value": "campers"},
                 ],
             }
         ],
@@ -455,7 +455,7 @@ def test_list_instances_handles_missing_tags(ec2_manager, registered_ami) -> Non
     result = ec2_manager.list_instances()
 
     assert len(result) == 1
-    assert result[0]["machine_config"] == "ad-hoc"
+    assert result[0]["camp_config"] == "ad-hoc"
     assert result[0]["name"] == "N/A"
 
 

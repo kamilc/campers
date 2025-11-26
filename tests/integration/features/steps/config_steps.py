@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 from behave import given, then, when
 
-from moondock.config import ConfigLoader
+from campers.config import ConfigLoader
 
 
 @given('config file "{path}" with defaults section')
@@ -48,25 +48,25 @@ def _write_temp_config(context) -> str:
 
     if harness_services is not None:
         config_file = harness_services.artifacts.create_temp_file(
-            "moondock.yaml", content=yaml_content
+            "campers.yaml", content=yaml_content
         )
-        harness_services.configuration_env.set("MOONDOCK_CONFIG", str(config_file))
+        harness_services.configuration_env.set("CAMPERS_CONFIG", str(config_file))
         return str(config_file)
 
-    fd, path = tempfile.mkstemp(prefix="moondock-config-", suffix=".yaml")
+    fd, path = tempfile.mkstemp(prefix="campers-config-", suffix=".yaml")
     with os.fdopen(fd, "w") as tmp_file:
         tmp_file.write(yaml_content)
-    os.environ["MOONDOCK_CONFIG"] = path
+    os.environ["CAMPERS_CONFIG"] = path
     return path
 
 
-@given('machine "{machine_name}" with instance_type "{instance_type}"')
+@given('machine "{camp_name}" with instance_type "{instance_type}"')
 def step_machine_with_instance_type(
-    context, machine_name: str, instance_type: str
+    context, camp_name: str, instance_type: str
 ) -> None:
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
-    context.config_data["machines"][machine_name] = {"instance_type": instance_type}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
+    context.config_data["camps"][camp_name] = {"instance_type": instance_type}
 
 
 @when("I load configuration without machine name")
@@ -76,17 +76,17 @@ def step_load_config_without_machine(context) -> None:
 
     loader = ConfigLoader()
     context.yaml_config = loader.load_config(config_path)
-    context.merged_config = loader.get_machine_config(context.yaml_config)
+    context.merged_config = loader.get_camp_config(context.yaml_config)
 
 
-@when('I load configuration for machine "{machine_name}"')
-def step_load_config_for_machine(context, machine_name: str) -> None:
+@when('I load configuration for machine "{camp_name}"')
+def step_load_config_for_machine(context, camp_name: str) -> None:
     config_path = _write_temp_config(context)
     context.temp_config_file = config_path
 
     loader = ConfigLoader()
     context.yaml_config = loader.load_config(config_path)
-    context.merged_config = loader.get_machine_config(context.yaml_config, machine_name)
+    context.merged_config = loader.get_camp_config(context.yaml_config, camp_name)
 
 
 @then('config contains region "{expected_region}"')
@@ -111,14 +111,14 @@ def step_config_contains_region_from_defaults(context) -> None:
 
 @given("no config file exists")
 def step_no_config_file_exists(context) -> None:
-    context.config_path = "/nonexistent/path/moondock.yaml"
+    context.config_path = "/nonexistent/path/campers.yaml"
 
 
 @when("I load configuration")
 def step_load_configuration(context) -> None:
     loader = ConfigLoader()
     context.yaml_config = loader.load_config(context.config_path)
-    context.merged_config = loader.get_machine_config(context.yaml_config)
+    context.merged_config = loader.get_camp_config(context.yaml_config)
 
 
 @then("built-in defaults are used")
@@ -161,22 +161,22 @@ def step_validate_configuration(context) -> None:
             config_path = _write_temp_config(context)
             loaded_config = loader.load_config(config_path)
 
-            machine_name = None
-            if "machines" in context.config_data:
-                machines = list(context.config_data["machines"].keys())
+            camp_name = None
+            if "camps" in context.config_data:
+                camps = list(context.config_data["camps"].keys())
 
-                if len(machines) == 1:
-                    machine_name = machines[0]
-                    logger.debug(f"Validating single machine config: {machine_name}")
+                if len(camps) == 1:
+                    camp_name = camps[0]
+                    logger.debug(f"Validating single machine config: {camp_name}")
 
-                elif hasattr(context, "machine_name") and context.machine_name:
-                    machine_name = context.machine_name
-                    logger.debug(f"Validating specified machine config: {machine_name}")
+                elif hasattr(context, "camp_name") and context.camp_name:
+                    camp_name = context.camp_name
+                    logger.debug(f"Validating specified machine config: {camp_name}")
 
                 else:
-                    logger.debug("Multiple machines defined, validating defaults only")
+                    logger.debug("Multiple camps defined, validating defaults only")
 
-            merged_config = loader.get_machine_config(loaded_config, machine_name)
+            merged_config = loader.get_camp_config(loaded_config, camp_name)
             loader.validate_config(merged_config)
             context.loaded_config = loaded_config
         else:
@@ -213,13 +213,13 @@ def step_yaml_defaults_override_disk_size(context, disk_size: int) -> None:
     context.config_data["defaults"]["disk_size"] = disk_size
 
 
-@given('machine "{machine_name}" overrides disk_size to {disk_size:d}')
+@given('machine "{camp_name}" overrides disk_size to {disk_size:d}')
 def step_machine_overrides_disk_size(
-    context, machine_name: str, disk_size: int
+    context, camp_name: str, disk_size: int
 ) -> None:
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
-    context.config_data["machines"][machine_name] = {"disk_size": disk_size}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
+    context.config_data["camps"][camp_name] = {"disk_size": disk_size}
 
 
 @given("YAML defaults with ignore {ignore_patterns}")
@@ -230,15 +230,15 @@ def step_yaml_defaults_with_ignore(context, ignore_patterns: str) -> None:
     context.config_data = {"defaults": {"ignore": patterns}}
 
 
-@given('machine "{machine_name}" with ignore {ignore_patterns}')
-def step_machine_with_ignore(context, machine_name: str, ignore_patterns: str) -> None:
+@given('machine "{camp_name}" with ignore {ignore_patterns}')
+def step_machine_with_ignore(context, camp_name: str, ignore_patterns: str) -> None:
     import json
 
     patterns = json.loads(ignore_patterns)
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
-    context.config_data["machines"][machine_name] = {"ignore": patterns}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
+    context.config_data["camps"][camp_name] = {"ignore": patterns}
 
 
 @then("config ignore is {expected_patterns}")
@@ -249,8 +249,8 @@ def step_config_ignore_is(context, expected_patterns: str) -> None:
     assert context.merged_config["ignore"] == expected
 
 
-@given('MOONDOCK_CONFIG is "{path}"')
-def step_moondock_config_is(context, path: str) -> None:
+@given('CAMPERS_CONFIG is "{path}"')
+def step_campers_config_is(context, path: str) -> None:
     context.env_config_path = path
 
 
@@ -277,14 +277,14 @@ def step_load_configuration_without_path(context) -> None:
 
     if harness_services is not None:
         harness_services.configuration_env.set(
-            "MOONDOCK_CONFIG", context.env_config_path
+            "CAMPERS_CONFIG", context.env_config_path
         )
     else:
-        os.environ["MOONDOCK_CONFIG"] = context.env_config_path
+        os.environ["CAMPERS_CONFIG"] = context.env_config_path
 
     loader = ConfigLoader()
     context.yaml_config = loader.load_config()
-    context.merged_config = loader.get_machine_config(context.yaml_config)
+    context.merged_config = loader.get_camp_config(context.yaml_config)
 
 
 @then('config loaded from "{path}"')

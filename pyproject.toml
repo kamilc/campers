@@ -1,5 +1,5 @@
 [project]
-name = "moondock"
+name = "campers"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-moondock = "moondock.__main__:main"
+campers = "campers.__main__:main"
 
 [dependency-groups]
 dev = [
@@ -28,7 +28,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["moondock"]
+packages = ["campers"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]

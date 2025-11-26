@@ -2,17 +2,17 @@ Feature: YAML Configuration Loader
 
 @smoke @dry_run
 Scenario: Load config with defaults only
-  Given config file "moondock.yaml" with defaults section
-  When I load configuration without machine name
+  Given config file "campers.yaml" with defaults section
+  When I load configuration without camp name
   Then config contains region "us-east-1"
   And config contains instance_type "t3.medium"
   And config contains disk_size 50
 
 @smoke @dry_run
-Scenario: Load config with machine override
+Scenario: Load config with camp override
   Given config file with defaults section
-  And machine "jupyter-lab" with instance_type "m5.xlarge"
-  When I load configuration for machine "jupyter-lab"
+  And camp "jupyter-lab" with instance_type "m5.xlarge"
+  When I load configuration for camp "jupyter-lab"
   Then config contains instance_type "m5.xlarge"
   And config contains region from defaults
 
@@ -39,20 +39,20 @@ Scenario: Validate port conflict
 Scenario: Configuration hierarchy merging
   Given built-in defaults exist
   And YAML defaults override disk_size to 100
-  And machine "ml-training" overrides disk_size to 200
-  When I load configuration for machine "ml-training"
+  And camp "ml-training" overrides disk_size to 200
+  When I load configuration for camp "ml-training"
   Then config contains disk_size 200
 
 @smoke
 Scenario: List fields replace not merge
   Given YAML defaults with ignore ["*.pyc", "__pycache__"]
-  And machine "jupyter-lab" with ignore ["*.pyc", "data/", "models/"]
-  When I load configuration for machine "jupyter-lab"
+  And camp "jupyter-lab" with ignore ["*.pyc", "data/", "models/"]
+  When I load configuration for camp "jupyter-lab"
   Then config ignore is ["*.pyc", "data/", "models/"]
 
 @smoke
 Scenario: Load from environment variable
-  Given MOONDOCK_CONFIG is "/tmp/custom-config.yaml"
+  Given CAMPERS_CONFIG is "/tmp/custom-config.yaml"
   And config file exists at "/tmp/custom-config.yaml"
   When I load configuration without path
   Then config loaded from "/tmp/custom-config.yaml"

@@ -8,7 +8,7 @@ Scenario: Default on_exit=stop preserves instance and security group
   Then the instance is stopped (not terminated)
   And the security group is preserved
   And the key pair is preserved
-  And the key file exists in ~/.moondock/keys/
+  And the key file exists in ~/.campers/keys/
   And storage cost estimate is shown
 
 @smoke @localstack
@@ -24,11 +24,11 @@ Scenario: on_exit=terminate destroys instance and all resources
 @smoke @localstack
 Scenario: on_exit=stop preserves environment state for restart
   Given on_exit configuration is set to "stop"
-  And a running instance with name "moondock-myproject-main" exists
+  And a running instance with name "campers-myproject-main" exists
   And I have created file "/tmp/test.txt" on the instance
   When I send SIGINT (Ctrl+C) during execution
   Then the instance is stopped
-  And I run "moondock start moondock-myproject-main"
+  And I run "campers start campers-myproject-main"
   And the file "/tmp/test.txt" still exists on the instance
 
 @smoke @localstack

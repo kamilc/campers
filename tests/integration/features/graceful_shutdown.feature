@@ -64,12 +64,12 @@ Scenario: Duplicate cleanup is prevented
 Scenario: Normal completion without interruption
   Given LocalStack is healthy and responding
   And config file with defaults section
-  When moondock run completes normally
+  When campers run completes normally
   Then cleanup happens in finally block
 
 @smoke @dry_run
 Scenario: Test mode graceful shutdown works correctly
-  Given MOONDOCK_TEST_MODE is "1"
+  Given CAMPERS_TEST_MODE is "1"
   And config file with defaults section
   When SIGINT signal is received during execution
   Then cleanup sequence executes on mock resources

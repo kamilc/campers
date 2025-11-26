@@ -1,10 +1,10 @@
-"""Tests for moondock utility functions."""
+"""Tests for campers utility functions."""
 
 import subprocess
 from unittest.mock import MagicMock, patch
 
 
-from moondock.utils import (
+from campers.utils import (
     generate_instance_name,
     get_git_branch,
     get_git_project_name,
@@ -118,23 +118,23 @@ class TestSanitizeInstanceName:
 
     def test_replaces_forward_slashes(self) -> None:
         """Test replacement of forward slashes with dashes."""
-        result = sanitize_instance_name("moondock-myproject-feature/new-api")
-        assert result == "moondock-myproject-feature-new-api"
+        result = sanitize_instance_name("campers-myproject-feature/new-api")
+        assert result == "campers-myproject-feature-new-api"
 
     def test_removes_invalid_characters(self) -> None:
         """Test removal of invalid characters."""
-        result = sanitize_instance_name("moondock-myproject@v2#test")
-        assert result == "moondock-myproject-v2-test"
+        result = sanitize_instance_name("campers-myproject@v2#test")
+        assert result == "campers-myproject-v2-test"
 
     def test_removes_consecutive_dashes(self) -> None:
         """Test removal of consecutive dashes."""
-        result = sanitize_instance_name("moondock--myproject---main")
-        assert result == "moondock-myproject-main"
+        result = sanitize_instance_name("campers--myproject---main")
+        assert result == "campers-myproject-main"
 
     def test_trims_leading_trailing_dashes(self) -> None:
         """Test trimming of leading and trailing dashes."""
-        result = sanitize_instance_name("-moondock-myproject-main-")
-        assert result == "moondock-myproject-main"
+        result = sanitize_instance_name("-campers-myproject-main-")
+        assert result == "campers-myproject-main"
 
     def test_limits_to_256_characters(self) -> None:
         """Test limiting to 256 characters."""
@@ -144,8 +144,8 @@ class TestSanitizeInstanceName:
 
     def test_handles_special_characters_in_branch_name(self) -> None:
         """Test handling of special characters like @ and v."""
-        result = sanitize_instance_name("moondock-myproject-feature/new-api@v2")
-        assert result == "moondock-myproject-feature-new-api-v2"
+        result = sanitize_instance_name("campers-myproject-feature/new-api@v2")
+        assert result == "campers-myproject-feature-new-api-v2"
 
     def test_handles_empty_after_sanitization(self) -> None:
         """Test handling of name that becomes empty after sanitization."""
@@ -159,63 +159,63 @@ class TestGenerateInstanceName:
     def test_generates_git_based_name_with_branch(self) -> None:
         """Test generating name from git project and branch."""
         with (
-            patch("moondock.utils.get_git_project_name") as mock_proj,
-            patch("moondock.utils.get_git_branch") as mock_branch,
+            patch("campers.utils.get_git_project_name") as mock_proj,
+            patch("campers.utils.get_git_branch") as mock_branch,
         ):
             mock_proj.return_value = "myproject"
             mock_branch.return_value = "main"
             result = generate_instance_name()
-            assert result == "moondock-myproject-main"
+            assert result == "campers-myproject-main"
 
     def test_generates_timestamp_name_without_branch(self) -> None:
         """Test fallback to timestamp when branch is None."""
         with (
-            patch("moondock.utils.get_git_project_name") as mock_proj,
-            patch("moondock.utils.get_git_branch") as mock_branch,
+            patch("campers.utils.get_git_project_name") as mock_proj,
+            patch("campers.utils.get_git_branch") as mock_branch,
             patch("time.time") as mock_time,
         ):
             mock_proj.return_value = "myproject"
             mock_branch.return_value = None
             mock_time.return_value = 1234567890.5
             result = generate_instance_name()
-            assert result == "moondock-1234567890"
+            assert result == "campers-1234567890"
 
     def test_generates_timestamp_name_without_project(self) -> None:
         """Test fallback to timestamp when project is None."""
         with (
-            patch("moondock.utils.get_git_project_name") as mock_proj,
-            patch("moondock.utils.get_git_branch") as mock_branch,
+            patch("campers.utils.get_git_project_name") as mock_proj,
+            patch("campers.utils.get_git_branch") as mock_branch,
             patch("time.time") as mock_time,
         ):
             mock_proj.return_value = None
             mock_branch.return_value = "main"
             mock_time.return_value = 1234567890.5
             result = generate_instance_name()
-            assert result == "moondock-1234567890"
+            assert result == "campers-1234567890"
 
     def test_sanitizes_git_based_name(self) -> None:
         """Test that git-based names are sanitized."""
         with (
-            patch("moondock.utils.get_git_project_name") as mock_proj,
-            patch("moondock.utils.get_git_branch") as mock_branch,
+            patch("campers.utils.get_git_project_name") as mock_proj,
+            patch("campers.utils.get_git_branch") as mock_branch,
         ):
             mock_proj.return_value = "MyProject"
             mock_branch.return_value = "feature/new-api@v2"
             result = generate_instance_name()
-            assert result == "moondock-myproject-feature-new-api-v2"
+            assert result == "campers-myproject-feature-new-api-v2"
 
     def test_timestamp_is_10_digits(self) -> None:
         """Test that timestamp is 10 digits (Unix seconds)."""
         with (
-            patch("moondock.utils.get_git_project_name") as mock_proj,
-            patch("moondock.utils.get_git_branch") as mock_branch,
+            patch("campers.utils.get_git_project_name") as mock_proj,
+            patch("campers.utils.get_git_branch") as mock_branch,
             patch("time.time") as mock_time,
         ):
             mock_proj.return_value = None
             mock_branch.return_value = None
             mock_time.return_value = 1234567890.5
             result = generate_instance_name()
-            assert result.startswith("moondock-")
+            assert result.startswith("campers-")
             timestamp_part = result.split("-")[1]
             assert len(timestamp_part) == 10
             assert timestamp_part.isdigit()

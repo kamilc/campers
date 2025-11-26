@@ -141,7 +141,7 @@ def step_create_running_instances_of_type(
 def step_view_tui(context: Context) -> None:
     """Launch TUI and verify widget is visible."""
     import boto3
-    from moondock.ec2 import EC2Manager
+    from campers.ec2 import EC2Manager
 
     is_localstack = (
         hasattr(context, "scenario") and "localstack" in context.scenario.tags
@@ -159,20 +159,20 @@ def step_view_tui(context: Context) -> None:
                 **kwargs
             )
 
-        moondock = context.moondock_module.Moondock(
+        campers = context.campers_module.Campers(
             ec2_manager_factory=localstack_ec2_factory
         )
     else:
-        moondock = context.moondock_module.Moondock()
+        campers = context.campers_module.Campers()
 
-    context.tui_moondock = moondock
+    context.tui_campers = campers
 
     async def launch_and_capture() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
 
-        app = MoondockTUI(
-            moondock_instance=moondock,
+        app = CampersTUI(
+            campers_instance=campers,
             run_kwargs={},
             update_queue=update_queue,
             start_worker=False,

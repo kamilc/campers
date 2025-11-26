@@ -1,4 +1,4 @@
-"""Unit tests for moondock main module cleanup behavior."""
+"""Unit tests for campers main module cleanup behavior."""
 
 import logging
 import signal
@@ -8,23 +8,23 @@ from unittest.mock import MagicMock
 class TestCleanupLogging:
     """Test cleanup logging messages."""
 
-    def test_stop_instance_cleanup_logs_initial_message(self, moondock, caplog):
+    def test_stop_instance_cleanup_logs_initial_message(self, campers, caplog):
         """Verify cleanup logs initial shutdown message.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
 
         with caplog.at_level(logging.INFO):
-            moondock._stop_instance_cleanup()
+            campers._stop_instance_cleanup()
 
         assert any(
             "Shutdown requested - stopping instance and preserving resources..."
@@ -32,36 +32,36 @@ class TestCleanupLogging:
             for record in caplog.records
         )
 
-    def test_terminate_instance_cleanup_logs_initial_message(self, moondock, caplog):
+    def test_terminate_instance_cleanup_logs_initial_message(self, campers, caplog):
         """Verify cleanup logs initial shutdown message.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
 
         with caplog.at_level(logging.INFO):
-            moondock._terminate_instance_cleanup()
+            campers._terminate_instance_cleanup()
 
         assert any(
             "Shutdown requested - beginning cleanup..." in record.message
             for record in caplog.records
         )
 
-    def test_cleanup_logs_completion_message_success(self, moondock, caplog):
+    def test_cleanup_logs_completion_message_success(self, campers, caplog):
         """Verify cleanup logs successful completion message.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
@@ -69,39 +69,39 @@ class TestCleanupLogging:
         mock_ec2.stop_instance.return_value = None
         mock_ec2.get_volume_size.return_value = 50
 
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": mock_ec2,
         }
 
         with caplog.at_level(logging.INFO):
-            moondock._stop_instance_cleanup()
+            campers._stop_instance_cleanup()
 
         assert any(
             "Cleanup completed successfully" in record.message
             for record in caplog.records
         )
 
-    def test_cleanup_logs_completion_message_with_errors(self, moondock, caplog):
+    def test_cleanup_logs_completion_message_with_errors(self, campers, caplog):
         """Verify cleanup logs error count when errors occur.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
         mock_ec2 = MagicMock()
         mock_ec2.stop_instance.side_effect = RuntimeError("Test error")
 
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": mock_ec2,
         }
 
         with caplog.at_level(logging.INFO):
-            moondock._stop_instance_cleanup()
+            campers._stop_instance_cleanup()
 
         assert any(
             "Cleanup completed with 1 errors" in record.message
@@ -112,109 +112,109 @@ class TestCleanupLogging:
 class TestPartialInitializationHandling:
     """Test cleanup handles partial initialization gracefully."""
 
-    def test_skips_port_forwarding_cleanup_when_not_initialized(self, moondock, caplog):
+    def test_skips_port_forwarding_cleanup_when_not_initialized(self, campers, caplog):
         """Verify port forwarding cleanup is skipped when not initialized.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
 
         with caplog.at_level(logging.DEBUG):
-            moondock._stop_instance_cleanup()
+            campers._stop_instance_cleanup()
 
         assert any(
             "Skipping port forwarding cleanup - not initialized" in record.message
             for record in caplog.records
         )
 
-    def test_skips_mutagen_cleanup_when_not_initialized(self, moondock, caplog):
+    def test_skips_mutagen_cleanup_when_not_initialized(self, campers, caplog):
         """Verify Mutagen cleanup is skipped when not initialized.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
 
         with caplog.at_level(logging.DEBUG):
-            moondock._stop_instance_cleanup()
+            campers._stop_instance_cleanup()
 
         assert any(
             "Skipping Mutagen cleanup - not initialized" in record.message
             for record in caplog.records
         )
 
-    def test_skips_ssh_cleanup_when_not_initialized(self, moondock, caplog):
+    def test_skips_ssh_cleanup_when_not_initialized(self, campers, caplog):
         """Verify SSH cleanup is skipped when not initialized.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
 
         with caplog.at_level(logging.DEBUG):
-            moondock._stop_instance_cleanup()
+            campers._stop_instance_cleanup()
 
         assert any(
             "Skipping SSH cleanup - not initialized" in record.message
             for record in caplog.records
         )
 
-    def test_handles_empty_resources_gracefully(self, moondock, caplog):
+    def test_handles_empty_resources_gracefully(self, campers, caplog):
         """Verify cleanup handles empty resources gracefully.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
-        moondock._resources = {}
+        campers._resources = {}
 
         with caplog.at_level(logging.INFO):
-            moondock._stop_instance_cleanup()
+            campers._stop_instance_cleanup()
 
         assert any(
             "No resources to clean up" in record.message
             for record in caplog.records
         )
 
-    def test_skips_instance_cleanup_when_not_initialized(self, moondock, caplog):
+    def test_skips_instance_cleanup_when_not_initialized(self, campers, caplog):
         """Verify instance cleanup is skipped when instance not initialized.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
-        moondock._resources = {}
+        campers._resources = {}
 
         with caplog.at_level(logging.DEBUG):
-            moondock._stop_instance_cleanup()
+            campers._stop_instance_cleanup()
 
         assert any(
             "No resources to clean up" in record.message
@@ -225,13 +225,13 @@ class TestPartialInitializationHandling:
 class TestCleanupOrder:
     """Test cleanup executes in correct order."""
 
-    def test_cleanup_order_stop_instance(self, moondock):
+    def test_cleanup_order_stop_instance(self, campers):
         """Verify cleanup order for stop instance.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         """
         cleanup_sequence = []
 
@@ -256,7 +256,7 @@ class TestCleanupOrder:
         )
         mock_ec2.get_volume_size.return_value = 50
 
-        moondock._resources = {
+        campers._resources = {
             "portforward_mgr": mock_portforward,
             "mutagen_mgr": mock_mutagen,
             "mutagen_session_name": "test-session",
@@ -265,17 +265,17 @@ class TestCleanupOrder:
             "ec2_manager": mock_ec2,
         }
 
-        moondock._stop_instance_cleanup()
+        campers._stop_instance_cleanup()
 
         assert cleanup_sequence == ["port_forward", "mutagen", "ssh", "ec2"]
 
-    def test_cleanup_order_terminate_instance(self, moondock):
+    def test_cleanup_order_terminate_instance(self, campers):
         """Verify cleanup order for terminate instance.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         """
         cleanup_sequence = []
 
@@ -299,7 +299,7 @@ class TestCleanupOrder:
             lambda id: cleanup_sequence.append("ec2")
         )
 
-        moondock._resources = {
+        campers._resources = {
             "portforward_mgr": mock_portforward,
             "mutagen_mgr": mock_mutagen,
             "mutagen_session_name": "test-session",
@@ -308,7 +308,7 @@ class TestCleanupOrder:
             "ec2_manager": mock_ec2,
         }
 
-        moondock._terminate_instance_cleanup()
+        campers._terminate_instance_cleanup()
 
         assert cleanup_sequence == ["port_forward", "mutagen", "ssh", "ec2"]
 
@@ -316,13 +316,13 @@ class TestCleanupOrder:
 class TestErrorResilience:
     """Test cleanup continues despite individual failures."""
 
-    def test_cleanup_continues_after_port_forward_error(self, moondock):
+    def test_cleanup_continues_after_port_forward_error(self, campers):
         """Verify cleanup continues after port forward error.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         """
         cleanup_sequence = []
 
@@ -347,7 +347,7 @@ class TestErrorResilience:
         )
         mock_ec2.get_volume_size.return_value = 50
 
-        moondock._resources = {
+        campers._resources = {
             "portforward_mgr": mock_portforward,
             "mutagen_mgr": mock_mutagen,
             "mutagen_session_name": "test-session",
@@ -356,19 +356,19 @@ class TestErrorResilience:
             "ec2_manager": mock_ec2,
         }
 
-        moondock._stop_instance_cleanup()
+        campers._stop_instance_cleanup()
 
         assert "mutagen" in cleanup_sequence
         assert "ssh" in cleanup_sequence
         assert "ec2" in cleanup_sequence
 
-    def test_cleanup_continues_after_mutagen_error(self, moondock):
+    def test_cleanup_continues_after_mutagen_error(self, campers):
         """Verify cleanup continues after Mutagen error.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         """
         cleanup_sequence = []
 
@@ -389,7 +389,7 @@ class TestErrorResilience:
         )
         mock_ec2.get_volume_size.return_value = 50
 
-        moondock._resources = {
+        campers._resources = {
             "portforward_mgr": mock_portforward,
             "mutagen_mgr": mock_mutagen,
             "mutagen_session_name": "test-session",
@@ -398,19 +398,19 @@ class TestErrorResilience:
             "ec2_manager": mock_ec2,
         }
 
-        moondock._stop_instance_cleanup()
+        campers._stop_instance_cleanup()
 
         assert "port_forward" in cleanup_sequence
         assert "ssh" in cleanup_sequence
         assert "ec2" in cleanup_sequence
 
-    def test_cleanup_continues_after_ssh_error(self, moondock):
+    def test_cleanup_continues_after_ssh_error(self, campers):
         """Verify cleanup continues after SSH error.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         """
         cleanup_sequence = []
 
@@ -435,7 +435,7 @@ class TestErrorResilience:
         )
         mock_ec2.get_volume_size.return_value = 50
 
-        moondock._resources = {
+        campers._resources = {
             "portforward_mgr": mock_portforward,
             "mutagen_mgr": mock_mutagen,
             "mutagen_session_name": "test-session",
@@ -444,19 +444,19 @@ class TestErrorResilience:
             "ec2_manager": mock_ec2,
         }
 
-        moondock._stop_instance_cleanup()
+        campers._stop_instance_cleanup()
 
         assert "port_forward" in cleanup_sequence
         assert "mutagen" in cleanup_sequence
         assert "ec2" in cleanup_sequence
 
-    def test_cleanup_collects_errors(self, moondock, caplog):
+    def test_cleanup_collects_errors(self, campers, caplog):
         """Verify all errors are collected and reported.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
@@ -475,7 +475,7 @@ class TestErrorResilience:
         mock_ec2.stop_instance.side_effect = RuntimeError("EC2 error")
         mock_ec2.get_volume_size.return_value = 50
 
-        moondock._resources = {
+        campers._resources = {
             "portforward_mgr": mock_portforward,
             "mutagen_mgr": mock_mutagen,
             "mutagen_session_name": "test-session",
@@ -485,7 +485,7 @@ class TestErrorResilience:
         }
 
         with caplog.at_level(logging.INFO):
-            moondock._stop_instance_cleanup()
+            campers._stop_instance_cleanup()
 
         assert any(
             "Cleanup completed with 4 errors" in record.message
@@ -496,25 +496,25 @@ class TestErrorResilience:
 class TestDuplicateCleanupPrevention:
     """Test duplicate cleanup is prevented."""
 
-    def test_duplicate_cleanup_is_skipped(self, moondock, caplog):
+    def test_duplicate_cleanup_is_skipped(self, campers, caplog):
         """Verify second cleanup attempt is skipped.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         caplog : LogCaptureFixture
             Pytest log capture fixture
         """
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
 
-        moondock._cleanup_in_progress = True
+        campers._cleanup_in_progress = True
 
         with caplog.at_level(logging.INFO):
-            moondock._cleanup_resources(signum=signal.SIGINT, frame=None)
+            campers._cleanup_resources(signum=signal.SIGINT, frame=None)
 
         assert any(
             "Cleanup already in progress" in record.message
@@ -525,58 +525,58 @@ class TestDuplicateCleanupPrevention:
 class TestExitCodes:
     """Test exit code logic in cleanup."""
 
-    def test_cleanup_exit_code_logic(self, moondock):
+    def test_cleanup_exit_code_logic(self, campers):
         """Verify exit code mapping for signals is correct.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         """
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
-        moondock.merged_config = {"on_exit": "stop"}
+        campers.merged_config = {"on_exit": "stop"}
 
-        moondock._cleanup_resources(signum=None, frame=None)
+        campers._cleanup_resources(signum=None, frame=None)
 
-        assert moondock._cleanup_in_progress is False
+        assert campers._cleanup_in_progress is False
 
 
 class TestResourceLocking:
     """Test resource locking during cleanup."""
 
-    def test_resources_cleared_after_cleanup(self, moondock):
+    def test_resources_cleared_after_cleanup(self, campers):
         """Verify resources are cleared after cleanup.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         """
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
 
-        moondock._stop_instance_cleanup()
+        campers._stop_instance_cleanup()
 
-        assert len(moondock._resources) == 0
+        assert len(campers._resources) == 0
 
-    def test_cleanup_lock_released_after_cleanup(self, moondock):
+    def test_cleanup_lock_released_after_cleanup(self, campers):
         """Verify cleanup lock is released after cleanup.
 
         Parameters
         ----------
-        moondock : Moondock
-            Moondock instance
+        campers : Campers
+            Campers instance
         """
-        moondock._resources = {
+        campers._resources = {
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
 
-        moondock._cleanup_resources()
+        campers._cleanup_resources()
 
-        assert moondock._cleanup_in_progress is False
+        assert campers._cleanup_in_progress is False

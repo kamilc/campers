@@ -6,7 +6,7 @@ Scenario: Create single SSH tunnel
   And LocalStack is healthy and responding
   And HTTP server runs on port 48888 in SSH container
 
-  When I run moondock command "run -c 'sleep 30'"
+  When I run campers command "run -c 'sleep 30'"
 
   Then SSH tunnel is created for port 48888
   And tunnel forwards localhost:48888 to remote:48888
@@ -20,7 +20,7 @@ Scenario: Create multiple SSH tunnels
   And HTTP server runs on port 48889 in SSH container
   And HTTP server runs on port 48890 in SSH container
 
-  When I run moondock command "run -c 'sleep 30'"
+  When I run campers command "run -c 'sleep 30'"
 
   Then status messages logged for all three ports
   And HTTP request to localhost:48888 succeeds
@@ -32,16 +32,16 @@ Scenario: Skip port forwarding when no ports configured
   Given config file with no ports specified
   And LocalStack is healthy and responding
 
-  When I run moondock command "run -c 'echo test'"
+  When I run campers command "run -c 'echo test'"
 
   Then no SSH tunnels are created
   And no port forwarding log messages appear
 
 @smoke @localstack @pilot @timeout_300
 Scenario: Create single SSH tunnel via TUI
-  Given a config file with machine "test-box" defined
-  And machine "test-box" has command "sleep 30"
-  And machine "test-box" has ports [48888]
+  Given a config file with camp "test-box" defined
+  And camp "test-box" has command "sleep 30"
+  And camp "test-box" has ports [48888]
   And LocalStack is healthy and responding
   And HTTP server runs on port 48888 in SSH container
 
@@ -54,9 +54,9 @@ Scenario: Create single SSH tunnel via TUI
 
 @smoke @localstack @pilot @timeout_300
 Scenario: Create multiple SSH tunnels via TUI
-  Given a config file with machine "test-box" defined
-  And machine "test-box" has command "sleep 30"
-  And machine "test-box" has ports [48888, 48889, 48890]
+  Given a config file with camp "test-box" defined
+  And camp "test-box" has command "sleep 30"
+  And camp "test-box" has ports [48888, 48889, 48890]
   And LocalStack is healthy and responding
   And HTTP server runs on port 48888 in SSH container
   And HTTP server runs on port 48889 in SSH container
@@ -74,9 +74,9 @@ Scenario: Create multiple SSH tunnels via TUI
 
 @smoke @localstack @pilot @timeout_300
 Scenario: Skip port forwarding when no ports configured via TUI
-  Given a config file with machine "test-box" defined
-  And machine "test-box" has command "sleep 10"
-  And machine "test-box" has no ports specified
+  Given a config file with camp "test-box" defined
+  And camp "test-box" has command "sleep 10"
+  And camp "test-box" has no ports specified
   And LocalStack is healthy and responding
 
   When I launch the Moondock TUI with the config file
@@ -86,9 +86,9 @@ Scenario: Skip port forwarding when no ports configured via TUI
 
 @smoke @localstack @pilot @timeout_300
 Scenario: Port forwarding lifecycle via TUI
-  Given a config file with machine "test-box" defined
-  And machine "test-box" has command "sleep 10"
-  And machine "test-box" has ports [48891]
+  Given a config file with camp "test-box" defined
+  And camp "test-box" has command "sleep 10"
+  And camp "test-box" has ports [48891]
   And LocalStack is healthy and responding
   And HTTP server runs on port 48891 in SSH container
 
@@ -100,9 +100,9 @@ Scenario: Port forwarding lifecycle via TUI
 
 @smoke @dry_run
 Scenario: Test mode simulates SSH tunnels
-  Given MOONDOCK_TEST_MODE is "1"
+  Given CAMPERS_TEST_MODE is "1"
   And config file with ports [48888, 6006]
-  When I run moondock command "run -c 'echo test'"
+  When I run campers command "run -c 'echo test'"
   Then SSH tunnel creation is skipped
   And status message "Creating SSH tunnel for port 48888..." is logged
   And status message "SSH tunnel established: localhost:48888 -> remote:48888" is logged
@@ -112,7 +112,7 @@ Scenario: Test mode simulates SSH tunnels
 @smoke @dry_run
 Scenario: Localhost-only binding for security
   Given config file with ports [48888]
-  When I run moondock command "run -c 'echo test'"
+  When I run campers command "run -c 'echo test'"
   Then status message "Creating SSH tunnel for port 48888..." is logged
   And status message "SSH tunnel established: localhost:48888 -> remote:48888" is logged
 

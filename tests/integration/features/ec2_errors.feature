@@ -23,8 +23,8 @@ Scenario: Instance launch timeout after 5 minutes
 
 @error @dry_run
 Scenario: Resource name conflict handled
-  Given key pair "moondock-123" already exists
-  And security group "moondock-123" already exists
+  Given key pair "campers-123" already exists
+  And security group "campers-123" already exists
   When I launch instance with same unique_id
   Then existing key pair is deleted
   And existing security group is deleted

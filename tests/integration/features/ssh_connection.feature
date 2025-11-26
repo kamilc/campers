@@ -6,7 +6,7 @@ Scenario: SSH connection retry with exponential backoff
   And LocalStack is healthy and responding
   And SSH container will delay startup by 10 seconds
 
-  When I run moondock command "run -c 'echo ready'"
+  When I run campers command "run -c 'echo ready'"
 
   Then SSH connection attempts are made
   And connection retry delays match [1, 2, 4, 8] seconds
@@ -19,7 +19,7 @@ Scenario: SSH connection fails after all retries
   And LocalStack is healthy and responding
   And SSH container is not accessible
 
-  When I run moondock command "run -c 'echo test'"
+  When I run campers command "run -c 'echo test'"
 
   Then SSH connection is attempted multiple times
   And all connection attempts fail
@@ -28,10 +28,10 @@ Scenario: SSH connection fails after all retries
 
 @integration @localstack @pilot @timeout_420
 Scenario: SSH connection retry progress shown in TUI
-  Given a config file with machine "test-box" defined
-  And machine "test-box" has command "echo ready"
-  And machine "test-box" has instance_type "t3.micro"
-  And machine "test-box" has region "us-east-1"
+  Given a config file with camp "test-box" defined
+  And camp "test-box" has command "echo ready"
+  And camp "test-box" has instance_type "t3.micro"
+  And camp "test-box" has region "us-east-1"
   And LocalStack is healthy and responding
   And SSH container will delay startup by 10 seconds
 
@@ -46,8 +46,8 @@ Scenario: SSH connection retry progress shown in TUI
 
 @error @localstack @pilot @timeout_420
 Scenario: SSH connection failure shown in TUI
-  Given a config file with machine "test-box" defined
-  And machine "test-box" has command "echo test"
+  Given a config file with camp "test-box" defined
+  And camp "test-box" has command "echo test"
   And LocalStack is healthy and responding
   And SSH container is not accessible
 
@@ -61,7 +61,7 @@ Scenario: SSH connection failure shown in TUI
 @integration @dry_run
 Scenario: Shell features work correctly
   Given config file with defaults section
-  When I run moondock command "run -c 'echo hello | grep ll'"
+  When I run campers command "run -c 'echo hello | grep ll'"
   Then SSH connection is established
   And command uses bash shell
   And output contains "hello"
@@ -70,15 +70,15 @@ Scenario: Shell features work correctly
 @smoke @dry_run
 Scenario: Commands execute in home directory
   Given config file with defaults section
-  When I run moondock command "run -c 'pwd'"
+  When I run campers command "run -c 'pwd'"
   Then command output contains "/home/ubuntu"
   And command exit code is 0
 
 @smoke @dry_run
 Scenario: Test mode skips actual SSH connection
-  Given MOONDOCK_TEST_MODE is "1"
+  Given CAMPERS_TEST_MODE is "1"
   And config file with defaults section
-  When I run moondock command "run -c 'hostname'"
+  When I run campers command "run -c 'hostname'"
   Then SSH connection is not actually attempted
   And status messages are printed
   And command_exit_code is 0 in result

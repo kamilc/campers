@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def execute_command_direct(
     context: Context, command: str, args: dict | None = None, region: str | None = None
 ) -> None:
-    """Execute moondock command via direct instantiation with mocked dependencies.
+    """Execute campers command via direct instantiation with mocked dependencies.
 
     Parameters
     ----------
@@ -32,7 +32,7 @@ def execute_command_direct(
     region : str | None
         AWS region to use (default: us-east-1)
     """
-    from moondock.__main__ import Moondock
+    from campers.__main__ import Campers
     from tests.unit.fakes.fake_ec2_manager import FakeEC2Manager
     from tests.unit.fakes.fake_ssh_manager import FakeSSHManager
 
@@ -85,18 +85,18 @@ def execute_command_direct(
         return manager
 
     try:
-        moondock = Moondock(
+        campers = Campers(
             ec2_manager_factory=ec2_manager_factory,
             ssh_manager_factory=FakeSSHManager,
             boto3_client_factory=mock_boto3_client_factory,
         )
 
-        moondock._create_ec2_manager = ec2_manager_factory
+        campers._create_ec2_manager = ec2_manager_factory
 
         ec2_client = getattr(context, "patched_ec2_client", None)
 
         if command == "doctor":
-            moondock.doctor(region=region, ec2_client=ec2_client)
+            campers.doctor(region=region, ec2_client=ec2_client)
             context.exit_code = 0
 
         elif command == "setup":
@@ -107,12 +107,12 @@ def execute_command_direct(
                 return user_input
 
             with unittest.mock.patch("builtins.input", side_effect=mocked_input):
-                moondock.setup(region=region, ec2_client=ec2_client)
+                campers.setup(region=region, ec2_client=ec2_client)
             context.exit_code = 0
 
         elif command == "list":
             region = args.get("region") if args else None
-            moondock.list(region=region)
+            campers.list(region=region)
             context.exit_code = 0
 
         elif command == "stop":
@@ -120,7 +120,7 @@ def execute_command_direct(
                 raise ValueError("stop command requires name_or_id argument")
             name_or_id = args["name_or_id"]
             region = args.get("region")
-            moondock.stop(name_or_id=name_or_id, region=region)
+            campers.stop(name_or_id=name_or_id, region=region)
             context.exit_code = 0
 
         elif command == "start":
@@ -128,12 +128,12 @@ def execute_command_direct(
                 raise ValueError("start command requires name_or_id argument")
             name_or_id = args["name_or_id"]
             region = args.get("region")
-            moondock.start(name_or_id=name_or_id, region=region)
+            campers.start(name_or_id=name_or_id, region=region)
             context.exit_code = 0
 
         elif command == "run":
-            result = moondock.run(
-                machine_name=args.get("machine_name") if args else None,
+            result = campers.run(
+                camp_name=args.get("camp_name") if args else None,
                 command=args.get("command", "echo test") if args else "echo test",
                 json_output=True,
                 plain=True,
@@ -155,7 +155,7 @@ def execute_command_direct(
 
         elif command == "init":
             force = args.get("force", False) if args else False
-            moondock.init(force=force)
+            campers.init(force=force)
             context.exit_code = 0
 
         else:
@@ -226,7 +226,7 @@ def step_aws_credentials_not_configured(context: Context) -> None:
 
 @when('I run setup with input "{user_input}"')
 def step_run_setup_with_input(context: Context, user_input: str) -> None:
-    """Run moondock setup command with user input.
+    """Run campers setup command with user input.
 
     Parameters
     ----------
@@ -251,11 +251,11 @@ def step_run_setup_with_input(context: Context, user_input: str) -> None:
     vpc_env_value = "true" if vpc_exists else "false"
 
     context.harness.services.configuration_env.set(
-        "MOONDOCK_TEST_VPC_EXISTS", vpc_env_value
+        "CAMPERS_TEST_VPC_EXISTS", vpc_env_value
     )
 
     result = subprocess.run(
-        ["uv", "run", "python", "-m", "moondock", "setup"],
+        ["uv", "run", "python", "-m", "campers", "setup"],
         env=env,
         capture_output=True,
         text=True,
@@ -270,7 +270,7 @@ def step_run_setup_with_input(context: Context, user_input: str) -> None:
 
 @when("I run {command:w}")
 def step_run_simple_command(context: Context, command: str) -> None:
-    """Run moondock command without input.
+    """Run campers command without input.
 
     Parameters
     ----------
@@ -291,7 +291,7 @@ def step_run_simple_command(context: Context, command: str) -> None:
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
             "AWS_SESSION_TOKEN",
-            "MOONDOCK_TEST_MODE",
+            "CAMPERS_TEST_MODE",
         ]:
             env.pop(key, None)
 
@@ -307,16 +307,16 @@ def step_run_simple_command(context: Context, command: str) -> None:
             vpc_env_value = "true" if vpc_exists else "false"
 
             context.harness.services.configuration_env.set(
-                "MOONDOCK_TEST_VPC_EXISTS", vpc_env_value
+                "CAMPERS_TEST_VPC_EXISTS", vpc_env_value
             )
         except Exception:
             vpc_env_value = "false"
             context.harness.services.configuration_env.set(
-                "MOONDOCK_TEST_VPC_EXISTS", vpc_env_value
+                "CAMPERS_TEST_VPC_EXISTS", vpc_env_value
             )
 
     result = subprocess.run(
-        ["uv", "run", "python", "-m", "moondock", command],
+        ["uv", "run", "python", "-m", "campers", command],
         env=env,
         capture_output=True,
         text=True,
@@ -330,7 +330,7 @@ def step_run_simple_command(context: Context, command: str) -> None:
 
 @when('I run with environment "{env_and_command}"')
 def step_run_with_environment(context: Context, env_and_command: str) -> None:
-    """Run command with environment variable (e.g., 'MOONDOCK_DEBUG=1 moondock run').
+    """Run command with environment variable (e.g., 'CAMPERS_DEBUG=1 campers run').
 
     Parameters
     ----------
@@ -350,7 +350,7 @@ def step_run_with_environment(context: Context, env_and_command: str) -> None:
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
             "AWS_SESSION_TOKEN",
-            "MOONDOCK_TEST_MODE",
+            "CAMPERS_TEST_MODE",
         ]:
             env.pop(key, None)
 
@@ -363,11 +363,11 @@ def step_run_with_environment(context: Context, env_and_command: str) -> None:
         else:
             command_parts.append(part)
 
-    if command_parts and command_parts[0] == "moondock":
+    if command_parts and command_parts[0] == "campers":
         command_parts = command_parts[1:]
 
     result = subprocess.run(
-        ["uv", "run", "python", "-m", "moondock"] + command_parts,
+        ["uv", "run", "python", "-m", "campers"] + command_parts,
         env=env,
         capture_output=True,
         text=True,

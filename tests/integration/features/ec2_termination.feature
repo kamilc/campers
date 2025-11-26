@@ -5,8 +5,8 @@ Scenario: Terminate instance and cleanup resources
   Given running instance with unique_id "1234567890"
   When I terminate the instance
   Then instance state is "terminated"
-  And key pair "moondock-1234567890" is deleted from AWS
-  And key file "~/.moondock/keys/1234567890.pem" is deleted
+  And key pair "campers-1234567890" is deleted from AWS
+  And key file "~/.campers/keys/1234567890.pem" is deleted
   And security group is deleted from AWS
 
 @smoke @dry_run

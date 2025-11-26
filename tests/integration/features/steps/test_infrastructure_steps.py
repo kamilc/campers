@@ -7,16 +7,16 @@ from behave import given, then, when
 from behave.runner import Context
 
 
-def get_moondock_dir() -> Path:
-    """Get MOONDOCK_DIR from environment or use default.
+def get_campers_dir() -> Path:
+    """Get CAMPERS_DIR from environment or use default.
 
     Returns
     -------
     Path
-        The moondock directory path.
+        The campers directory path.
     """
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    return Path(moondock_dir)
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    return Path(campers_dir)
 
 
 @given("multiple tests run in rapid succession")
@@ -168,8 +168,8 @@ def step_check_preexisting_artifacts(context: Context) -> None:
     context : Context
         The Behave context object.
     """
-    moondock_dir = get_moondock_dir()
-    keys_dir = moondock_dir / "keys"
+    campers_dir = get_campers_dir()
+    keys_dir = campers_dir / "keys"
 
     if keys_dir.exists():
         for pem_file in keys_dir.glob("*.pem"):
@@ -189,10 +189,10 @@ def step_old_key_files_removed(context: Context, path: str) -> None:
     path : str
         The path to check for removed key files.
     """
-    if path.startswith("$MOONDOCK_DIR"):
-        moondock_dir = get_moondock_dir()
-        relative_path = path.replace("$MOONDOCK_DIR/", "")
-        expanded_path = moondock_dir / relative_path
+    if path.startswith("$CAMPERS_DIR"):
+        campers_dir = get_campers_dir()
+        relative_path = path.replace("$CAMPERS_DIR/", "")
+        expanded_path = campers_dir / relative_path
     else:
         expanded_path = Path(path.replace("~", str(Path.home())))
 
@@ -210,7 +210,7 @@ def step_directory_empty_or_nonexistent(context: Context) -> None:
     context : Context
         The Behave context object.
     """
-    keys_dir = get_moondock_dir() / "keys"
+    keys_dir = get_campers_dir() / "keys"
 
     if keys_dir.exists():
         files = list(keys_dir.iterdir())

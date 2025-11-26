@@ -2,8 +2,8 @@ Feature: Instance List Command
 
 @smoke @dry_run
 Scenario: List instances across all regions
-  Given 2 moondock instances exist in "us-east-1"
-  And 1 moondock instance exists in "us-west-2"
+  Given 2 campers instances exist in "us-east-1"
+  And 1 campers instance exists in "us-west-2"
   When I run list command directly
   Then output displays 3 instances
   And output contains columns "NAME, INSTANCE-ID, STATUS, REGION, TYPE, LAUNCHED"
@@ -11,8 +11,8 @@ Scenario: List instances across all regions
 
 @smoke @dry_run
 Scenario: List instances filtered by region
-  Given 2 moondock instances exist in "us-east-1"
-  And 1 moondock instance exists in "us-west-2"
+  Given 2 campers instances exist in "us-east-1"
+  And 1 campers instance exists in "us-west-2"
   When I run list command directly with region "us-east-1"
   Then output displays header "Instances in us-east-1:"
   And output displays 2 instances
@@ -21,9 +21,9 @@ Scenario: List instances filtered by region
 
 @smoke @dry_run
 Scenario: No instances found
-  Given no moondock instances exist
+  Given no campers instances exist
   When I run list command directly
-  Then output displays "No moondock-managed instances found"
+  Then output displays "No campers-managed instances found"
 
 @error @dry_run @no_credentials
 Scenario: AWS credentials missing
@@ -33,7 +33,7 @@ Scenario: AWS credentials missing
   And output displays "AWS credentials not found"
 
 @smoke @dry_run
-Scenario: Display instance with ad-hoc machine config
+Scenario: Display instance with ad-hoc camp config
   Given instance "i-abc123" exists with no MachineConfig tag
   When I run list command directly
   Then instance "i-abc123" shows NAME as "ad-hoc"
@@ -50,7 +50,7 @@ Scenario: Display human-readable launch times
 
 @error @dry_run
 Scenario: Handle partial region failures
-  Given moondock instances exist in "us-east-1"
+  Given campers instances exist in "us-east-1"
   And region "us-west-2" query fails with timeout
   When I run list command directly
   Then output displays instances from "us-east-1"
@@ -66,23 +66,23 @@ Scenario: Display instances in various states
   And STATUS column shows correct state for each instance
 
 @smoke @dry_run
-Scenario: Handle long machine config names
-  Given instance with MachineConfig "very-long-machine-config-name-exceeds-column-width"
+Scenario: Handle long camp config names
+  Given instance with MachineConfig "very-long-camp-config-name-exceeds-column-width"
   When I run list command directly
-  Then machine config name is truncated to 19 characters
+  Then camp config name is truncated to 19 characters
   And table formatting remains aligned
 
 @smoke @dry_run
 Scenario: Empty state with region filter
-  Given no moondock instances exist in "us-east-1"
+  Given no campers instances exist in "us-east-1"
   When I run list command directly with region "us-east-1"
-  Then output displays "No moondock-managed instances found"
+  Then output displays "No campers-managed instances found"
   And no header is printed
   And no table is printed
 
 @error @dry_run
 Scenario: Fallback to default region when describe_regions fails
-  Given moondock instances exist in "us-east-1"
+  Given campers instances exist in "us-east-1"
   And describe_regions call fails
   When I run list command directly
   Then output displays instances from "us-east-1"

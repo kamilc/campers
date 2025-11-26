@@ -40,11 +40,11 @@ def step_status_widget_displays(context: Context, status: str) -> None:
     """
 
     async def verify_status() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -85,11 +85,11 @@ def step_uptime_widget_displays_elapsed(context: Context) -> None:
     """
 
     async def verify_uptime() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -139,11 +139,11 @@ def step_mutagen_widget_displays_state(context: Context, state: str) -> None:
     """
 
     async def verify_mutagen_state() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -178,11 +178,11 @@ def step_mutagen_widget_displays_text(context: Context, expected_text: str) -> N
     """
 
     async def verify_mutagen_text() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
@@ -259,25 +259,25 @@ def step_graceful_shutdown_initiated(context: Context) -> None:
     """
 
     async def verify_graceful_shutdown() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:
             await pilot.pause()
             shutdown_initiated = False
 
-            original_cleanup = mock_moondock._cleanup_resources
+            original_cleanup = mock_campers._cleanup_resources
 
             def mock_cleanup(signum=None, frame=None):
                 nonlocal shutdown_initiated
                 shutdown_initiated = True
                 original_cleanup(signum, frame)
 
-            mock_moondock._cleanup_resources = mock_cleanup
+            mock_campers._cleanup_resources = mock_cleanup
             await pilot.press("q")
             await pilot.pause()
             assert shutdown_initiated or app.is_running is False, (
@@ -322,11 +322,11 @@ def step_application_exits_immediately(context: Context) -> None:
     """
 
     async def verify_immediate_exit() -> None:
-        MoondockTUI = context.moondock_module.MoondockTUI
+        CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        mock_moondock = context.moondock_module.Moondock()
-        app = MoondockTUI(
-            moondock_instance=mock_moondock, run_kwargs={}, update_queue=update_queue,
+        mock_campers = context.campers_module.Campers()
+        app = CampersTUI(
+            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
             start_worker=False
         )
         async with app.run_test() as pilot:

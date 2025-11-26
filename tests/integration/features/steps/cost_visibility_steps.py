@@ -185,12 +185,12 @@ def step_running_instance_with_type(context: Context, instance_type: str) -> Non
     fake_manager.instances[instance_id] = {
         "instance_id": instance_id,
         "unique_id": unique_id,
-        "name": f"moondock-test-{instance_type}",
+        "name": f"campers-test-{instance_type}",
         "state": "running",
         "region": region,
         "instance_type": instance_type,
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": f"test-{instance_type}",
+        "camp_config": f"test-{instance_type}",
         "volume_size": 50,
     }
 
@@ -223,12 +223,12 @@ def step_stopped_instance_with_type(context: Context, instance_type: str) -> Non
     fake_manager.instances[instance_id] = {
         "instance_id": instance_id,
         "unique_id": unique_id,
-        "name": f"moondock-test-{instance_type}",
+        "name": f"campers-test-{instance_type}",
         "state": "stopped",
         "region": region,
         "instance_type": instance_type,
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": f"test-{instance_type}",
+        "camp_config": f"test-{instance_type}",
         "volume_size": 40,
     }
 
@@ -260,7 +260,7 @@ def step_running_instance_with_type_and_volume(
     fake_manager = context.fake_ec2_managers[region]
 
     instance_id = f"i-{len(fake_manager.instances):08x}"
-    instance_name = f"moondock-test-{instance_type}"
+    instance_name = f"campers-test-{instance_type}"
     unique_id = f"test-{instance_type}"
 
     fake_manager.instances[instance_id] = {
@@ -271,7 +271,7 @@ def step_running_instance_with_type_and_volume(
         "region": region,
         "instance_type": instance_type,
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": instance_name,
+        "camp_config": instance_name,
         "volume_size": volume_size,
     }
 
@@ -305,7 +305,7 @@ def step_stopped_instance_with_type_and_volume(
     fake_manager = context.fake_ec2_managers[region]
 
     instance_id = f"i-{len(fake_manager.instances):08x}"
-    instance_name = f"moondock-test-{instance_type}"
+    instance_name = f"campers-test-{instance_type}"
     unique_id = f"test-{instance_type}"
 
     fake_manager.instances[instance_id] = {
@@ -316,7 +316,7 @@ def step_stopped_instance_with_type_and_volume(
         "region": region,
         "instance_type": instance_type,
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": instance_name,
+        "camp_config": instance_name,
         "volume_size": volume_size,
     }
 
@@ -352,11 +352,11 @@ def step_instance_in_unsupported_region(context: Context, region: str) -> None:
     instance_data = {
         "instance_id": instance_id,
         "unique_id": unique_id,
-        "name": "moondock-test-unsupported",
+        "name": "campers-test-unsupported",
         "state": "running",
         "instance_type": "t3.medium",
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": "test-unsupported",
+        "camp_config": "test-unsupported",
         "region": region,
     }
 
@@ -388,12 +388,12 @@ def step_running_instance_generic(context: Context) -> None:
     fake_manager.instances[instance_id] = {
         "instance_id": instance_id,
         "unique_id": unique_id,
-        "name": "moondock-test",
+        "name": "campers-test",
         "state": "running",
         "region": region,
         "instance_type": "t3.medium",
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": "test-generic",
+        "camp_config": "test-generic",
         "volume_size": 50,
     }
 
@@ -432,12 +432,12 @@ def step_stopped_instance_generic(context: Context) -> None:
     fake_manager.instances[instance_id] = {
         "instance_id": instance_id,
         "unique_id": unique_id,
-        "name": "moondock-test",
+        "name": "campers-test",
         "state": "stopped",
         "region": region,
         "instance_type": "t3.medium",
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": "test-generic",
+        "camp_config": "test-generic",
         "volume_size": 50,
     }
 
@@ -453,10 +453,10 @@ def step_stopped_instance_generic(context: Context) -> None:
     context.test_instances.append(instance_id)
 
 
-@when('I run "moondock list" twice within 24 hours')
-@given('I run "moondock list" twice within 24 hours')
+@when('I run "campers list" twice within 24 hours')
+@given('I run "campers list" twice within 24 hours')
 def step_run_list_twice(context: Context) -> None:
-    """Run moondock list command twice to test caching."""
+    """Run campers list command twice to test caching."""
     from tests.integration.features.steps.common_steps import execute_command_direct
 
     execute_command_direct(context, "list")

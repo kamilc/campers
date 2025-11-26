@@ -29,7 +29,7 @@ class TUIHandle:
     Attributes
     ----------
     app : Any
-        The MoondockTUI application instance from Textual
+        The CampersTUI application instance from Textual
     pilot : Any
         Textual Pilot object for test interaction
     event_queue : queue.Queue
@@ -37,7 +37,7 @@ class TUIHandle:
     started_at : float
         Timestamp when TUI was launched
     config_path : str
-        Path to moondock configuration file used for launch
+        Path to campers configuration file used for launch
     """
 
     app: Any
@@ -91,7 +91,7 @@ class PilotExtension:
 
     async def launch_tui(
         self,
-        machine_name: str | None,
+        camp_name: str | None,
         config_path: str,
         timeout_sec: float,
     ) -> TUIHandle:
@@ -103,10 +103,10 @@ class PilotExtension:
 
         Parameters
         ----------
-        machine_name : str | None
+        camp_name : str | None
             Machine name to run, None for ad-hoc mode
         config_path : str
-            Path to moondock config file
+            Path to campers config file
         timeout_sec : float
             Timeout budget for TUI operations
 
@@ -122,22 +122,22 @@ class PilotExtension:
         RuntimeError
             If TUI app creation fails
         """
-        from moondock.__main__ import MoondockTUI
+        from campers.__main__ import CampersTUI
 
         update_queue = self.create_tui_update_queue()
 
         try:
             logger.info(
-                "Launching TUI app: machine_name=%s, timeout_sec=%.1f",
-                machine_name,
+                "Launching TUI app: camp_name=%s, timeout_sec=%.1f",
+                camp_name,
                 timeout_sec,
             )
 
-            moondock = __import__("moondock", fromlist=["Moondock"]).Moondock()
+            campers = __import__("campers", fromlist=["Campers"]).Campers()
 
-            app = MoondockTUI(
-                moondock_instance=moondock,
-                run_kwargs={"machine_name": machine_name, "json_output": False},
+            app = CampersTUI(
+                campers_instance=campers,
+                run_kwargs={"camp_name": camp_name, "json_output": False},
                 update_queue=update_queue,
             )
 
@@ -157,7 +157,7 @@ class PilotExtension:
                 self.publish_tui_event(
                     "tui-app-started",
                     {
-                        "machine_name": machine_name,
+                        "camp_name": camp_name,
                         "config_path": config_path,
                         "timestamp": self.tui_handle.started_at,
                     },
@@ -343,7 +343,7 @@ class PilotExtension:
         Parameters
         ----------
         app : Any
-            MoondockTUI app instance to dispose
+            CampersTUI app instance to dispose
         """
         if app is not None:
             try:

@@ -243,15 +243,15 @@ Example feature:
 ```gherkin
 Feature: EC2 Instance Management
   Scenario: Launch instance with custom configuration
-    Given the moondock CLI is available
-    When I run: moondock init --size t3.micro
+    Given the campers CLI is available
+    When I run: campers init --size t3.micro
     Then the instance should be in state "running"
 ```
 
 Corresponding steps:
 
 ```python
-@given("the moondock CLI is available")
+@given("the campers CLI is available")
 def step_cli_available(context: Context) -> None:
     context.cli = MoondockCLI()
 

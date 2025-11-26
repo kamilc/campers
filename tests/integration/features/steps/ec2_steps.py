@@ -11,7 +11,7 @@ from behave.runner import Context
 from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
 from moto import mock_aws
 
-from moondock.ec2 import EC2Manager
+from campers.ec2 import EC2Manager
 
 
 def setup_moto_environment(context: Context) -> None:
@@ -227,16 +227,16 @@ def step_running_instance_with_unique_id(context: Context, unique_id: str) -> No
     vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
     sg_response = ec2_client.create_security_group(
-        GroupName=f"moondock-{unique_id}",
+        GroupName=f"campers-{unique_id}",
         Description=f"Test SG {unique_id}",
         VpcId=vpc_id,
     )
     context.security_group_id = sg_response["GroupId"]
 
-    key_response = ec2_client.create_key_pair(KeyName=f"moondock-{unique_id}")
+    key_response = ec2_client.create_key_pair(KeyName=f"campers-{unique_id}")
 
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    keys_dir = Path(moondock_dir) / "keys"
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    keys_dir = Path(campers_dir) / "keys"
     keys_dir.mkdir(parents=True, exist_ok=True)
     key_file = keys_dir / f"{unique_id}.pem"
     key_file.write_text(key_response["KeyMaterial"])
@@ -246,7 +246,7 @@ def step_running_instance_with_unique_id(context: Context, unique_id: str) -> No
     instances = ec2_resource.create_instances(
         ImageId=ami_id,
         InstanceType="t3.medium",
-        KeyName=f"moondock-{unique_id}",
+        KeyName=f"campers-{unique_id}",
         SecurityGroupIds=[context.security_group_id],
         MinCount=1,
         MaxCount=1,
@@ -254,7 +254,7 @@ def step_running_instance_with_unique_id(context: Context, unique_id: str) -> No
             {
                 "ResourceType": "instance",
                 "Tags": [
-                    {"Key": "ManagedBy", "Value": "moondock"},
+                    {"Key": "ManagedBy", "Value": "campers"},
                     {"Key": "UniqueId", "Value": unique_id},
                 ],
             }
@@ -431,23 +431,23 @@ def step_launch_instance(context: Context) -> None:
     context.ec2_client = ec2_manager.ec2_client
 
 
-@when('I launch instance with machine "{machine_name}"')
-def step_launch_instance_with_machine(context: Context, machine_name: str) -> None:
+@when('I launch instance with machine "{camp_name}"')
+def step_launch_instance_with_machine(context: Context, camp_name: str) -> None:
     """Launch instance using machine config."""
     if hasattr(context, "config_data") and context.config_data:
         defaults = context.config_data.get("defaults", {})
-        machine_config = context.config_data.get("machines", {}).get(machine_name, {})
+        camp_config = context.config_data.get("camps", {}).get(camp_name, {})
         context.ec2_config = {
-            "instance_type": machine_config.get(
+            "instance_type": camp_config.get(
                 "instance_type", defaults.get("instance_type", "t3.medium")
             ),
-            "disk_size": machine_config.get("disk_size", defaults.get("disk_size", 50)),
-            "region": machine_config.get("region", defaults.get("region", "us-east-1")),
-            "machine_name": machine_name,
+            "disk_size": camp_config.get("disk_size", defaults.get("disk_size", 50)),
+            "region": camp_config.get("region", defaults.get("region", "us-east-1")),
+            "camp_name": camp_name,
         }
 
     step_launch_instance(context)
-    context.machine_name = machine_name
+    context.camp_name = camp_name
 
 
 @when('I launch instance with options "{options}"')
@@ -553,15 +553,15 @@ def step_attempt_to_launch_instance(context: Context) -> None:
                 config_path = _write_temp_config(context)
                 context.temp_config_file = config_path
 
-                from moondock.__main__ import Moondock
+                from campers.__main__ import Campers
                 from tests.unit.fakes.fake_ec2_manager import FakeEC2Manager
                 from tests.unit.fakes.fake_ssh_manager import FakeSSHManager
 
-                moondock = Moondock(
+                campers = Campers(
                     ec2_manager_factory=FakeEC2Manager,
                     ssh_manager_factory=FakeSSHManager,
                 )
-                moondock.run(machine_name="test", json_output=True, plain=True)
+                campers.run(camp_name="test", json_output=True, plain=True)
             else:
                 if hasattr(context, "aws_keys_backup"):
                     import boto3.session
@@ -773,12 +773,12 @@ def step_verify_key_pair_name(context: Context, prefix: str) -> None:
     assert any(kp["KeyName"].startswith(prefix) for kp in key_pairs["KeyPairs"])
 
 
-@then('private key is saved to "~/.moondock/keys/{unique_id}.pem"')
+@then('private key is saved to "~/.campers/keys/{unique_id}.pem"')
 def step_verify_key_file_saved(context: Context, unique_id: str) -> None:
     """Verify private key saved to disk with placeholder path."""
     actual_unique_id = context.instance_details["unique_id"]
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    key_file = Path(moondock_dir) / "keys" / f"{actual_unique_id}.pem"
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    key_file = Path(campers_dir) / "keys" / f"{actual_unique_id}.pem"
     assert key_file.exists()
 
     context.cleanup_key_file = key_file
@@ -797,7 +797,7 @@ def step_verify_instance_has_key(context: Context) -> None:
     ec2_resource = boto3.resource("ec2", region_name="us-east-1")
     instance = ec2_resource.Instance(context.instance_details["instance_id"])
     instance.load()
-    assert instance.key_name.startswith("moondock-")
+    assert instance.key_name.startswith("campers-")
 
 
 @then("key name matches security group unique_id")
@@ -926,7 +926,7 @@ def step_verify_ami_arch(context: Context, arch: str) -> None:
             f"Expected architecture {arch}, got {image['Architecture']}"
         )
     else:
-        assert os.environ.get("MOONDOCK_TEST_MODE") == "1", (
+        assert os.environ.get("CAMPERS_TEST_MODE") == "1", (
             "Architecture attribute missing from AMI (only acceptable in test mode)"
         )
 
@@ -942,7 +942,7 @@ def step_verify_ami_virt(context: Context, virt_type: str) -> None:
             f"Expected virtualization {virt_type}, got {image['VirtualizationType']}"
         )
     else:
-        assert os.environ.get("MOONDOCK_TEST_MODE") == "1", (
+        assert os.environ.get("CAMPERS_TEST_MODE") == "1", (
             "VirtualizationType missing (only acceptable in test mode)"
         )
 
@@ -961,7 +961,7 @@ def step_verify_key_deleted_generic(context: Context) -> None:
     assert hasattr(context, "ec2_client"), "ec2_client not found in context"
     assert context.ec2_client is not None, "ec2_client is None"
 
-    key_name = f"moondock-{context.unique_id}"
+    key_name = f"campers-{context.unique_id}"
     key_pairs = context.ec2_client.describe_key_pairs()
     key_names = [kp["KeyName"] for kp in key_pairs["KeyPairs"]]
     assert key_name not in key_names
@@ -981,16 +981,16 @@ def step_verify_key_file_deleted_generic(context: Context) -> None:
     assert hasattr(context, "unique_id"), "unique_id not found in context"
     assert context.unique_id is not None, "unique_id is None"
 
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    key_file = Path(moondock_dir) / "keys" / f"{context.unique_id}.pem"
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    key_file = Path(campers_dir) / "keys" / f"{context.unique_id}.pem"
     assert not key_file.exists()
 
 
-@then('key file "~/.moondock/keys/{unique_id}.pem" is deleted')
+@then('key file "~/.campers/keys/{unique_id}.pem" is deleted')
 def step_verify_key_file_deleted(context: Context, unique_id: str) -> None:
     """Verify key file deleted from disk."""
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    key_file = Path(moondock_dir) / "keys" / f"{unique_id}.pem"
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    key_file = Path(campers_dir) / "keys" / f"{unique_id}.pem"
     assert not key_file.exists()
 
 
@@ -1182,32 +1182,32 @@ def step_verify_rollback_cleanup(context: Context) -> None:
     assert context.ec2_client is not None, "ec2_client is None"
 
     key_pairs = context.ec2_client.describe_key_pairs()
-    moondock_keys = [
-        kp for kp in key_pairs["KeyPairs"] if kp["KeyName"].startswith("moondock-")
+    campers_keys = [
+        kp for kp in key_pairs["KeyPairs"] if kp["KeyName"].startswith("campers-")
     ]
-    assert len(moondock_keys) == 0, (
+    assert len(campers_keys) == 0, (
         f"Rollback failed: Found orphaned key pairs: "
-        f"{[k['KeyName'] for k in moondock_keys]}"
+        f"{[k['KeyName'] for k in campers_keys]}"
     )
 
     try:
         sgs = context.ec2_client.describe_security_groups(
-            Filters=[{"Name": "group-name", "Values": ["moondock-*"]}]
+            Filters=[{"Name": "group-name", "Values": ["campers-*"]}]
         )
-        moondock_sgs = [
+        campers_sgs = [
             sg
             for sg in sgs.get("SecurityGroups", [])
-            if sg["GroupName"].startswith("moondock-")
+            if sg["GroupName"].startswith("campers-")
         ]
-        assert len(moondock_sgs) == 0, (
+        assert len(campers_sgs) == 0, (
             f"Rollback failed: Found orphaned security groups: "
-            f"{[sg['GroupName'] for sg in moondock_sgs]}"
+            f"{[sg['GroupName'] for sg in campers_sgs]}"
         )
     except ClientError:
         pass
 
-    moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-    keys_dir = Path(moondock_dir) / "keys"
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    keys_dir = Path(campers_dir) / "keys"
 
     if keys_dir.exists() and hasattr(context, "unique_id"):
         expected_key_file = keys_dir / f"{context.unique_id}.pem"
@@ -1240,7 +1240,7 @@ def step_verify_existing_key_deleted(context: Context) -> None:
     key_names = [kp["KeyName"] for kp in key_pairs["KeyPairs"]]
 
     if hasattr(context, "instance_details") and context.instance_details:
-        new_key_name = f"moondock-{context.instance_details['unique_id']}"
+        new_key_name = f"campers-{context.instance_details['unique_id']}"
         assert new_key_name in key_names, (
             f"Key pair '{new_key_name}' not found after conflict resolution"
         )
@@ -1560,7 +1560,7 @@ def step_verify_error_includes_filters(context: Context) -> None:
     assert "No AMI found" in str(context.exception)
 
 
-@given("an existing moondock config without ami section")
+@given("an existing campers config without ami section")
 def step_existing_config_no_ami(context: Context) -> None:
     """Create existing config without ami section."""
     context.ami_config = {"instance_type": "t3.medium", "disk_size": 50}

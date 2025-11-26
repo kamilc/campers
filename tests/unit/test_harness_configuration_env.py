@@ -203,23 +203,23 @@ class TestConfigurationEnvIsolation:
         """Test environment variable isolation using setup/cleanup pattern."""
         try:
             original_value = "original"
-            os.environ["MOONDOCK_DIR"] = original_value
+            os.environ["CAMPERS_DIR"] = original_value
 
             env = ConfigurationEnv()
             env.enter()
-            env.set("MOONDOCK_DIR", "/tmp/test_scenario")
+            env.set("CAMPERS_DIR", "/tmp/test_scenario")
             env.set("AWS_ACCESS_KEY_ID", "testing")
             env.set("AWS_SECRET_ACCESS_KEY", "testing")
 
-            assert os.environ["MOONDOCK_DIR"] == "/tmp/test_scenario"
+            assert os.environ["CAMPERS_DIR"] == "/tmp/test_scenario"
             assert os.environ["AWS_ACCESS_KEY_ID"] == "testing"
             assert os.environ["AWS_SECRET_ACCESS_KEY"] == "testing"
 
             env.exit()
 
-            assert os.environ["MOONDOCK_DIR"] == original_value
+            assert os.environ["CAMPERS_DIR"] == original_value
             assert "AWS_ACCESS_KEY_ID" not in os.environ
             assert "AWS_SECRET_ACCESS_KEY" not in os.environ
         finally:
-            if "MOONDOCK_DIR" in os.environ:
-                del os.environ["MOONDOCK_DIR"]
+            if "CAMPERS_DIR" in os.environ:
+                del os.environ["CAMPERS_DIR"]

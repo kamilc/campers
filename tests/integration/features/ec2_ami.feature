@@ -77,7 +77,7 @@ Scenario: Error when no AMIs match query
 
 @smoke @dry_run
 Scenario: Backward compatibility - existing config without ami section
-  Given an existing moondock config without ami section
+  Given an existing campers config without ami section
   When instance is launched
   Then Amazon Ubuntu 24 x86_64 AMI is selected
   And behavior is unchanged from previous version

@@ -85,7 +85,7 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
     context : Context
         Behave test context
     """
-    context.mock_moondock._resources = {
+    context.mock_campers._resources = {
         "ec2_manager": MagicMock(),
         "instance_details": {"instance_id": TEST_INSTANCE_ID},
         "ssh_manager": MagicMock(),
@@ -95,22 +95,22 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
     }
     context.cleanup_order = []
 
-    context.mock_moondock._resources["portforward_mgr"].stop_all_tunnels.side_effect = (
+    context.mock_campers._resources["portforward_mgr"].stop_all_tunnels.side_effect = (
         lambda: context.cleanup_order.append("portforward")
     )
-    context.mock_moondock._resources["mutagen_mgr"].terminate_session.side_effect = (
+    context.mock_campers._resources["mutagen_mgr"].terminate_session.side_effect = (
         lambda name, ssh_wrapper_dir=None, host=None: context.cleanup_order.append(
             "mutagen"
         )
     )
-    context.mock_moondock._resources["ssh_manager"].close.side_effect = (
+    context.mock_campers._resources["ssh_manager"].close.side_effect = (
         lambda: context.cleanup_order.append("ssh")
     )
-    context.mock_moondock._resources["ec2_manager"].stop_instance.side_effect = (
+    context.mock_campers._resources["ec2_manager"].stop_instance.side_effect = (
         lambda id: context.cleanup_order.append("ec2")
     )
-    context.mock_moondock._resources["ec2_manager"].get_volume_size.return_value = 50
-    context.mock_moondock._resources["ec2_manager"].terminate_instance.side_effect = (
+    context.mock_campers._resources["ec2_manager"].get_volume_size.return_value = 50
+    context.mock_campers._resources["ec2_manager"].terminate_instance.side_effect = (
         lambda id: context.cleanup_order.append("ec2")
     )
 
@@ -119,7 +119,7 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
 def step_instance_running_with_all_resources(context: Context) -> None:
     """Set up instance with all resources active.
 
-    For @localstack scenarios, launches moondock as subprocess.
+    For @localstack scenarios, launches campers as subprocess.
     For @dry_run scenarios, sets up mock resources.
 
     Parameters
@@ -132,17 +132,17 @@ def step_instance_running_with_all_resources(context: Context) -> None:
         import yaml
 
         if not hasattr(context, "config_data") or context.config_data is None:
-            context.config_data = {"defaults": {}, "machines": {}}
+            context.config_data = {"defaults": {}, "camps": {}}
 
-        if "machines" not in context.config_data:
-            context.config_data["machines"] = {}
+        if "camps" not in context.config_data:
+            context.config_data["camps"] = {}
 
         context.config_data["defaults"]["command"] = "sleep 300"
         context.config_data["defaults"]["ports"] = [48888]
         context.config_data["defaults"]["sync_paths"] = [
             {"local": "~/test-sync", "remote": "~/test-sync"}
         ]
-        context.config_data["machines"]["test-box"] = {}
+        context.config_data["camps"]["test-box"] = {}
 
         temp_file = tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False, dir=context.tmp_dir
@@ -152,18 +152,18 @@ def step_instance_running_with_all_resources(context: Context) -> None:
         context.temp_config_file = temp_file.name
 
         context.harness.services.configuration_env.set(
-            "MOONDOCK_CONFIG", temp_file.name
+            "CAMPERS_CONFIG", temp_file.name
         )
-        context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
+        context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "0")
         context.harness.services.configuration_env.set(
-            "MOONDOCK_FORCE_SIGNAL_EXIT", "1"
+            "CAMPERS_FORCE_SIGNAL_EXIT", "1"
         )
-        os.environ["MOONDOCK_FORCE_SIGNAL_EXIT"] = "1"
-        context.harness.services.configuration_env.set("MOONDOCK_DISABLE_MUTAGEN", "1")
-        os.environ["MOONDOCK_DISABLE_MUTAGEN"] = "1"
+        os.environ["CAMPERS_FORCE_SIGNAL_EXIT"] = "1"
+        context.harness.services.configuration_env.set("CAMPERS_DISABLE_MUTAGEN", "1")
+        os.environ["CAMPERS_DISABLE_MUTAGEN"] = "1"
 
         context.app_process = subprocess.Popen(
-            ["uv", "run", "moondock", "run", "test-box"],
+            ["uv", "run", "campers", "run", "test-box"],
             cwd=os.getcwd(),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -230,13 +230,13 @@ def step_instance_launch_in_progress(context: Context) -> None:
         import yaml
 
         if not hasattr(context, "config_data") or context.config_data is None:
-            context.config_data = {"defaults": {}, "machines": {}}
+            context.config_data = {"defaults": {}, "camps": {}}
 
-        if "machines" not in context.config_data:
-            context.config_data["machines"] = {}
+        if "camps" not in context.config_data:
+            context.config_data["camps"] = {}
 
         context.config_data["defaults"]["command"] = "sleep 300"
-        context.config_data["machines"]["test-box"] = {}
+        context.config_data["camps"]["test-box"] = {}
 
         temp_file = tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False, dir=context.tmp_dir
@@ -246,24 +246,24 @@ def step_instance_launch_in_progress(context: Context) -> None:
         context.temp_config_file = temp_file.name
 
         context.harness.services.configuration_env.set(
-            "MOONDOCK_CONFIG", temp_file.name
+            "CAMPERS_CONFIG", temp_file.name
         )
-        context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "0")
+        context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "0")
         context.harness.services.configuration_env.set(
-            "MOONDOCK_FORCE_SIGNAL_EXIT", "1"
+            "CAMPERS_FORCE_SIGNAL_EXIT", "1"
         )
-        os.environ["MOONDOCK_FORCE_SIGNAL_EXIT"] = "1"
-        context.harness.services.configuration_env.set("MOONDOCK_DISABLE_MUTAGEN", "1")
-        os.environ["MOONDOCK_DISABLE_MUTAGEN"] = "1"
+        os.environ["CAMPERS_FORCE_SIGNAL_EXIT"] = "1"
+        context.harness.services.configuration_env.set("CAMPERS_DISABLE_MUTAGEN", "1")
+        os.environ["CAMPERS_DISABLE_MUTAGEN"] = "1"
 
         scenario_name = context.scenario.name if hasattr(context, "scenario") else ""
         if "only cleans created resources" in scenario_name:
             context.harness.services.configuration_env.set(
-                "MOONDOCK_SKIP_SSH_CONNECTION", "1"
+                "CAMPERS_SKIP_SSH_CONNECTION", "1"
             )
 
         context.app_process = subprocess.Popen(
-            ["uv", "run", "moondock", "run", "test-box"],
+            ["uv", "run", "campers", "run", "test-box"],
             cwd=os.getcwd(),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -280,13 +280,13 @@ def step_instance_launch_in_progress(context: Context) -> None:
                 f"stdout: {stdout}\nstderr: {stderr}"
             )
     else:
-        context.mock_moondock._resources = {
+        context.mock_campers._resources = {
             "ec2_manager": MagicMock(),
             "instance_details": {"instance_id": TEST_INSTANCE_ID},
         }
         context.cleanup_order = []
 
-        context.mock_moondock._resources[
+        context.mock_campers._resources[
             "ec2_manager"
         ].terminate_instance.side_effect = lambda id: context.cleanup_order.append(
             "ec2"
@@ -297,7 +297,7 @@ def step_instance_launch_in_progress(context: Context) -> None:
 def step_ssh_not_connected(context: Context) -> None:
     """Simulate SSH not yet connected state.
 
-    For @localstack scenarios, this is handled by setting MOONDOCK_SKIP_SSH_CONNECTION
+    For @localstack scenarios, this is handled by setting CAMPERS_SKIP_SSH_CONNECTION
     in the "instance launch is in progress" step.
     For @dry_run scenarios, removes ssh_manager from mock resources.
 
@@ -309,8 +309,8 @@ def step_ssh_not_connected(context: Context) -> None:
     if hasattr(context, "scenario") and "localstack" in context.scenario.tags:
         pass
     else:
-        if "ssh_manager" in context.mock_moondock._resources:
-            del context.mock_moondock._resources["ssh_manager"]
+        if "ssh_manager" in context.mock_campers._resources:
+            del context.mock_campers._resources["ssh_manager"]
 
 
 @given("mutagen termination will fail")
@@ -330,7 +330,7 @@ def step_mutagen_will_fail(context: Context) -> None:
     else:
         context.cleanup_order = []
 
-        context.mock_moondock._resources[
+        context.mock_campers._resources[
             "portforward_mgr"
         ].stop_all_tunnels.side_effect = lambda: context.cleanup_order.append(
             "portforward"
@@ -342,14 +342,14 @@ def step_mutagen_will_fail(context: Context) -> None:
             context.cleanup_order.append("mutagen_fail")
             raise RuntimeError("Mutagen error")
 
-        context.mock_moondock._resources[
+        context.mock_campers._resources[
             "mutagen_mgr"
         ].terminate_session.side_effect = mutagen_fail
 
-        context.mock_moondock._resources["ssh_manager"].close.side_effect = (
+        context.mock_campers._resources["ssh_manager"].close.side_effect = (
             lambda: context.cleanup_order.append("ssh")
         )
-        context.mock_moondock._resources[
+        context.mock_campers._resources[
             "ec2_manager"
         ].terminate_instance.side_effect = lambda id: context.cleanup_order.append(
             "ec2"
@@ -358,7 +358,7 @@ def step_mutagen_will_fail(context: Context) -> None:
 
 @given("cleanup is already in progress")
 def step_cleanup_in_progress(context: Context) -> None:
-    context.mock_moondock._cleanup_in_progress = True
+    context.mock_campers._cleanup_in_progress = True
 
 
 @when("SIGINT signal is received")
@@ -403,7 +403,7 @@ def step_sigint_received(context: Context) -> None:
     else:
         capture_logs_during_cleanup(
             context,
-            context.mock_moondock._cleanup_resources,
+            context.mock_campers._cleanup_resources,
             signum=signal.SIGINT,
             frame=None,
         )
@@ -451,7 +451,7 @@ def step_sigterm_received(context: Context) -> None:
     else:
         capture_logs_during_cleanup(
             context,
-            context.mock_moondock._cleanup_resources,
+            context.mock_campers._cleanup_resources,
             signum=signal.SIGTERM,
             frame=None,
         )
@@ -459,13 +459,13 @@ def step_sigterm_received(context: Context) -> None:
 
 @when("another SIGINT signal is received")
 def step_another_sigint_received(context: Context) -> None:
-    context.mock_moondock._cleanup_resources(signum=signal.SIGINT, frame=None)
+    context.mock_campers._cleanup_resources(signum=signal.SIGINT, frame=None)
 
 
-@when("moondock run completes normally")
-def step_moondock_run_completes(context: Context) -> None:
-    context.mock_moondock._cleanup_in_progress = False
-    context.mock_moondock._cleanup_resources()
+@when("campers run completes normally")
+def step_campers_run_completes(context: Context) -> None:
+    context.mock_campers._cleanup_in_progress = False
+    context.mock_campers._cleanup_resources()
 
 
 @when("SIGINT signal is received during execution")
@@ -481,7 +481,7 @@ def step_sigint_during_execution(context: Context) -> None:
 
     capture_logs_during_cleanup(
         context,
-        context.mock_moondock._cleanup_resources,
+        context.mock_campers._cleanup_resources,
         signum=signal.SIGINT,
         frame=None,
     )
@@ -917,12 +917,12 @@ def step_second_cleanup_skipped(context: Context) -> None:
 
 @then("no duplicate cleanup errors occur")
 def step_no_duplicate_cleanup_errors(context: Context) -> None:
-    assert context.mock_moondock._cleanup_in_progress is True
+    assert context.mock_campers._cleanup_in_progress is True
 
 
 @then("cleanup happens in finally block")
 def step_cleanup_in_finally(context: Context) -> None:
-    assert context.mock_moondock._cleanup_in_progress is False
+    assert context.mock_campers._cleanup_in_progress is False
 
 
 @then("cleanup sequence executes on mock resources")
@@ -942,4 +942,4 @@ def step_cleanup_on_mock_resources(context: Context) -> None:
 
 @then("no actual AWS operations occur")
 def step_no_actual_aws_operations(context: Context) -> None:
-    assert context.mock_moondock._resources is not None
+    assert context.mock_campers._resources is not None

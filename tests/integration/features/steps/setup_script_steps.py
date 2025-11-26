@@ -11,9 +11,9 @@ from tests.integration.features.steps.docker_helpers import exec_in_ssh_containe
 logger = logging.getLogger(__name__)
 
 
-@given('machine "{machine_name}" has multi-line setup_script')
+@given('machine "{camp_name}" has multi-line setup_script')
 def step_machine_has_multi_line_setup_script(
-    context: Context, machine_name: str
+    context: Context, camp_name: str
 ) -> None:
     """Configure machine with multi-line setup_script with shell features.
 
@@ -21,15 +21,15 @@ def step_machine_has_multi_line_setup_script(
     ----------
     context : Context
         Behave context object
-    machine_name : str
+    camp_name : str
         Machine name
     """
-    ensure_machine_exists(context, machine_name)
+    ensure_machine_exists(context, camp_name)
 
     multi_line_script = "set -e; mkdir -p /tmp/workspace; echo 'Ready' > /tmp/workspace/status.txt; if [ -d /tmp/workspace ]; then echo 'Workspace created'; fi"
 
-    context.config_data["machines"][machine_name]["setup_script"] = multi_line_script
-    logger.info(f"Configured multi-line setup_script for {machine_name}")
+    context.config_data["camps"][camp_name]["setup_script"] = multi_line_script
+    logger.info(f"Configured multi-line setup_script for {camp_name}")
 
 
 @then('marker file "{filename}" exists in SSH container')

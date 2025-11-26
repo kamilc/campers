@@ -82,8 +82,8 @@ def ensure_defaults_section(context: Context) -> dict:
 def extract_ports_from_config(
     context: Context,
     include_defaults: bool = True,
-    include_machines: bool = True,
-    machine_name: str | None = None,
+    include_camps: bool = True,
+    camp_name: str | None = None,
 ) -> list[int]:
     """Extract unique ports from config based on specified sources.
 
@@ -93,9 +93,9 @@ def extract_ports_from_config(
         Behave context object containing config data
     include_defaults : bool
         Whether to include ports from defaults section
-    include_machines : bool
-        Whether to include ports from machines section
-    machine_name : str | None
+    include_camps : bool
+        Whether to include ports from camps section
+    camp_name : str | None
         If specified, only extract ports from this machine
 
     Returns
@@ -113,15 +113,15 @@ def extract_ports_from_config(
         default_ports = defaults.get("ports", [])
         all_ports.extend(default_ports)
 
-    if include_machines:
-        machines = context.config_data.get("machines", {})
+    if include_camps:
+        camps = context.config_data.get("camps", {})
 
-        if machine_name:
-            machine_config = machines.get(machine_name, {})
-            machine_ports = machine_config.get("ports", [])
+        if camp_name:
+            camp_config = camps.get(camp_name, {})
+            machine_ports = camp_config.get("ports", [])
             all_ports.extend(machine_ports)
         else:
-            for config in machines.values():
+            for config in camps.values():
                 ports = config.get("ports", [])
                 all_ports.extend(ports)
 
@@ -179,14 +179,14 @@ def step_command_executing(context: Context) -> None:
 def step_port_tunnel_fails(context: Context, port: int) -> None:
     """Mark that tunnel creation will fail for specific port."""
     context.harness.services.configuration_env.set(
-        "MOONDOCK_TUNNEL_FAIL_PORT", str(port)
+        "CAMPERS_TUNNEL_FAIL_PORT", str(port)
     )
 
 
 @given("local port {port:d} is already in use")
 def step_local_port_in_use(context: Context, port: int) -> None:
     """Mark that local port is already in use."""
-    context.harness.services.configuration_env.set("MOONDOCK_PORT_IN_USE", str(port))
+    context.harness.services.configuration_env.set("CAMPERS_PORT_IN_USE", str(port))
 
 
 @then("SSH tunnel is created for port {port:d}")
@@ -364,7 +364,7 @@ def step_tunnel_fails_with_error(context: Context) -> None:
 @when("user interrupts with KeyboardInterrupt")
 def step_user_interrupts(context: Context) -> None:
     """Simulate KeyboardInterrupt."""
-    context.harness.services.configuration_env.set("MOONDOCK_SIMULATE_INTERRUPT", "1")
+    context.harness.services.configuration_env.set("CAMPERS_SIMULATE_INTERRUPT", "1")
 
 
 @when("SSH tunnel is created for port {port:d}")
@@ -648,18 +648,18 @@ def start_http_servers_for_machine_ports(context: Context) -> None:
         logger.debug("No config_data available, skipping HTTP server setup")
         return
 
-    if not hasattr(context, "machine_name") or context.machine_name is None:
-        logger.debug("No machine_name available, skipping HTTP server setup")
+    if not hasattr(context, "camp_name") or context.camp_name is None:
+        logger.debug("No camp_name available, skipping HTTP server setup")
         return
 
-    machines = context.config_data.get("machines", {})
-    machine_config = machines.get(context.machine_name, {})
-    ports = machine_config.get("ports", [])
+    camps = context.config_data.get("camps", {})
+    camp_config = camps.get(context.camp_name, {})
+    ports = camp_config.get("ports", [])
     start_http_servers_for_ports(context, ports)
 
 
 def start_http_servers_for_all_configured_ports(context: Context) -> None:
-    """Start HTTP servers for all configured ports in defaults and machines.
+    """Start HTTP servers for all configured ports in defaults and camps.
 
     This function starts HTTP servers for ports from both the defaults section
     and machine-specific configuration. Called after instance creation to ensure
@@ -675,7 +675,7 @@ def start_http_servers_for_all_configured_ports(context: Context) -> None:
         return
 
     unique_ports = extract_ports_from_config(
-        context, include_defaults=True, include_machines=True
+        context, include_defaults=True, include_camps=True
     )
 
     if unique_ports:

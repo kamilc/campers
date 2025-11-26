@@ -7,7 +7,7 @@ Scenario: Doctor reports missing VPC
   When I run doctor
   Then exit code is 0
   And stdout contains "No default VPC in us-east-1"
-  And stdout contains "moondock setup"
+  And stdout contains "campers setup"
   And stdout contains "aws ec2 create-default-vpc --region us-east-1"
 
 @smoke @dry_run

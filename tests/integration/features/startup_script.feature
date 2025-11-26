@@ -8,7 +8,7 @@ Scenario: Execute startup_script after Mutagen sync
   And defaults have command "test -f ~/myproject/.startup_marker && echo success"
   And LocalStack is healthy and responding
 
-  When I run moondock command "run -c 'test -f ~/myproject/.startup_marker && echo success'"
+  When I run campers command "run -c 'test -f ~/myproject/.startup_marker && echo success'"
 
   Then instance is launched
   And SSH connection is established
@@ -25,7 +25,7 @@ Scenario: Multi-line startup_script with shell features
   And defaults have command "cat /config/myproject/.venv/status.txt"
   And LocalStack is healthy and responding
 
-  When I run moondock command "run -c 'cat /config/myproject/.venv/status.txt'"
+  When I run campers command "run -c 'cat /config/myproject/.venv/status.txt'"
 
   Then startup_script executes successfully
   And startup_script exit code is 0
@@ -40,7 +40,7 @@ Scenario: Startup_script failure prevents command execution
   And defaults have startup_script "exit 42"
   And LocalStack is healthy and responding
 
-  When I run moondock command "run -c 'echo hello'"
+  When I run campers command "run -c 'echo hello'"
 
   Then instance is launched
   And startup_script exit code is 42
@@ -57,7 +57,7 @@ Scenario: Skip startup_script when not defined
   And defaults have command "hostname"
   And LocalStack is healthy and responding
 
-  When I run moondock command "run -c 'hostname'"
+  When I run campers command "run -c 'hostname'"
 
   Then instance is launched
   And startup_script execution is skipped
@@ -67,12 +67,12 @@ Scenario: Skip startup_script when not defined
 Scenario: Configuration hierarchy for startup_script
   Given YAML defaults with startup_script "touch ~/myproject/.default_marker"
   And defaults have sync_paths configured
-  And machine "override-box" has startup_script "touch ~/myproject/.machine_marker"
+  And camp "override-box" has startup_script "touch ~/myproject/.camp_marker"
   And LocalStack is healthy and responding
 
-  When I run moondock command "run override-box -c 'ls ~/myproject'"
+  When I run campers command "run override-box -c 'ls ~/myproject'"
 
-  Then file "/config/myproject/.machine_marker" exists in SSH container
+  Then file "/config/myproject/.camp_marker" exists in SSH container
   And status message "Startup script completed successfully" is logged
 
 @smoke @localstack @pilot @timeout_300
@@ -84,7 +84,7 @@ Scenario: Execute startup_script after sync via TUI
   And LocalStack is healthy and responding
 
   When I launch the Moondock TUI with the config file
-  And I simulate running the machine in the TUI
+  And I simulate running the camp in the TUI
 
   Then the TUI log panel contains "Running startup_script..."
   And the TUI log panel contains "Startup script completed successfully"
@@ -101,7 +101,7 @@ Scenario: Multi-line startup_script via TUI
   And LocalStack is healthy and responding
 
   When I launch the Moondock TUI with the config file
-  And I simulate running the machine in the TUI
+  And I simulate running the camp in the TUI
 
   Then the TUI log panel contains "Startup script completed successfully"
   And file "/config/myproject/.venv/status.txt" contains "Activated"
@@ -116,7 +116,7 @@ Scenario: Startup_script failure shown in TUI
   And LocalStack is healthy and responding
 
   When I launch the Moondock TUI with the config file
-  And I simulate running the machine in the TUI
+  And I simulate running the camp in the TUI
 
   Then the TUI log panel contains "Running startup_script..."
   And the TUI log panel contains "Startup script failed with exit code: 42"
@@ -132,7 +132,7 @@ Scenario: Skip startup_script via TUI when not defined
   And LocalStack is healthy and responding
 
   When I launch the Moondock TUI with the config file
-  And I simulate running the machine in the TUI
+  And I simulate running the camp in the TUI
 
   Then the TUI log panel does not contain "Running startup_script..."
   And the TUI log panel contains "Command completed successfully"
@@ -143,15 +143,15 @@ Scenario: Configuration hierarchy via TUI
   Given a config file with defaults section
   And defaults have sync_paths configured
   And defaults have startup_script "touch ~/myproject/.default_marker"
-  And machine "override-box" has startup_script "touch ~/myproject/.machine_marker"
-  And machine "override-box" has command "ls ~/myproject"
+  And camp "override-box" has startup_script "touch ~/myproject/.camp_marker"
+  And camp "override-box" has command "ls ~/myproject"
   And LocalStack is healthy and responding
 
   When I launch the Moondock TUI with the config file
   And I simulate running the "override-box" in the TUI
 
   Then the TUI log panel contains "Startup script completed successfully"
-  And file "/config/myproject/.machine_marker" exists in SSH container
+  And file "/config/myproject/.camp_marker" exists in SSH container
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
 @smoke @dry_run
@@ -159,7 +159,7 @@ Scenario: startup_script executes from synced directory
   Given config file with defaults section
   And defaults have sync_paths with local "~/myproject" and remote "~/myproject"
   And defaults have startup_script "pwd"
-  When I run moondock command "run -c 'echo done'"
+  When I run campers command "run -c 'echo done'"
   Then startup_script exit code is 0
   And working directory is sync remote path
 
@@ -168,18 +168,18 @@ Scenario: Command executes from synced directory after startup_script
   Given config file with defaults section
   And defaults have sync_paths with local "~/app" and remote "~/app"
   And defaults have startup_script "source .venv/bin/activate"
-  When I run moondock command "run -c 'pwd'"
+  When I run campers command "run -c 'pwd'"
   Then startup_script exit code is 0
   And command exit code is 0
   And working directory is sync remote path
 
 @smoke @dry_run
 Scenario: Test mode simulates startup_script execution
-  Given MOONDOCK_TEST_MODE is "1"
+  Given CAMPERS_TEST_MODE is "1"
   And config file with defaults section
   And defaults have sync_paths configured
   And defaults have startup_script "source .venv/bin/activate"
-  When I run moondock command "run -c 'python --version'"
+  When I run campers command "run -c 'python --version'"
   Then SSH connection is not actually attempted for startup_script
   And status message "Running startup_script..." is logged
   And status message "Startup script completed successfully" is logged

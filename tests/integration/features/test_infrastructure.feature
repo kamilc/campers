@@ -19,5 +19,5 @@ Scenario: Cleanup errors are logged
 Scenario: Test artifacts are cleaned
   Given test infrastructure improvements start
   When checking for pre-existing artifacts
-  Then old key files in "$MOONDOCK_DIR/keys/" are removed
+  Then old key files in "$CAMPERS_DIR/keys/" are removed
   And directory is empty or non-existent

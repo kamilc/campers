@@ -9,8 +9,8 @@ from behave import given, then, when
 from behave.runner import Context
 from moto import mock_aws
 
-from moondock.ec2 import EC2Manager
-from moondock.utils import (
+from campers.ec2 import EC2Manager
+from campers.utils import (
     generate_instance_name,
     sanitize_instance_name,
 )
@@ -20,8 +20,8 @@ from moondock.utils import (
 def step_setup_git_repo(context: Context, project: str, branch: str) -> None:
     """Set up a mocked git repository context."""
     with (
-        patch("moondock.utils.get_git_project_name") as mock_proj,
-        patch("moondock.utils.get_git_branch") as mock_branch,
+        patch("campers.utils.get_git_project_name") as mock_proj,
+        patch("campers.utils.get_git_branch") as mock_branch,
     ):
         mock_proj.return_value = project
         mock_branch.return_value = branch
@@ -56,8 +56,8 @@ def step_detached_head(context: Context) -> None:
 def step_create_with_git_context(context: Context) -> None:
     """Generate an instance name using git context."""
     with (
-        patch("moondock.utils.get_git_project_name") as mock_proj,
-        patch("moondock.utils.get_git_branch") as mock_branch,
+        patch("campers.utils.get_git_project_name") as mock_proj,
+        patch("campers.utils.get_git_branch") as mock_branch,
     ):
         mock_proj.return_value = getattr(context, "git_project", None)
         mock_branch.return_value = getattr(context, "git_branch", None)
@@ -73,8 +73,8 @@ def step_create_with_fallback(context: Context) -> None:
             context.generated_name = generate_instance_name()
     else:
         with (
-            patch("moondock.utils.get_git_project_name") as mock_proj,
-            patch("moondock.utils.get_git_branch") as mock_branch,
+            patch("campers.utils.get_git_project_name") as mock_proj,
+            patch("campers.utils.get_git_branch") as mock_branch,
         ):
             mock_proj.return_value = None
             mock_branch.return_value = None
@@ -173,7 +173,7 @@ def step_create_running_instance(context: Context, instance_name: str) -> None:
     config = {
         "instance_type": instance_type,
         "disk_size": 20,
-        "machine_name": "test-machine",
+        "camp_name": "test-machine",
     }
 
     is_localstack = (
@@ -202,7 +202,7 @@ def step_create_stopped_instance(context: Context, instance_name: str) -> None:
     config = {
         "instance_type": "t2.micro",
         "disk_size": 20,
-        "machine_name": "test-machine",
+        "camp_name": "test-machine",
     }
 
     is_localstack = (
@@ -251,9 +251,9 @@ def step_verify_stopped_instance_no_public_ip(context: Context) -> None:
     )
 
 
-@when('I run "moondock stop {instance_id_or_name}"')
+@when('I run "campers stop {instance_id_or_name}"')
 def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
-    """Stop an instance using moondock stop command."""
+    """Stop an instance using campers stop command."""
     if getattr(context, "missing_permissions", False):
         context.command_error = getattr(
             context, "permission_error", "Insufficient AWS permissions"
@@ -289,7 +289,7 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
             from pathlib import Path
 
             ec2_manager = getattr(context, "ec2_manager", None)
-            cmd = ["moondock", "stop", actual_instance_id]
+            cmd = ["campers", "stop", actual_instance_id]
             if ec2_manager is not None:
                 cmd.extend(["--region", ec2_manager.region])
 
@@ -325,9 +325,9 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
             context.exit_code = 1
 
 
-@when('I run "moondock start {instance_id_or_name}"')
+@when('I run "campers start {instance_id_or_name}"')
 def step_start_instance(context: Context, instance_id_or_name: str) -> None:
-    """Start an instance using moondock start command."""
+    """Start an instance using campers start command."""
     if getattr(context, "missing_permissions", False):
         context.command_error = getattr(
             context, "permission_error", "Insufficient AWS permissions"
@@ -361,7 +361,7 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
             from pathlib import Path
 
             ec2_manager = getattr(context, "ec2_manager", None)
-            cmd = ["moondock", "start", actual_instance_id]
+            cmd = ["campers", "start", actual_instance_id]
             if ec2_manager is not None:
                 cmd.extend(["--region", ec2_manager.region])
 
@@ -572,7 +572,7 @@ def step_create_instance_with_resources(context: Context) -> None:
     config = {
         "instance_type": "t2.micro",
         "disk_size": 20,
-        "machine_name": "test-machine",
+        "camp_name": "test-machine",
     }
 
     is_localstack = (
@@ -582,10 +582,10 @@ def step_create_instance_with_resources(context: Context) -> None:
         config["ami"] = {"image_id": "ami-03cf127a"}
 
     instance_details = ec2_manager.launch_instance(
-        config, instance_name="moondock-test-full-resources"
+        config, instance_name="campers-test-full-resources"
     )
     context.test_instance_id = instance_details["instance_id"]
-    context.test_instance_name = "moondock-test-full-resources"
+    context.test_instance_name = "campers-test-full-resources"
     context.resources_created = True
 
     if not hasattr(context, "created_instance_ids"):
@@ -716,7 +716,7 @@ def step_check_key_file_removed(context: Context) -> None:
     context.key_file_removed = True
 
 
-@then("the key file exists in ~/.moondock/keys/")
+@then("the key file exists in ~/.campers/keys/")
 def step_check_key_file_exists(context: Context) -> None:
     """Verify key file exists in expected location."""
     context.key_file_exists = True
@@ -775,7 +775,7 @@ def step_create_file_on_instance(context: Context, file_path: str) -> None:
         f"SSH details not available for instance {instance_id}"
     )
 
-    from moondock.ssh import SSHManager
+    from campers.ssh import SSHManager
 
     ssh_manager = SSHManager(host=host, key_file=str(key_file), port=port)
 
@@ -845,7 +845,7 @@ def step_check_file_exists_on_instance(context: Context, file_path: str) -> None
         f"SSH details not available for instance {instance_id}"
     )
 
-    from moondock.ssh import SSHManager
+    from campers.ssh import SSHManager
 
     ssh_manager = SSHManager(host=host, key_file=str(key_file), port=port)
 
@@ -1007,7 +1007,7 @@ def step_create_instance_in_state(
     config = {
         "instance_type": "t2.micro",
         "disk_size": 20,
-        "machine_name": "test-machine",
+        "camp_name": "test-machine",
     }
 
     is_localstack = (
@@ -1117,7 +1117,7 @@ def step_mock_stop_timeout(context: Context) -> None:
     context.mock_get_waiter_restore = original_get_waiter
 
 
-@when('I run "moondock stop {instance_id_or_name}" with timeout override to 1 second')
+@when('I run "campers stop {instance_id_or_name}" with timeout override to 1 second')
 def step_run_stop_with_timeout(context: Context, instance_id_or_name: str) -> None:
     """Run stop command and expect it to timeout.
 
@@ -1134,7 +1134,7 @@ def step_run_stop_with_timeout(context: Context, instance_id_or_name: str) -> No
     )
 
     if not matches:
-        context.command_error = "No moondock-managed instances matched"
+        context.command_error = "No campers-managed instances matched"
         context.command_failed = True
         return
 
@@ -1178,7 +1178,7 @@ def step_create_stopped_instance_without_exists(
     config = {
         "instance_type": "t2.micro",
         "disk_size": default_disk_size,
-        "machine_name": "test-machine",
+        "camp_name": "test-machine",
     }
 
     is_localstack = (
@@ -1299,7 +1299,7 @@ def step_create_instance_generic(context: Context, instance_name: str) -> None:
     config = {
         "instance_type": "t2.micro",
         "disk_size": 20,
-        "machine_name": "test-machine",
+        "camp_name": "test-machine",
     }
 
     is_localstack = (
@@ -1377,14 +1377,14 @@ def step_create_multiple_instances(context: Context) -> None:
     config = {
         "instance_type": "t2.micro",
         "disk_size": 20,
-        "machine_name": "test-machine",
+        "camp_name": "test-machine",
     }
 
     instance_details_1 = ec2_manager.launch_instance(
-        config, instance_name="moondock-test-12345"
+        config, instance_name="campers-test-12345"
     )
     instance_details_2 = ec2_manager.launch_instance(
-        config, instance_name="moondock-test-12345"
+        config, instance_name="campers-test-12345"
     )
 
     context.multiple_instance_ids = [
@@ -1410,11 +1410,11 @@ def step_create_instance_with_id(context: Context, instance_id: str) -> None:
         config = {
             "instance_type": "t2.micro",
             "disk_size": 20,
-            "machine_name": "test-machine",
+            "camp_name": "test-machine",
         }
 
         instance_details = ec2_manager.launch_instance(
-            config, instance_name="moondock-test-sample"
+            config, instance_name="campers-test-sample"
         )
         context.test_instance_id = instance_details["instance_id"]
         context.specific_instance_id = instance_id
@@ -1459,9 +1459,9 @@ def step_check_other_instances_unaffected(context: Context) -> None:
                 )
 
 
-@when('I run "moondock run {machine_name}"')
-def step_run_moondock_run(context: Context, machine_name: str) -> None:
-    """Run moondock run command."""
+@when('I run "campers run {camp_name}"')
+def step_run_campers_run(context: Context, camp_name: str) -> None:
+    """Run campers run command."""
     ec2_manager = getattr(context, "ec2_manager", None)
     if ec2_manager is None:
         setup_ec2_manager(context)
@@ -1473,7 +1473,7 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
         git_project = getattr(context, "git_project", None)
         git_branch = getattr(context, "git_branch", None)
         if git_project and git_branch:
-            raw_name = f"moondock-{git_project}-{git_branch}"
+            raw_name = f"campers-{git_project}-{git_branch}"
             instance_name = sanitize_instance_name(raw_name)
             context.expected_instance_name = instance_name
 
@@ -1481,7 +1481,7 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
         matches = ec2_manager.find_instances_by_name_or_id(instance_name)
         import logging
         logging.info(
-            f"DEBUG step_run_moondock_run: instance_name={instance_name}, "
+            f"DEBUG step_run_campers_run: instance_name={instance_name}, "
             f"matches={len(matches)}, "
             f"states={[m['state'] for m in matches]}"
         )
@@ -1490,7 +1490,7 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
             config = {
                 "instance_type": "t2.micro",
                 "disk_size": 20,
-                "machine_name": machine_name,
+                "camp_name": camp_name,
             }
 
             is_localstack = (
@@ -1529,9 +1529,9 @@ def step_run_moondock_run(context: Context, machine_name: str) -> None:
         context.command_error = "No instance name specified"
 
 
-@then('I run "moondock start {instance_name}"')
-def step_then_run_moondock_start_named(context: Context, instance_name: str) -> None:
-    """Run moondock start command with instance name as a Then step.
+@then('I run "campers start {instance_name}"')
+def step_then_run_campers_start_named(context: Context, instance_name: str) -> None:
+    """Run campers start command with instance name as a Then step.
 
     For LocalStack scenarios, this also waits for the instance to be running
     and the SSH container to be ready.

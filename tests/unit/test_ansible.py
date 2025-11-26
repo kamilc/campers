@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from moondock.ansible import AnsibleManager
+from campers.ansible import AnsibleManager
 
 
 class TestAnsibleManagerInstallationCheck:
@@ -109,7 +109,7 @@ class TestAnsibleManagerPlaybookSerialization:
 
         assert playbook_path.exists()
         assert playbook_path.suffix == ".yml"
-        assert "moondock-playbook-webserver-" in playbook_path.name
+        assert "campers-playbook-webserver-" in playbook_path.name
 
         content = playbook_path.read_text()
         assert "hosts: all" in content
@@ -246,8 +246,8 @@ class TestAnsibleManagerFileCleanup:
 
         with mock.patch("tempfile.mktemp") as mock_mktemp:
             temp_files = [
-                Path("/tmp/moondock-inventory-abc123.ini"),
-                Path("/tmp/moondock-playbook-test-def456.yml"),
+                Path("/tmp/campers-inventory-abc123.ini"),
+                Path("/tmp/campers-playbook-test-def456.yml"),
             ]
             mock_mktemp.side_effect = [str(f) for f in temp_files]
 
@@ -365,7 +365,7 @@ class TestAnsibleManagerIntegration:
         def track_execution(*args: Any, **kwargs: Any) -> mock.Mock:
             cmd = args[0]
             for pb_name in ["base", "webapp"]:
-                if f"moondock-playbook-{pb_name}" in str(cmd):
+                if f"campers-playbook-{pb_name}" in str(cmd):
                     execution_order.append(pb_name)
             mock_process = mock.Mock()
             mock_process.stdout = []

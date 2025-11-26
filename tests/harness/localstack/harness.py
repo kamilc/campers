@@ -39,7 +39,7 @@ from tests.harness.services.timeout_manager import TimeoutManager
 from tests.harness.utils.port_allocator import PortAllocator
 
 from tests.integration.features.steps.docker_manager import EC2ContainerManager
-from moondock.sync import MutagenManager
+from campers.sync import MutagenManager
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ LOCALSTACK_STARTUP_TIMEOUT = 30
 DEFAULT_TIMEOUT_BUDGET = 600
 SSH_PORT_BASE = 49152
 MAX_CONTAINERS_PER_INSTANCE = 5
-LOCALSTACK_CONTAINER_NAME = "moondock-localstack"
+LOCALSTACK_CONTAINER_NAME = "campers-localstack"
 LOCALSTACK_IMAGE = os.environ.get(
     "LOCALSTACK_IMAGE",
     "localstack/localstack:latest",
@@ -164,7 +164,7 @@ class LocalStackHarness(ScenarioHarness):
         configuration_env.set("AWS_ACCESS_KEY_ID", "testing")
         configuration_env.set("AWS_SECRET_ACCESS_KEY", "testing")
         configuration_env.set("AWS_DEFAULT_REGION", "us-east-1")
-        configuration_env.set("MOONDOCK_TEST_MODE", "0")
+        configuration_env.set("CAMPERS_TEST_MODE", "0")
 
         resource_registry = ResourceRegistry()
         scenario_timeout = getattr(
@@ -802,9 +802,9 @@ class LocalStackHarness(ScenarioHarness):
         if self.services is None:
             return
 
-        if os.environ.get("MOONDOCK_DISABLE_MUTAGEN") == "1":
+        if os.environ.get("CAMPERS_DISABLE_MUTAGEN") == "1":
             logger.info(
-                "Mutagen disabled via MOONDOCK_DISABLE_MUTAGEN=1; "
+                "Mutagen disabled via CAMPERS_DISABLE_MUTAGEN=1; "
                 "skipping harness sync setup"
             )
             return
@@ -836,15 +836,15 @@ class LocalStackHarness(ScenarioHarness):
             setattr(self.context, "mutagen_error", message)
             return
 
-        test_mode = os.environ.get("MOONDOCK_TEST_MODE") == "1"
+        test_mode = os.environ.get("CAMPERS_TEST_MODE") == "1"
         ignore_patterns = defaults.get("ignore", [])
         include_vcs = defaults.get("include_vcs", False)
-        ssh_wrapper_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
+        ssh_wrapper_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
 
         sessions_for_instance = self._mutagen_sessions.setdefault(instance_id, [])
 
         for index, sync_config in enumerate(sync_paths):
-            session_id = f"moondock-{instance_id}-{index}"
+            session_id = f"campers-{instance_id}-{index}"
             if session_id in sessions_for_instance:
                 continue
 
@@ -936,7 +936,7 @@ class LocalStackHarness(ScenarioHarness):
     def _wait_for_initial_sync(self, session_id: str) -> None:
         """Wait for Mutagen initial sync and publish status events."""
 
-        if os.environ.get("MOONDOCK_SYNC_TIMEOUT") == "1":
+        if os.environ.get("CAMPERS_SYNC_TIMEOUT") == "1":
             raise MutagenTimeoutError("Mutagen sync timed out after 1 seconds")
 
         wait_result = self._mutagen_runner(

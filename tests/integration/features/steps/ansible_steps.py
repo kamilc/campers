@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @given('config with playbook "{playbook_name}" defined')
 def step_config_with_playbook_defined(context: Context, playbook_name: str) -> None:
-    """Configure moondock.yaml with a named Ansible playbook.
+    """Configure campers.yaml with a named Ansible playbook.
 
     Parameters
     ----------
@@ -51,7 +51,7 @@ def step_config_with_playbook_defined(context: Context, playbook_name: str) -> N
 def step_config_with_multiple_playbooks_defined(
     context: Context, playbook1: str, playbook2: str
 ) -> None:
-    """Configure moondock.yaml with multiple named Ansible playbooks.
+    """Configure campers.yaml with multiple named Ansible playbooks.
 
     Parameters
     ----------
@@ -87,9 +87,9 @@ def step_config_with_multiple_playbooks_defined(
     logger.info(f"Configured playbooks: {playbook1}, {playbook2}")
 
 
-@given('machine "{machine_name}" has ansible_playbook "{playbook_name}"')
+@given('machine "{camp_name}" has ansible_playbook "{playbook_name}"')
 def step_machine_with_ansible_playbook(
-    context: Context, machine_name: str, playbook_name: str
+    context: Context, camp_name: str, playbook_name: str
 ) -> None:
     """Configure machine with single ansible_playbook reference.
 
@@ -97,7 +97,7 @@ def step_machine_with_ansible_playbook(
     ----------
     context : Context
         Behave context object
-    machine_name : str
+    camp_name : str
         Name of the machine
     playbook_name : str
         Name of the playbook to execute
@@ -108,21 +108,21 @@ def step_machine_with_ansible_playbook(
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    if machine_name not in context.config_data["machines"]:
-        context.config_data["machines"][machine_name] = {}
+    if camp_name not in context.config_data["camps"]:
+        context.config_data["camps"][camp_name] = {}
 
-    context.config_data["machines"][machine_name]["instance_type"] = "t3.medium"
-    context.config_data["machines"][machine_name]["ansible_playbook"] = playbook_name
+    context.config_data["camps"][camp_name]["instance_type"] = "t3.medium"
+    context.config_data["camps"][camp_name]["ansible_playbook"] = playbook_name
 
-    logger.info(f"Configured {machine_name} with ansible_playbook: {playbook_name}")
+    logger.info(f"Configured {camp_name} with ansible_playbook: {playbook_name}")
 
 
-@given('machine "{machine_name}" has ansible_playbooks [{playbooks}]')
+@given('machine "{camp_name}" has ansible_playbooks [{playbooks}]')
 def step_machine_with_ansible_playbooks(
-    context: Context, machine_name: str, playbooks: str
+    context: Context, camp_name: str, playbooks: str
 ) -> None:
     """Configure machine with multiple ansible_playbooks references.
 
@@ -130,7 +130,7 @@ def step_machine_with_ansible_playbooks(
     ----------
     context : Context
         Behave context object
-    machine_name : str
+    camp_name : str
         Name of the machine
     playbooks : str
         Comma-separated playbook names (without quotes)
@@ -141,17 +141,17 @@ def step_machine_with_ansible_playbooks(
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    if machine_name not in context.config_data["machines"]:
-        context.config_data["machines"][machine_name] = {}
+    if camp_name not in context.config_data["camps"]:
+        context.config_data["camps"][camp_name] = {}
 
     playbook_list = [pb.strip().strip('"') for pb in playbooks.split(",")]
-    context.config_data["machines"][machine_name]["instance_type"] = "t3.medium"
-    context.config_data["machines"][machine_name]["ansible_playbooks"] = playbook_list
+    context.config_data["camps"][camp_name]["instance_type"] = "t3.medium"
+    context.config_data["camps"][camp_name]["ansible_playbooks"] = playbook_list
 
-    logger.info(f"Configured {machine_name} with ansible_playbooks: {playbook_list}")
+    logger.info(f"Configured {camp_name} with ansible_playbooks: {playbook_list}")
 
 
 @given("Ansible is not installed on local machine")
@@ -181,7 +181,7 @@ def step_ansible_not_installed(context: Context) -> None:
     if not hasattr(context, "patches"):
         context.patches = []
 
-    patch = unittest.mock.patch("moondock.ansible.shutil.which", side_effect=mock_which)
+    patch = unittest.mock.patch("campers.ansible.shutil.which", side_effect=mock_which)
     patch.start()
     context.patches.append(patch)
 
@@ -208,7 +208,7 @@ def step_ansible_installed(context: Context) -> None:
         context.patches = []
 
     patch_which = unittest.mock.patch(
-        "moondock.ansible.shutil.which", return_value="/usr/bin/ansible-playbook"
+        "campers.ansible.shutil.which", return_value="/usr/bin/ansible-playbook"
     )
     patch_which.start()
     context.patches.append(patch_which)
@@ -221,7 +221,7 @@ def step_ansible_installed(context: Context) -> None:
         return mock_process
 
     patch_popen = unittest.mock.patch(
-        "moondock.ansible.subprocess.Popen", side_effect=mock_popen
+        "campers.ansible.subprocess.Popen", side_effect=mock_popen
     )
     patch_popen.start()
     context.patches.append(patch_popen)
@@ -271,10 +271,10 @@ def step_config_has_ansible_playbook_defined(
         }
     ]
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    context.config_data["machines"]["test"] = {
+    context.config_data["camps"]["test"] = {
         "instance_type": "t3.medium",
         "ansible_playbook": playbook_name,
     }
@@ -341,10 +341,10 @@ def step_machine_has_ansible_playbook(context: Context, playbook_name: str) -> N
             "command": "echo test",
         }
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    context.config_data["machines"]["test"] = {
+    context.config_data["camps"]["test"] = {
         "instance_type": "t3.medium",
         "ansible_playbook": playbook_name,
     }
@@ -378,10 +378,10 @@ def step_config_has_no_playbooks_section(context: Context) -> None:
     if "playbooks" in context.config_data:
         del context.config_data["playbooks"]
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    context.config_data["machines"]["test"] = {
+    context.config_data["camps"]["test"] = {
         "instance_type": "t3.medium",
         "ansible_playbook": "test",
     }
@@ -512,7 +512,7 @@ def step_playbook_defined(context: Context, playbook_name: str) -> None:
 
 
 @given('machine config has ansible_playbook "test"')
-def step_machine_config_has_ansible_playbook_test(context: Context) -> None:
+def step_camp_config_has_ansible_playbook_test(context: Context) -> None:
     """Configure machine with ansible_playbook field.
 
     Parameters
@@ -526,10 +526,10 @@ def step_machine_config_has_ansible_playbook_test(context: Context) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    context.config_data["machines"]["testmachine"] = {
+    context.config_data["camps"]["testmachine"] = {
         "instance_type": "t3.medium",
         "ansible_playbook": "test",
     }
@@ -538,7 +538,7 @@ def step_machine_config_has_ansible_playbook_test(context: Context) -> None:
 
 
 @given('machine config also has ansible_playbooks ["test"]')
-def step_machine_config_also_has_ansible_playbooks(context: Context) -> None:
+def step_camp_config_also_has_ansible_playbooks(context: Context) -> None:
     """Add ansible_playbooks field to existing machine config.
 
     Parameters
@@ -552,19 +552,19 @@ def step_machine_config_also_has_ansible_playbooks(context: Context) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    if "testmachine" not in context.config_data["machines"]:
-        context.config_data["machines"]["testmachine"] = {"instance_type": "t3.medium"}
+    if "testmachine" not in context.config_data["camps"]:
+        context.config_data["camps"]["testmachine"] = {"instance_type": "t3.medium"}
 
-    context.config_data["machines"]["testmachine"]["ansible_playbooks"] = ["test"]
+    context.config_data["camps"]["testmachine"]["ansible_playbooks"] = ["test"]
 
     logger.info("Machine also has ansible_playbooks: [test]")
 
 
 @given('machine config has ansible_playbooks ["test"]')
-def step_machine_config_has_ansible_playbooks_test(context: Context) -> None:
+def step_camp_config_has_ansible_playbooks_test(context: Context) -> None:
     """Configure machine with ansible_playbooks field.
 
     Parameters
@@ -578,10 +578,10 @@ def step_machine_config_has_ansible_playbooks_test(context: Context) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    context.config_data["machines"]["testmachine"] = {
+    context.config_data["camps"]["testmachine"] = {
         "instance_type": "t3.medium",
         "ansible_playbooks": ["test"],
     }
@@ -604,10 +604,10 @@ def step_config_with_amazon_linux_ami(context: Context) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    context.config_data["machines"]["test"] = {
+    context.config_data["camps"]["test"] = {
         "instance_type": "t3.medium",
         "ami": {"query": {"name": "al2023-ami-*", "owner": "amazon"}},
     }
@@ -624,7 +624,7 @@ def step_configuration_is_loaded(context: Context) -> None:
     context : Context
         Behave context object
     """
-    from moondock.config import ConfigLoader
+    from campers.config import ConfigLoader
 
     config_path = _write_temp_config(context)
     context.temp_config_file = config_path
@@ -647,15 +647,15 @@ def step_launch_instance_via_cli(context: Context) -> None:
     config_path = _write_temp_config(context)
     context.temp_config_file = config_path
 
-    machine_name = None
+    camp_name = None
     if hasattr(context, "config_data") and context.config_data:
-        machines = context.config_data.get("machines", {})
-        if machines:
-            machine_name = list(machines.keys())[0]
+        camps = context.config_data.get("camps", {})
+        if camps:
+            camp_name = list(camps.keys())[0]
 
     args = {}
-    if machine_name:
-        args["machine_name"] = machine_name
+    if camp_name:
+        args["camp_name"] = camp_name
 
     try:
         execute_command_direct(context, "run", args=args if args else None)
@@ -993,9 +993,9 @@ def step_localstack_is_running(context: Context) -> None:
     logger.info("LocalStack setup verified")
 
 
-@given('machine "{machine_name}" with ansible_playbook "{playbook_name}"')
+@given('machine "{camp_name}" with ansible_playbook "{playbook_name}"')
 def step_machine_with_ansible_playbook_combined(
-    context: Context, machine_name: str, playbook_name: str
+    context: Context, camp_name: str, playbook_name: str
 ) -> None:
     """Define machine with ansible_playbook in combined step.
 
@@ -1003,7 +1003,7 @@ def step_machine_with_ansible_playbook_combined(
     ----------
     context : Context
         Behave context object
-    machine_name : str
+    camp_name : str
         Machine name
     playbook_name : str
         Playbook name
@@ -1017,8 +1017,8 @@ def step_machine_with_ansible_playbook_combined(
     if "playbooks" not in context.config_data:
         context.config_data["playbooks"] = {}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
     context.config_data["playbooks"][playbook_name] = [
         {
@@ -1032,12 +1032,12 @@ def step_machine_with_ansible_playbook_combined(
         }
     ]
 
-    context.config_data["machines"][machine_name] = {
+    context.config_data["camps"][camp_name] = {
         "instance_type": "t3.medium",
         "ansible_playbook": playbook_name,
     }
 
-    logger.info(f"Machine {machine_name} with playbook {playbook_name} configured")
+    logger.info(f"Machine {camp_name} with playbook {playbook_name} configured")
 
 
 @then("Mutagen sync completes")

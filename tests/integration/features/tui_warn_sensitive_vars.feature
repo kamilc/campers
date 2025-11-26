@@ -2,8 +2,8 @@ Feature: TUI Warn about Sensitive Variables
 
 @smoke @localstack @timeout_60
 Scenario: Warn about sensitive variables
-  Given a config file with machine "myproject" defined
-  And machine "myproject" has command "exit 42"
+  Given a config file with camp "myproject" defined
+  And camp "myproject" has command "exit 42"
   And LocalStack is healthy and responding
   And local environment has AWS_SECRET_ACCESS_KEY and OPENAI_API_KEY
   And config has env_filter [".*SECRET.*", ".*_API_KEY$"]

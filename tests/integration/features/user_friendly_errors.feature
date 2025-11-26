@@ -14,7 +14,7 @@ Scenario: Debug flag shows stack trace
   Given AWS credentials are configured
   And running in real AWS mode
   And region "us-east-1" has no default VPC
-  When I run with environment "MOONDOCK_DEBUG=1 moondock run"
+  When I run with environment "CAMPERS_DEBUG=1 campers run"
   Then exit code is not 0
   And stderr contains "Traceback"
 

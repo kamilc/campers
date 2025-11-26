@@ -4,7 +4,7 @@ Feature: Environment Variable Forwarding
 Scenario: Forward AWS credentials to remote command
   Given local environment has AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
   And config has env_filter ["AWS_.*"]
-  When I run moondock command "run -c 'aws s3 ls'"
+  When I run campers command "run -c 'aws s3 ls'"
   Then 2 environment variables are forwarded
   And command executes with export prefix
   And AWS credentials are available in remote command
@@ -13,21 +13,21 @@ Scenario: Forward AWS credentials to remote command
 Scenario: Forward multiple token types
   Given local environment has AWS_ACCESS_KEY_ID, HF_TOKEN, WANDB_API_KEY
   And config has env_filter ["AWS_.*", "HF_TOKEN", ".*_API_KEY$"]
-  When I run moondock command "run -c 'env'"
+  When I run campers command "run -c 'env'"
   Then 3 environment variables are forwarded
   And status message "Forwarding 3 environment variables" is logged
 
 @smoke @dry_run
 Scenario: No env_filter configured
   Given config has no env_filter defined
-  When I run moondock command "run -c 'echo test'"
+  When I run campers command "run -c 'echo test'"
   Then no environment variables are forwarded
   And command executes without export prefix
 
 @smoke @dry_run
 Scenario: Empty env_filter list
   Given config has env_filter []
-  When I run moondock command "run -c 'echo test'"
+  When I run campers command "run -c 'echo test'"
   Then no environment variables are forwarded
   And command executes without export prefix
 
@@ -48,9 +48,9 @@ Scenario: Invalid regex pattern validation
 
 @smoke @dry_run
 Scenario: Test mode simulates environment forwarding
-  Given MOONDOCK_TEST_MODE is "1"
+  Given CAMPERS_TEST_MODE is "1"
   And config has env_filter ["AWS_.*", "HF_TOKEN"]
-  When I run moondock command "run -c 'echo test'"
+  When I run campers command "run -c 'echo test'"
   Then status message "Forwarding" is logged
   And test completes successfully
 

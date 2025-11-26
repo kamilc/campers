@@ -10,12 +10,12 @@ from behave import given, then, when
 from behave.runner import Context
 from botocore.exceptions import ClientError
 
-from moondock.ec2 import ACTIVE_INSTANCE_STATES
+from campers.ec2 import ACTIVE_INSTANCE_STATES
 
 
-@given('running instance "{instance_id}" with MachineConfig "{machine_config}"')
-def step_running_instance_with_machine_config(
-    context: Context, instance_id: str, machine_config: str
+@given('running instance "{instance_id}" with CampConfig "{camp_config}"')
+def step_running_instance_with_camp_config(
+    context: Context, instance_id: str, camp_config: str
 ) -> None:
     """Create a running instance with specific machine config."""
     if context.instances is None:
@@ -23,12 +23,12 @@ def step_running_instance_with_machine_config(
 
     instance = {
         "instance_id": instance_id,
-        "name": f"moondock-{instance_id}",
+        "name": f"campers-{instance_id}",
         "state": "running",
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "launch_time": datetime.now(timezone.utc),
-        "machine_config": machine_config,
+        "camp_config": camp_config,
     }
 
     context.instances.append(instance)
@@ -91,7 +91,7 @@ def step_run_stop_command_impl(
     context: Context, name_or_id: str, region: str | None
 ) -> None:
     """Run stop command with name or ID and optional region."""
-    moondock = context.mock_moondock
+    campers = context.mock_campers
 
     actual_name_or_id = name_or_id
 
@@ -125,14 +125,14 @@ def step_run_stop_command_impl(
             "instance_type": instance.get("instance_type", "t3.medium"),
         }
 
-    with patch("moondock.ec2.EC2Manager.list_instances") as mock_list:
+    with patch("campers.ec2.EC2Manager.list_instances") as mock_list:
         if context.aws_permission_error is not None:
             mock_list.side_effect = context.aws_permission_error
         else:
             mock_list.return_value = filtered_instances
 
-        with patch("moondock.ec2.EC2Manager.stop_instance") as mock_stop:
-            with patch("moondock.ec2.EC2Manager.get_volume_size") as mock_get_volume:
+        with patch("campers.ec2.EC2Manager.stop_instance") as mock_stop:
+            with patch("campers.ec2.EC2Manager.get_volume_size") as mock_get_volume:
                 if context.terminate_runtime_error is not None:
                     mock_stop.side_effect = context.terminate_runtime_error
                 elif context.terminate_client_error is not None:
@@ -153,9 +153,9 @@ def step_run_stop_command_impl(
 
                 try:
                     if region:
-                        moondock.stop(actual_name_or_id, region=region)
+                        campers.stop(actual_name_or_id, region=region)
                     else:
-                        moondock.stop(actual_name_or_id)
+                        campers.stop(actual_name_or_id)
 
                     context.exit_code = 0
                 except SystemExit as e:

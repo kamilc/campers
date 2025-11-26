@@ -1,4 +1,4 @@
-"""Step definitions for moondock skeleton feature tests."""
+"""Step definitions for campers skeleton feature tests."""
 
 import subprocess
 from pathlib import Path
@@ -6,41 +6,41 @@ from pathlib import Path
 from behave import given, then, when
 
 
-@given("moondock.py exists in project root")
-def step_moondock_exists(context) -> None:
-    """Verify moondock package exists in project root."""
+@given("campers.py exists in project root")
+def step_campers_exists(context) -> None:
+    """Verify campers package exists in project root."""
     project_root = Path(__file__).parent.parent.parent.parent.parent
 
-    moondock_path = project_root / "moondock" / "__main__.py"
+    campers_path = project_root / "campers" / "__main__.py"
 
-    assert moondock_path.exists(), f"moondock/__main__.py not found at {moondock_path}"
-    context.moondock_path = moondock_path
+    assert campers_path.exists(), f"campers/__main__.py not found at {campers_path}"
+    context.campers_path = campers_path
 
 
-@given("moondock.py contains PEP 723 dependencies")
+@given("campers.py contains PEP 723 dependencies")
 def step_contains_pep723(context) -> None:
-    """Verify moondock.py contains PEP 723 dependency specification."""
-    content = context.moondock_path.read_text()
+    """Verify campers.py contains PEP 723 dependency specification."""
+    content = context.campers_path.read_text()
 
     assert "# /// script" in content, "Missing PEP 723 script marker"
     assert "# dependencies = [" in content, "Missing dependencies array"
     assert "# ///" in content, "Missing PEP 723 closing marker"
 
 
-@given('moondock.py contains dependency "{dependency}"')
+@given('campers.py contains dependency "{dependency}"')
 def step_contains_dependency(context, dependency: str) -> None:
-    """Verify moondock.py contains specific dependency."""
-    content = context.moondock_path.read_text()
+    """Verify campers.py contains specific dependency."""
+    content = context.campers_path.read_text()
 
-    assert dependency in content, f"Dependency {dependency} not found in moondock.py"
+    assert dependency in content, f"Dependency {dependency} not found in campers.py"
 
 
-@given("moondock.py defines Moondock class")
-def step_defines_moondock_class(context) -> None:
-    """Verify moondock.py defines Moondock class."""
-    content = context.moondock_path.read_text()
+@given("campers.py defines Campers class")
+def step_defines_campers_class(context) -> None:
+    """Verify campers.py defines Campers class."""
+    content = context.campers_path.read_text()
 
-    assert "class Moondock" in content, "Moondock class not defined"
+    assert "class Campers" in content, "Campers class not defined"
 
 
 @when('I run "{command}"')
@@ -63,10 +63,10 @@ def step_run_command(context, command: str) -> None:
     """
     import os
 
-    if getattr(context, "use_direct_instantiation", False) and "moondock" in command:
+    if getattr(context, "use_direct_instantiation", False) and "campers" in command:
         from tests.integration.features.steps.common_steps import execute_command_direct
 
-        parts = command.replace("moondock", "").strip().split()
+        parts = command.replace("campers", "").strip().split()
         if parts:
             cmd_name = parts[0]
             region = None
@@ -81,7 +81,7 @@ def step_run_command(context, command: str) -> None:
 
     env = os.environ.copy()
 
-    if "moondock" in command and ("setup" in command or "doctor" in command):
+    if "campers" in command and ("setup" in command or "doctor" in command):
         import boto3
 
         try:
@@ -90,11 +90,11 @@ def step_run_command(context, command: str) -> None:
                 Filters=[{"Name": "isDefault", "Values": ["true"]}]
             )
             vpc_exists = bool(vpcs.get("Vpcs", []))
-            env["MOONDOCK_TEST_VPC_EXISTS"] = "true" if vpc_exists else "false"
+            env["CAMPERS_TEST_VPC_EXISTS"] = "true" if vpc_exists else "false"
         except Exception:
-            env["MOONDOCK_TEST_VPC_EXISTS"] = "false"
+            env["CAMPERS_TEST_VPC_EXISTS"] = "false"
 
-        command = command.replace("moondock", "uv run python -m moondock")
+        command = command.replace("campers", "uv run python -m campers")
 
     result = subprocess.run(
         command,
@@ -159,6 +159,6 @@ def step_fire_routes(context) -> None:
     """Verify Fire successfully routes to CLI commands."""
     assert context.exit_code == 0, "Fire routing failed with non-zero exit code"
     combined_output = context.stdout + context.stderr
-    assert "moondock" in combined_output.lower(), (
+    assert "campers" in combined_output.lower(), (
         "CLI command routing not found in output"
     )

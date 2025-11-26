@@ -2,16 +2,16 @@ Feature: Init Command
 
 @smoke
 Scenario: Create config at default location
-  Given "moondock.yaml" does not exist
-  And MOONDOCK_CONFIG is not set
+  Given "campers.yaml" does not exist
+  And CAMPERS_CONFIG is not set
   When I run init command
-  Then "moondock.yaml" is created
+  Then "campers.yaml" is created
   And file contains template content
-  And success message includes "moondock.yaml"
+  And success message includes "campers.yaml"
 
 @smoke
 Scenario: Create config at custom location via environment variable
-  Given MOONDOCK_CONFIG is "/tmp/custom.yaml"
+  Given CAMPERS_CONFIG is "/tmp/custom.yaml"
   And "/tmp/custom.yaml" does not exist
   When I run init command
   Then "/tmp/custom.yaml" is created
@@ -20,29 +20,29 @@ Scenario: Create config at custom location via environment variable
 
 @smoke
 Scenario: Create config with parent directory creation
-  Given MOONDOCK_CONFIG is "configs/project/moondock.yaml"
+  Given CAMPERS_CONFIG is "configs/project/campers.yaml"
   And "configs/project/" does not exist
   When I run init command
   Then "configs/project/" directory is created
-  And "configs/project/moondock.yaml" is created
+  And "configs/project/campers.yaml" is created
   And file contains template content
-  And success message includes "configs/project/moondock.yaml"
+  And success message includes "configs/project/campers.yaml"
 
 @error
 Scenario: Refuse to overwrite existing config without force
-  Given "moondock.yaml" exists
-  And MOONDOCK_CONFIG is not set
+  Given "campers.yaml" exists
+  And CAMPERS_CONFIG is not set
   When I run init command
   Then command fails with exit code 1
-  And "moondock.yaml" is not modified
-  And error message includes "moondock.yaml"
+  And "campers.yaml" is not modified
+  And error message includes "campers.yaml"
   And error is printed to stderr
 
 @smoke
 Scenario: Overwrite existing config with force flag
-  Given "moondock.yaml" exists
-  And MOONDOCK_CONFIG is not set
+  Given "campers.yaml" exists
+  And CAMPERS_CONFIG is not set
   When I run init command with "--force"
-  Then "moondock.yaml" is overwritten
+  Then "campers.yaml" is overwritten
   And file contains template content
-  And success message includes "moondock.yaml"
+  And success message includes "campers.yaml"

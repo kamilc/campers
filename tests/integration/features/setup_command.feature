@@ -23,7 +23,7 @@ Scenario: Setup confirms existing VPC
 @dry_run
 Scenario: Setup with custom region
   Given AWS credentials are configured
-  When I run "moondock setup --region us-west-2"
+  When I run "campers setup --region us-west-2"
   Then exit code is 0
   And stdout contains "Checking AWS prerequisites for us-west-2"
 
@@ -31,7 +31,7 @@ Scenario: Setup with custom region
 Scenario: Setup is idempotent
   Given AWS credentials are configured
   And region "us-east-1" has default VPC
-  And "moondock setup" completed successfully
+  And "campers setup" completed successfully
   When I run setup
   Then exit code is 0
   And VPC count in "us-east-1" is unchanged

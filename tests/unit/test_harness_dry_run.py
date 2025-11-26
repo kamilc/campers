@@ -348,7 +348,7 @@ class TestDryRunHarnessIntegration:
         original_aws_key = os.environ.get("AWS_ACCESS_KEY_ID")
         original_aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY")
         original_region = os.environ.get("AWS_DEFAULT_REGION")
-        original_moondock_dir = os.environ.get("MOONDOCK_DIR")
+        original_campers_dir = os.environ.get("CAMPERS_DIR")
 
         try:
             os.environ["CUSTOM_VAR"] = "before_harness"
@@ -359,7 +359,7 @@ class TestDryRunHarnessIntegration:
             assert os.environ.get("AWS_ACCESS_KEY_ID") == "testing"
             assert os.environ.get("AWS_SECRET_ACCESS_KEY") == "testing"
             assert os.environ.get("AWS_DEFAULT_REGION") == "us-east-1"
-            assert "MOONDOCK_DIR" in os.environ
+            assert "CAMPERS_DIR" in os.environ
             assert os.environ.get("CUSTOM_VAR") == "before_harness"
 
             harness.services.configuration_env.set("CUSTOM_VAR", "modified_in_harness")
@@ -381,8 +381,8 @@ class TestDryRunHarnessIntegration:
                 or os.environ.get("AWS_DEFAULT_REGION") == original_region
             )
             assert (
-                "MOONDOCK_DIR" not in os.environ
-                or os.environ.get("MOONDOCK_DIR") == original_moondock_dir
+                "CAMPERS_DIR" not in os.environ
+                or os.environ.get("CAMPERS_DIR") == original_campers_dir
             )
 
         finally:
@@ -401,10 +401,10 @@ class TestDryRunHarnessIntegration:
             elif "AWS_DEFAULT_REGION" in os.environ:
                 del os.environ["AWS_DEFAULT_REGION"]
 
-            if original_moondock_dir:
-                os.environ["MOONDOCK_DIR"] = original_moondock_dir
-            elif "MOONDOCK_DIR" in os.environ:
-                del os.environ["MOONDOCK_DIR"]
+            if original_campers_dir:
+                os.environ["CAMPERS_DIR"] = original_campers_dir
+            elif "CAMPERS_DIR" in os.environ:
+                del os.environ["CAMPERS_DIR"]
 
             if "CUSTOM_VAR" in os.environ:
                 del os.environ["CUSTOM_VAR"]
@@ -432,12 +432,12 @@ class TestDryRunHarnessIntegration:
             captured_env_during_cleanup["AWS_DEFAULT_REGION"] = os.environ.get(
                 "AWS_DEFAULT_REGION"
             )
-            captured_env_during_cleanup["MOONDOCK_DIR"] = os.environ.get("MOONDOCK_DIR")
+            captured_env_during_cleanup["CAMPERS_DIR"] = os.environ.get("CAMPERS_DIR")
 
         original_aws_key = os.environ.get("AWS_ACCESS_KEY_ID")
         original_aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY")
         original_region = os.environ.get("AWS_DEFAULT_REGION")
-        original_moondock_dir = os.environ.get("MOONDOCK_DIR")
+        original_campers_dir = os.environ.get("CAMPERS_DIR")
 
         try:
             harness = DryRunHarness(context, scenario)
@@ -452,7 +452,7 @@ class TestDryRunHarnessIntegration:
             assert captured_env_during_cleanup["AWS_ACCESS_KEY_ID"] == "testing"
             assert captured_env_during_cleanup["AWS_SECRET_ACCESS_KEY"] == "testing"
             assert captured_env_during_cleanup["AWS_DEFAULT_REGION"] == "us-east-1"
-            assert captured_env_during_cleanup["MOONDOCK_DIR"] is not None
+            assert captured_env_during_cleanup["CAMPERS_DIR"] is not None
 
         finally:
             if original_aws_key:
@@ -470,7 +470,7 @@ class TestDryRunHarnessIntegration:
             elif "AWS_DEFAULT_REGION" in os.environ:
                 del os.environ["AWS_DEFAULT_REGION"]
 
-            if original_moondock_dir:
-                os.environ["MOONDOCK_DIR"] = original_moondock_dir
-            elif "MOONDOCK_DIR" in os.environ:
-                del os.environ["MOONDOCK_DIR"]
+            if original_campers_dir:
+                os.environ["CAMPERS_DIR"] = original_campers_dir
+            elif "CAMPERS_DIR" in os.environ:
+                del os.environ["CAMPERS_DIR"]

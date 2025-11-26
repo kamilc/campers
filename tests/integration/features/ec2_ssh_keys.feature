@@ -5,8 +5,8 @@ Scenario: SSH key created before instance launch
   Given valid configuration
   When I launch instance
   Then key pair is created in AWS
-  And key pair name starts with "moondock-"
-  And private key is saved to "~/.moondock/keys/{unique_id}.pem"
+  And key pair name starts with "campers-"
+  And private key is saved to "~/.campers/keys/{unique_id}.pem"
   And key file permissions are 0600
 
 @smoke @dry_run

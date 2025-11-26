@@ -14,8 +14,8 @@ from behave import given, then, when
 from behave.runner import Context
 
 from tests.integration.features.steps.common_steps import execute_command_direct
-from moondock.__main__ import MoondockCLI
-from moondock.portforward import PortForwardManager
+from campers.__main__ import CampersCLI
+from campers.portforward import PortForwardManager
 
 JSON_OUTPUT_TRUNCATE_LENGTH = 200
 
@@ -27,7 +27,7 @@ _PORT_FORWARD_MANAGERS: list[Any] = []
 def _install_portforward_hook() -> None:
     """Ensure any PortForwardManager registers for teardown tracking."""
 
-    if getattr(PortForwardManager, "_moondock_harness_hooked", False):
+    if getattr(PortForwardManager, "_campers_harness_hooked", False):
         return
 
     original_create_tunnels = PortForwardManager.create_tunnels
@@ -39,7 +39,7 @@ def _install_portforward_hook() -> None:
         return original_create_tunnels(self, *args, **kwargs)
 
     PortForwardManager.create_tunnels = wrapped_create_tunnels  # type: ignore[assignment]
-    PortForwardManager._moondock_harness_hooked = True  # type: ignore[attr-defined]
+    PortForwardManager._campers_harness_hooked = True  # type: ignore[attr-defined]
 
 
 _install_portforward_hook()
@@ -75,7 +75,7 @@ def _register_portforward_manager(context: Context, manager: Any) -> None:
         kind="portforward-manager",
         handle=manager,
         dispose_fn=dispose_portforward,
-        label="moondock-portforward-manager",
+        label="campers-portforward-manager",
     )
 
 
@@ -216,124 +216,124 @@ def create_cli_test_ssh_manager_factory():
     return mock_ssh_manager
 
 
-def ensure_machine_exists(context: Context, machine_name: str) -> None:
+def ensure_machine_exists(context: Context, camp_name: str) -> None:
     """Ensure machine configuration structure exists in context.
 
     Parameters
     ----------
     context : behave.runner.Context
         Behave test context
-    machine_name : str
+    camp_name : str
         Name of the machine configuration
     """
 
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {"defaults": {}}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    if machine_name not in context.config_data["machines"]:
-        context.config_data["machines"][machine_name] = {"ports": []}
+    if camp_name not in context.config_data["camps"]:
+        context.config_data["camps"][camp_name] = {"ports": []}
 
 
 @given("config file with defaults section only")
 def step_config_with_defaults_section_only(context: Context) -> None:
-    context.config_data = {"defaults": {}, "machines": {}}
+    context.config_data = {"defaults": {}, "camps": {}}
 
 
-@given('config file with machine "{machine_name}" defined')
-def step_config_with_machine_defined(context: Context, machine_name: str) -> None:
-    ensure_machine_exists(context, machine_name)
+@given('config file with machine "{camp_name}" defined')
+def step_config_with_machine_defined(context: Context, camp_name: str) -> None:
+    ensure_machine_exists(context, camp_name)
 
 
-@given('machine "{machine_name}" has instance_type "{instance_type}"')
+@given('machine "{camp_name}" has instance_type "{instance_type}"')
 def step_machine_has_instance_type(
-    context: Context, machine_name: str, instance_type: str
+    context: Context, camp_name: str, instance_type: str
 ) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["instance_type"] = instance_type
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["instance_type"] = instance_type
 
 
-@given('machine "{machine_name}" has disk_size {disk_size:d}')
+@given('machine "{camp_name}" has disk_size {disk_size:d}')
 def step_machine_has_disk_size(
-    context: Context, machine_name: str, disk_size: int
+    context: Context, camp_name: str, disk_size: int
 ) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["disk_size"] = disk_size
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["disk_size"] = disk_size
 
 
-@given('machine "{machine_name}" has region "{region}"')
-def step_machine_has_region(context: Context, machine_name: str, region: str) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["region"] = region
+@given('machine "{camp_name}" has region "{region}"')
+def step_machine_has_region(context: Context, camp_name: str, region: str) -> None:
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["region"] = region
 
 
-@given('machine "{machine_name}" overrides region to "{region}"')
+@given('machine "{camp_name}" overrides region to "{region}"')
 def step_machine_overrides_region(
-    context: Context, machine_name: str, region: str
+    context: Context, camp_name: str, region: str
 ) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["region"] = region
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["region"] = region
 
 
-@given('machine "{machine_name}" has command "{command}"')
-def step_machine_has_command(context: Context, machine_name: str, command: str) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["command"] = command
+@given('machine "{camp_name}" has command "{command}"')
+def step_machine_has_command(context: Context, camp_name: str, command: str) -> None:
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["command"] = command
 
 
-@given('machine "{machine_name}" has no command field')
-def step_machine_has_no_command(context: Context, machine_name: str) -> None:
-    ensure_machine_exists(context, machine_name)
+@given('machine "{camp_name}" has no command field')
+def step_machine_has_no_command(context: Context, camp_name: str) -> None:
+    ensure_machine_exists(context, camp_name)
 
 
-@given('machine "{machine_name}" has setup_script "{script}"')
+@given('machine "{camp_name}" has setup_script "{script}"')
 def step_machine_has_setup_script(
-    context: Context, machine_name: str, script: str
+    context: Context, camp_name: str, script: str
 ) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["setup_script"] = script
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["setup_script"] = script
 
 
-@given('machine "{machine_name}" has startup_script "{script}"')
+@given('machine "{camp_name}" has startup_script "{script}"')
 def step_machine_has_startup_script(
-    context: Context, machine_name: str, script: str
+    context: Context, camp_name: str, script: str
 ) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["startup_script"] = script
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["startup_script"] = script
 
 
-@given('machine "{machine_name}" has env_filter "{env_filter}"')
+@given('machine "{camp_name}" has env_filter "{env_filter}"')
 def step_machine_has_env_filter(
-    context: Context, machine_name: str, env_filter: str
+    context: Context, camp_name: str, env_filter: str
 ) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["env_filter"] = [env_filter]
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["env_filter"] = [env_filter]
 
 
-@given('machine "{machine_name}" has on_exit "{on_exit_value}"')
+@given('machine "{camp_name}" has on_exit "{on_exit_value}"')
 def step_machine_has_on_exit(
-    context: Context, machine_name: str, on_exit_value: str
+    context: Context, camp_name: str, on_exit_value: str
 ) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["on_exit"] = on_exit_value
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["on_exit"] = on_exit_value
 
 
-@given("config file with machines {machine_list}")
-def step_config_with_machines(context: Context, machine_list: str) -> None:
-    machines = json.loads(machine_list)
+@given("config file with camps {machine_list}")
+def step_config_with_camps(context: Context, machine_list: str) -> None:
+    camps = json.loads(machine_list)
 
-    context.config_data = {"defaults": {}, "machines": {}}
+    context.config_data = {"defaults": {}, "camps": {}}
 
-    for machine in machines:
-        context.config_data["machines"][machine] = {}
+    for machine in camps:
+        context.config_data["camps"][machine] = {}
 
 
 @given('YAML defaults with region "{region}"')
 def step_yaml_defaults_with_region(context: Context, region: str) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
-        context.config_data = {"defaults": {}, "machines": {}}
+        context.config_data = {"defaults": {}, "camps": {}}
 
     context.config_data["defaults"]["region"] = region
 
@@ -341,7 +341,7 @@ def step_yaml_defaults_with_region(context: Context, region: str) -> None:
 @given('YAML defaults with instance_type "{instance_type}"')
 def step_yaml_defaults_with_instance_type(context: Context, instance_type: str) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
-        context.config_data = {"defaults": {}, "machines": {}}
+        context.config_data = {"defaults": {}, "camps": {}}
 
     context.config_data["defaults"]["instance_type"] = instance_type
 
@@ -349,7 +349,7 @@ def step_yaml_defaults_with_instance_type(context: Context, instance_type: str) 
 @given('defaults section has region "{region}"')
 def step_defaults_section_has_region(context: Context, region: str) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
-        context.config_data = {"defaults": {}, "machines": {}}
+        context.config_data = {"defaults": {}, "camps": {}}
 
     if "defaults" not in context.config_data:
         context.config_data["defaults"] = {}
@@ -360,7 +360,7 @@ def step_defaults_section_has_region(context: Context, region: str) -> None:
 @given('defaults have instance_type "{instance_type}"')
 def step_defaults_have_instance_type(context: Context, instance_type: str) -> None:
     if not hasattr(context, "config_data") or context.config_data is None:
-        context.config_data = {"defaults": {}, "machines": {}}
+        context.config_data = {"defaults": {}, "camps": {}}
 
     context.config_data["defaults"]["instance_type"] = instance_type
 
@@ -379,7 +379,7 @@ def parse_cli_args(args: list[str]) -> dict[str, any]:
         Dictionary with parsed parameters
     """
     params = {
-        "machine_name": None,
+        "camp_name": None,
         "command": None,
         "instance_type": None,
         "disk_size": None,
@@ -445,8 +445,8 @@ def parse_cli_args(args: list[str]) -> dict[str, any]:
             else:
                 i += 1
 
-        elif not arg.startswith("-") and params["machine_name"] is None:
-            params["machine_name"] = arg
+        elif not arg.startswith("-") and params["camp_name"] is None:
+            params["camp_name"] = arg
             i += 1
 
         else:
@@ -455,38 +455,38 @@ def parse_cli_args(args: list[str]) -> dict[str, any]:
     return params
 
 
-@when('I run moondock command "{moondock_args}"')
-def step_run_moondock_command(context: Context, moondock_args: str) -> None:
-    """Execute moondock command (subprocess or in-process based on scenario tags).
+@when('I run campers command "{campers_args}"')
+def step_run_campers_command(context: Context, campers_args: str) -> None:
+    """Execute campers command (subprocess or in-process based on scenario tags).
 
     Parameters
     ----------
     context : Context
         Behave context object
-    moondock_args : str
-        Command-line arguments for moondock
+    campers_args : str
+        Command-line arguments for campers
     """
     harness_services = getattr(getattr(context, "harness", None), "services", None)
     yaml_content = yaml.dump(context.config_data)
 
     if harness_services is not None:
         config_file = harness_services.artifacts.create_temp_file(
-            "moondock.yaml", content=yaml_content
+            "campers.yaml", content=yaml_content
         )
-        harness_services.configuration_env.set("MOONDOCK_CONFIG", str(config_file))
-        harness_services.configuration_env.set("MOONDOCK_HARNESS_MANAGED", "1")
+        harness_services.configuration_env.set("CAMPERS_CONFIG", str(config_file))
+        harness_services.configuration_env.set("CAMPERS_HARNESS_MANAGED", "1")
         context.temp_config_file = str(config_file)
     else:
         import tempfile
 
-        fd, path = tempfile.mkstemp(prefix="moondock-cli-", suffix=".yaml")
+        fd, path = tempfile.mkstemp(prefix="campers-cli-", suffix=".yaml")
         with os.fdopen(fd, "w") as tmp_file:
             tmp_file.write(yaml_content)
         context.temp_config_file = path
-        os.environ["MOONDOCK_CONFIG"] = path
-        os.environ["MOONDOCK_HARNESS_MANAGED"] = "1"
+        os.environ["CAMPERS_CONFIG"] = path
+        os.environ["CAMPERS_HARNESS_MANAGED"] = "1"
 
-    args = shlex.split(moondock_args)
+    args = shlex.split(campers_args)
 
     is_localstack = (
         hasattr(context, "scenario") and "localstack" in context.scenario.tags
@@ -504,7 +504,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
             context,
             args[0] if args else "",
             args={
-                "machine_name": params.get("machine_name"),
+                "camp_name": params.get("camp_name"),
                 "command": params.get("command"),
                 "instance_type": params.get("instance_type"),
                 "disk_size": params.get("disk_size"),
@@ -549,7 +549,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
             root_logger.setLevel(logging.DEBUG)
 
             with mutagen_mocked(context):
-                cli = MoondockCLI(
+                cli = CampersCLI(
                     ec2_manager_factory=ec2_manager_factory,
                     ssh_manager_factory=ssh_manager_factory,
                     boto3_client_factory=boto3_factory,
@@ -557,7 +557,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
 
                 if args[0] == "run":
                     result = cli.run(
-                        machine_name=params["machine_name"],
+                        camp_name=params["camp_name"],
                         command=params["command"],
                         instance_type=params["instance_type"],
                         disk_size=params["disk_size"],
@@ -640,7 +640,7 @@ def step_run_moondock_command(context: Context, moondock_args: str) -> None:
             args.append("True")
 
         result = subprocess.run(
-            [sys.executable, "-m", "moondock"] + args,
+            [sys.executable, "-m", "campers"] + args,
             capture_output=True,
             text=True,
             env=os.environ.copy(),
@@ -769,35 +769,35 @@ def step_final_config_contains_env_filter(context: Context, expected: str) -> No
     assert context.exit_code == 0
 
 
-@given('machine "{machine_name}" has sync_paths configured')
-def step_machine_has_sync_paths_configured(context: Context, machine_name: str) -> None:
+@given('machine "{camp_name}" has sync_paths configured')
+def step_machine_has_sync_paths_configured(context: Context, camp_name: str) -> None:
     if not hasattr(context, "config_data"):
-        context.config_data = {"defaults": {}, "machines": {}}
+        context.config_data = {"defaults": {}, "camps": {}}
 
-    if "machines" not in context.config_data:
-        context.config_data["machines"] = {}
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
 
-    if machine_name not in context.config_data["machines"]:
-        context.config_data["machines"][machine_name] = {}
+    if camp_name not in context.config_data["camps"]:
+        context.config_data["camps"][camp_name] = {}
 
-    context.config_data["machines"][machine_name]["sync_paths"] = [
+    context.config_data["camps"][camp_name]["sync_paths"] = [
         {"local": "~/myproject", "remote": "~/myproject"}
     ]
 
 
-@given('machine "{machine_name}" has ports {ports_list}')
+@given('machine "{camp_name}" has ports {ports_list}')
 def step_machine_has_ports(
-    context: Context, machine_name: str, ports_list: str
+    context: Context, camp_name: str, ports_list: str
 ) -> None:
-    ensure_machine_exists(context, machine_name)
+    ensure_machine_exists(context, camp_name)
     ports = json.loads(ports_list)
-    context.config_data["machines"][machine_name]["ports"] = ports
+    context.config_data["camps"][camp_name]["ports"] = ports
 
 
-@given('machine "{machine_name}" has no ports specified')
-def step_machine_has_no_ports(context: Context, machine_name: str) -> None:
-    ensure_machine_exists(context, machine_name)
-    context.config_data["machines"][machine_name]["ports"] = []
+@given('machine "{camp_name}" has no ports specified')
+def step_machine_has_no_ports(context: Context, camp_name: str) -> None:
+    ensure_machine_exists(context, camp_name)
+    context.config_data["camps"][camp_name]["ports"] = []
 
 
 @then("final config contains sync_paths")

@@ -1,32 +1,32 @@
 Feature: TUI Basic Log Viewer
 
 @smoke @dry_run
-Scenario: Running moondock run in interactive terminal launches TUI
+Scenario: Running campers run in interactive terminal launches TUI
   Given config file with defaults section
   And stdout is an interactive terminal
-  When I run moondock command "run"
+  When I run campers command "run"
   Then TUI application launches
   And log messages are displayed in TUI
 
 @smoke
 Scenario: Running with --plain flag uses stderr logging
   Given config file with defaults section
-  When I run moondock command "run --plain"
+  When I run campers command "run --plain"
   Then TUI does not launch
   And logs are written to stderr
 
 @smoke
 Scenario: Running with --json-output flag uses JSON output
   Given config file with defaults section
-  When I run moondock command "run --json-output"
+  When I run campers command "run --json-output"
   Then TUI does not launch
   And final output is JSON string to stdout
 
 @smoke
-Scenario: Running with MOONDOCK_TEST_MODE does not launch TUI
-  Given MOONDOCK_TEST_MODE is "1"
+Scenario: Running with CAMPERS_TEST_MODE does not launch TUI
+  Given CAMPERS_TEST_MODE is "1"
   And config file with defaults section
-  When I run moondock command "run"
+  When I run campers command "run"
   Then TUI does not launch
   And logs are written to stderr
 
@@ -34,7 +34,7 @@ Scenario: Running with MOONDOCK_TEST_MODE does not launch TUI
 Scenario: Running in non-interactive shell does not launch TUI
   Given stdout is not a TTY
   And config file with defaults section
-  When I run moondock command "run"
+  When I run campers command "run"
   Then TUI does not launch
   And logs are written to stderr
 

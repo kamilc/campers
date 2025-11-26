@@ -16,7 +16,7 @@ from behave.runner import Context
 from tests.harness.utils.system_snapshot import gather_system_snapshot
 
 
-DIAGNOSTIC_ENV_PREFIXES: tuple[str, ...] = ("MOONDOCK_", "AWS_", "LOCALSTACK")
+DIAGNOSTIC_ENV_PREFIXES: tuple[str, ...] = ("CAMPERS_", "AWS_", "LOCALSTACK")
 
 
 def sanitize_for_path(value: str) -> str:
@@ -178,7 +178,7 @@ def collect_diagnostics(
     docker_logs_command = [
         "docker",
         "logs",
-        "moondock-localstack",
+        "campers-localstack",
         "--tail",
         "200",
     ]
@@ -203,7 +203,7 @@ def collect_diagnostics(
         "docker_ps:",
         run_diagnostic_command(["docker", "ps"]),
         "",
-        "docker_logs_moondock_localstack:",
+        "docker_logs_campers_localstack:",
         run_diagnostic_command(docker_logs_command),
         "",
         "mutagen_sync_list:",

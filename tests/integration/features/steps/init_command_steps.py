@@ -50,14 +50,14 @@ def step_file_does_not_exist(context, path: str) -> None:
         context.init_config_path = str(full_path)
 
 
-@given("MOONDOCK_CONFIG is not set")
-def step_moondock_config_not_set(context) -> None:
+@given("CAMPERS_CONFIG is not set")
+def step_campers_config_not_set(context) -> None:
     if hasattr(context, "harness") and getattr(context.harness, "services", None):
-        context.harness.services.configuration_env.delete("MOONDOCK_CONFIG")
+        context.harness.services.configuration_env.delete("CAMPERS_CONFIG")
     else:
-        os.environ.pop("MOONDOCK_CONFIG", None)
+        os.environ.pop("CAMPERS_CONFIG", None)
 
-    context.init_config_path = str(context.tmp_dir / "moondock.yaml")
+    context.init_config_path = str(context.tmp_dir / "campers.yaml")
 
 
 @given('"{path}" exists')
@@ -74,17 +74,17 @@ def step_run_init_command(context) -> None:
     env = os.environ.copy()
 
     if hasattr(context, "init_config_path"):
-        env["MOONDOCK_CONFIG"] = context.init_config_path
+        env["CAMPERS_CONFIG"] = context.init_config_path
     elif hasattr(context, "env_config_path"):
         path = context.env_config_path
 
         if not path.startswith("/"):
             path = str(context.tmp_dir / path)
 
-        env["MOONDOCK_CONFIG"] = path
+        env["CAMPERS_CONFIG"] = path
 
     result = subprocess.run(
-        ["uv", "run", "-m", "moondock", "init"],
+        ["uv", "run", "-m", "campers", "init"],
         cwd=str(context.project_root),
         capture_output=True,
         text=True,
@@ -101,17 +101,17 @@ def step_run_init_command_with_flag(context, flag: str) -> None:
     env = os.environ.copy()
 
     if hasattr(context, "init_config_path"):
-        env["MOONDOCK_CONFIG"] = context.init_config_path
+        env["CAMPERS_CONFIG"] = context.init_config_path
     elif hasattr(context, "env_config_path"):
         path = context.env_config_path
 
         if not path.startswith("/"):
             path = str(context.tmp_dir / path)
 
-        env["MOONDOCK_CONFIG"] = path
+        env["CAMPERS_CONFIG"] = path
 
     result = subprocess.run(
-        ["uv", "run", "-m", "moondock", "init", flag],
+        ["uv", "run", "-m", "campers", "init", flag],
         cwd=str(context.project_root),
         capture_output=True,
         text=True,
@@ -135,10 +135,10 @@ def step_file_contains_template_content(context) -> None:
     if hasattr(context, "created_file"):
         file_path = context.created_file
     else:
-        file_path = resolve_config_path(context, "moondock.yaml")
+        file_path = resolve_config_path(context, "campers.yaml")
 
     content = file_path.read_text()
-    assert "# Moondock Configuration File" in content
+    assert "# Campers Configuration File" in content
     assert "defaults:" in content
     assert "region:" in content
     assert "instance_type:" in content
@@ -186,6 +186,6 @@ def step_file_is_overwritten(context, path: str) -> None:
     assert current_content != context.original_content, (
         "File was not overwritten - content is the same"
     )
-    assert "# Moondock Configuration File" in current_content, (
+    assert "# Campers Configuration File" in current_content, (
         "File was overwritten but does not contain template content"
     )

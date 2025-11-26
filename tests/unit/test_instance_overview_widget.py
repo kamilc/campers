@@ -8,11 +8,11 @@ import pytest
 
 
 @pytest.fixture
-def mock_moondock():
-    """Create mock Moondock instance."""
-    moondock = Mock()
-    moondock.ec2_manager_factory = Mock()
-    return moondock
+def mock_campers():
+    """Create mock Campers instance."""
+    campers = Mock()
+    campers.ec2_manager_factory = Mock()
+    return campers
 
 
 @pytest.fixture
@@ -31,17 +31,17 @@ def mock_pricing_service():
     return service
 
 
-def test_widget_initialization(mock_moondock, mock_ec2_manager):
+def test_widget_initialization(mock_campers, mock_ec2_manager):
     """Test widget initializes with correct attributes."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("moondock.pricing.PricingService") as MockPricing:
+    with patch("campers.pricing.PricingService") as MockPricing:
         mock_pricing = Mock()
         MockPricing.return_value = mock_pricing
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
 
         assert widget.running_count == 0
         assert widget.stopped_count == 0
@@ -52,10 +52,10 @@ def test_widget_initialization(mock_moondock, mock_ec2_manager):
 
 
 def test_refresh_stats_counts_instances_correctly(
-    mock_moondock, mock_ec2_manager, mock_pricing_service
+    mock_campers, mock_ec2_manager, mock_pricing_service
 ):
     """Test refresh_stats correctly counts running and stopped instances."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.return_value = [
         {
@@ -95,12 +95,12 @@ def test_refresh_stats_counts_instances_correctly(
         },
     ]
 
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("moondock.pricing.PricingService") as MockPricing:
+    with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = mock_pricing_service
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
         asyncio.run(widget.refresh_stats())
 
         assert widget.running_count == 2
@@ -109,18 +109,18 @@ def test_refresh_stats_counts_instances_correctly(
 
 
 def test_refresh_stats_handles_empty_list(
-    mock_moondock, mock_ec2_manager, mock_pricing_service
+    mock_campers, mock_ec2_manager, mock_pricing_service
 ):
     """Test refresh_stats handles empty instance list."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.return_value = []
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("moondock.pricing.PricingService") as MockPricing:
+    with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = mock_pricing_service
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
         asyncio.run(widget.refresh_stats())
 
         assert widget.running_count == 0
@@ -128,10 +128,10 @@ def test_refresh_stats_handles_empty_list(
 
 
 def test_refresh_stats_calculates_daily_cost_when_pricing_available(
-    mock_moondock, mock_ec2_manager
+    mock_campers, mock_ec2_manager
 ):
     """Test refresh_stats calculates daily cost when pricing is available."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.return_value = [
         {
@@ -150,17 +150,17 @@ def test_refresh_stats_calculates_daily_cost_when_pricing_available(
         },
     ]
 
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("moondock.pricing.PricingService") as MockPricing, patch(
-        "moondock.pricing.calculate_monthly_cost"
+    with patch("campers.pricing.PricingService") as MockPricing, patch(
+        "campers.pricing.calculate_monthly_cost"
     ) as mock_calc:
         mock_pricing = Mock()
         mock_pricing.pricing_available = True
         MockPricing.return_value = mock_pricing
         mock_calc.side_effect = [899.0, 899.0]
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
         asyncio.run(widget.refresh_stats())
 
         assert widget.daily_cost == pytest.approx(1798.0 / 30, rel=0.01)
@@ -168,10 +168,10 @@ def test_refresh_stats_calculates_daily_cost_when_pricing_available(
 
 
 def test_refresh_stats_sets_none_cost_when_pricing_unavailable(
-    mock_moondock, mock_ec2_manager, mock_pricing_service
+    mock_campers, mock_ec2_manager, mock_pricing_service
 ):
     """Test refresh_stats sets None for cost when pricing unavailable."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.return_value = [
         {
@@ -183,13 +183,13 @@ def test_refresh_stats_sets_none_cost_when_pricing_unavailable(
         },
     ]
 
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
     mock_pricing_service.pricing_available = False
 
-    with patch("moondock.pricing.PricingService") as MockPricing:
+    with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = mock_pricing_service
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
         asyncio.run(widget.refresh_stats())
 
         assert widget.daily_cost is None
@@ -197,18 +197,18 @@ def test_refresh_stats_sets_none_cost_when_pricing_unavailable(
 
 
 def test_refresh_stats_handles_ec2_api_errors_gracefully(
-    mock_moondock, mock_ec2_manager, mock_pricing_service
+    mock_campers, mock_ec2_manager, mock_pricing_service
 ):
     """Test refresh_stats maintains last known state when EC2 API fails."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.side_effect = Exception("EC2 API error")
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("moondock.pricing.PricingService") as MockPricing:
+    with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = mock_pricing_service
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
         widget.running_count = 5
         widget.stopped_count = 3
 
@@ -218,16 +218,16 @@ def test_refresh_stats_handles_ec2_api_errors_gracefully(
         assert widget.stopped_count == 3
 
 
-def test_render_stats_formats_with_cost(mock_moondock, mock_ec2_manager):
+def test_render_stats_formats_with_cost(mock_campers, mock_ec2_manager):
     """Test render_stats formats display with cost."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("moondock.pricing.PricingService") as MockPricing:
+    with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = Mock()
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
         widget.running_count = 2
         widget.stopped_count = 3
         widget.daily_cost = 72.72
@@ -237,16 +237,16 @@ def test_render_stats_formats_with_cost(mock_moondock, mock_ec2_manager):
         assert result == "Running: 2  Stopped: 3  $72.72/day"
 
 
-def test_render_stats_formats_without_cost(mock_moondock, mock_ec2_manager):
+def test_render_stats_formats_without_cost(mock_campers, mock_ec2_manager):
     """Test render_stats formats display without cost (N/A)."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("moondock.pricing.PricingService") as MockPricing:
+    with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = Mock()
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
         widget.running_count = 1
         widget.stopped_count = 0
         widget.daily_cost = None
@@ -257,28 +257,28 @@ def test_render_stats_formats_without_cost(mock_moondock, mock_ec2_manager):
 
 
 def test_widget_queries_all_regions(
-    mock_moondock, mock_ec2_manager, mock_pricing_service
+    mock_campers, mock_ec2_manager, mock_pricing_service
 ):
     """Test widget queries all regions using region_filter=None."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.return_value = []
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("moondock.pricing.PricingService") as MockPricing:
+    with patch("campers.pricing.PricingService") as MockPricing:
         MockPricing.return_value = mock_pricing_service
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
         asyncio.run(widget.refresh_stats())
 
         mock_ec2_manager.list_instances.assert_called_once_with(region_filter=None)
 
 
 def test_refresh_stats_shows_na_when_all_prices_none(
-    mock_moondock, mock_ec2_manager
+    mock_campers, mock_ec2_manager
 ):
     """Test widget shows N/A when all running instances return None for pricing."""
-    from moondock.instance_overview_widget import InstanceOverviewWidget
+    from campers.instance_overview_widget import InstanceOverviewWidget
 
     mock_ec2_manager.list_instances.return_value = [
         {
@@ -290,17 +290,17 @@ def test_refresh_stats_shows_na_when_all_prices_none(
         },
     ]
 
-    mock_moondock.ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers.ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("moondock.pricing.PricingService") as MockPricing, patch(
-        "moondock.pricing.calculate_monthly_cost"
+    with patch("campers.pricing.PricingService") as MockPricing, patch(
+        "campers.pricing.calculate_monthly_cost"
     ) as mock_calc:
         mock_pricing = Mock()
         mock_pricing.pricing_available = True
         MockPricing.return_value = mock_pricing
         mock_calc.return_value = None
 
-        widget = InstanceOverviewWidget(mock_moondock)
+        widget = InstanceOverviewWidget(mock_campers)
         asyncio.run(widget.refresh_stats())
 
         assert widget.daily_cost is None

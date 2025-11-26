@@ -48,7 +48,7 @@ def step_ssh_connection_fails(context: Context) -> None:
 
 @when('I run run with instance type "{instance_type}"')
 def step_run_with_instance_type(context: Context, instance_type: str) -> None:
-    """Run moondock run command with instance type override.
+    """Run campers run command with instance type override.
 
     Parameters
     ----------
@@ -67,7 +67,7 @@ def step_run_with_instance_type(context: Context, instance_type: str) -> None:
             "run",
             "python",
             "-m",
-            "moondock",
+            "campers",
             "run",
             "--instance-type",
             instance_type,
@@ -85,7 +85,7 @@ def step_run_with_instance_type(context: Context, instance_type: str) -> None:
 
 @when('I run run with command "{command}"')
 def step_run_with_command(context: Context, command: str) -> None:
-    """Run moondock run command with a command to execute.
+    """Run campers run command with a command to execute.
 
     Parameters
     ----------
@@ -99,7 +99,7 @@ def step_run_with_command(context: Context, command: str) -> None:
     env = os.environ.copy()
 
     result = subprocess.run(
-        ["uv", "run", "python", "-m", "moondock", "run", "-c", command],
+        ["uv", "run", "python", "-m", "campers", "run", "-c", command],
         env=env,
         capture_output=True,
         text=True,

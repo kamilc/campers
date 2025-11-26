@@ -6,7 +6,7 @@ import paramiko
 import pytest
 from sshtunnel import BaseSSHTunnelForwarderError
 
-from moondock.portforward import PortForwardManager
+from campers.portforward import PortForwardManager
 
 
 @pytest.fixture
@@ -29,10 +29,10 @@ def test_port_forward_manager_initialization() -> None:
     assert manager.ports == []
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_create_tunnels_success_single_port(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -66,10 +66,10 @@ def test_create_tunnels_success_single_port(
     assert port_forward_manager.ports == [8888]
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_create_tunnels_success_multiple_ports(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -121,10 +121,10 @@ def test_create_tunnels_success_multiple_ports(
     assert mock_logger.info.call_args_list == expected_info_calls
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_create_tunnels_default_username(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -147,10 +147,10 @@ def test_create_tunnels_default_username(
     assert call_kwargs["ssh_username"] == "ubuntu"
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_create_tunnels_failure_raises_runtime_error(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -172,10 +172,10 @@ def test_create_tunnels_failure_raises_runtime_error(
     assert port_forward_manager.ports == []
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_create_tunnels_start_failure_raises_runtime_error(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -199,10 +199,10 @@ def test_create_tunnels_start_failure_raises_runtime_error(
     assert port_forward_manager.ports == []
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_create_tunnels_empty_port_list(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -222,7 +222,7 @@ def test_create_tunnels_empty_port_list(
     assert port_forward_manager.ports == []
 
 
-@patch("moondock.portforward.logger")
+@patch("campers.portforward.logger")
 def test_stop_all_tunnels_success(
     mock_logger: MagicMock, port_forward_manager: PortForwardManager
 ) -> None:
@@ -246,7 +246,7 @@ def test_stop_all_tunnels_success(
     assert mock_logger.info.call_args_list == expected_info_calls
 
 
-@patch("moondock.portforward.logger")
+@patch("campers.portforward.logger")
 def test_stop_all_tunnels_handles_exceptions(
     mock_logger: MagicMock, port_forward_manager: PortForwardManager
 ) -> None:
@@ -267,7 +267,7 @@ def test_stop_all_tunnels_handles_exceptions(
     mock_logger.warning.assert_called_once_with("Error stopping tunnels: Stop failed")
 
 
-@patch("moondock.portforward.logger")
+@patch("campers.portforward.logger")
 def test_stop_all_tunnels_empty_state(
     mock_logger: MagicMock, port_forward_manager: PortForwardManager
 ) -> None:
@@ -282,10 +282,10 @@ def test_stop_all_tunnels_empty_state(
     mock_logger.info.assert_not_called()
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_create_tunnels_localhost_binding(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -310,10 +310,10 @@ def test_create_tunnels_localhost_binding(
     assert call_kwargs["remote_bind_addresses"] == [("localhost", 8888)]
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_create_tunnels_custom_ssh_port(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -337,7 +337,7 @@ def test_create_tunnels_custom_ssh_port(
     assert call_kwargs["ssh_address_or_host"] == ("203.0.113.1", 2222)
 
 
-@patch("moondock.portforward.logger")
+@patch("campers.portforward.logger")
 def test_stop_all_tunnels_multiple_times_idempotent(
     mock_logger: MagicMock, port_forward_manager: PortForwardManager
 ) -> None:
@@ -357,10 +357,10 @@ def test_stop_all_tunnels_multiple_times_idempotent(
     mock_tunnel.stop.assert_called_once()
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_port_already_in_use_error(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -382,10 +382,10 @@ def test_port_already_in_use_error(
     assert port_forward_manager.ports == []
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_authentication_failure_invalid_key(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -407,10 +407,10 @@ def test_authentication_failure_invalid_key(
     assert port_forward_manager.ports == []
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_sshtunnel_base_error_handling(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,
@@ -432,10 +432,10 @@ def test_sshtunnel_base_error_handling(
     assert port_forward_manager.ports == []
 
 
-@patch("moondock.portforward.PortForwardManager.validate_key_file")
-@patch("moondock.portforward.PortForwardManager.validate_port")
-@patch("moondock.portforward.logger")
-@patch("moondock.portforward.SSHTunnelForwarder")
+@patch("campers.portforward.PortForwardManager.validate_key_file")
+@patch("campers.portforward.PortForwardManager.validate_port")
+@patch("campers.portforward.logger")
+@patch("campers.portforward.SSHTunnelForwarder")
 def test_create_tunnels_multiple_ports_different_values(
     mock_tunnel_forwarder: MagicMock,
     mock_logger: MagicMock,

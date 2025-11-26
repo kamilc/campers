@@ -47,7 +47,7 @@ def step_defaults_have_command(context: Context, command: str) -> None:
         Command to execute
     """
     if not hasattr(context, "config_data"):
-        context.config_data = {"defaults": {}, "machines": {}}
+        context.config_data = {"defaults": {}, "camps": {}}
 
     if "defaults" not in context.config_data:
         context.config_data["defaults"] = {}
@@ -139,7 +139,7 @@ def step_startup_script_executes_successfully(context: Context) -> None:
 def step_simulate_running_machine_in_tui(context: Context) -> None:
     """Simulate running the machine in the TUI using Textual Pilot.
 
-    This step uses the machine_name from context if set, otherwise uses None for ad-hoc mode.
+    This step uses the camp_name from context if set, otherwise uses None for ad-hoc mode.
     It also ensures sync_directory is properly initialized if sync_paths are configured.
 
     Parameters
@@ -149,19 +149,19 @@ def step_simulate_running_machine_in_tui(context: Context) -> None:
     """
     from tests.integration.features.steps.pilot_steps import run_tui_test_with_machine
 
-    machine_name = getattr(context, "machine_name", None)
+    camp_name = getattr(context, "camp_name", None)
 
     if not hasattr(context, "config_path"):
         raise AssertionError(
-            "No config path found. Run 'I launch the Moondock TUI with the config file' step first."
+            "No config path found. Run 'I launch the Campers TUI with the config file' step first."
         )
 
     ensure_sync_directory_context(context)
 
     max_wait = 180
-    logger.info(f"=== STARTING TUI TEST FOR MACHINE: {machine_name} ===")
+    logger.info(f"=== STARTING TUI TEST FOR MACHINE: {camp_name} ===")
     result = run_tui_test_with_machine(
-        machine_name, context.config_path, max_wait, context
+        camp_name, context.config_path, max_wait, context
     )
     context.tui_result = result
 
@@ -173,6 +173,6 @@ def step_simulate_running_machine_in_tui(context: Context) -> None:
         if instance_id:
             context.instance_id = instance_id
 
-    logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {machine_name} ===")
+    logger.info(f"=== TUI TEST COMPLETED FOR MACHINE: {camp_name} ===")
     logger.info(f"TUI result status: {result.get('status', 'UNKNOWN')}")
     logger.info(f"TUI log length: {len(result.get('log_text', ''))} characters")

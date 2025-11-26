@@ -86,7 +86,7 @@ class TestPilotExtensionEventPublishing:
 
         ext.publish_tui_event(
             "tui-status-changed",
-            {"status": "running", "machine_name": "test-machine"},
+            {"status": "running", "camp_name": "test-machine"},
         )
 
         event = event_bus.wait_for(
@@ -95,7 +95,7 @@ class TestPilotExtensionEventPublishing:
         assert event.type == "tui-status-changed"
         assert event.instance_id is None
         assert event.data["status"] == "running"
-        assert event.data["machine_name"] == "test-machine"
+        assert event.data["camp_name"] == "test-machine"
 
     def test_publish_tui_app_started_event(self) -> None:
         """Test tui-app-started event contains correct data."""
@@ -109,14 +109,14 @@ class TestPilotExtensionEventPublishing:
         ext.publish_tui_event(
             "tui-app-started",
             {
-                "machine_name": "jupyter-lab",
+                "camp_name": "jupyter-lab",
                 "config_path": "/tmp/config.yaml",
                 "timestamp": timestamp,
             },
         )
 
         event = event_bus.wait_for("tui-app-started", instance_id=None, timeout_sec=1.0)
-        assert event.data["machine_name"] == "jupyter-lab"
+        assert event.data["camp_name"] == "jupyter-lab"
         assert event.data["config_path"] == "/tmp/config.yaml"
         assert event.data["timestamp"] == timestamp
 

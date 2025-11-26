@@ -39,7 +39,7 @@ def ensure_defaults_section(context: Context) -> dict[str, Any]:
 def step_mutagen_not_installed(context: Context) -> None:
     """Mark that mutagen is not installed locally."""
     context.harness.services.configuration_env.set(
-        "MOONDOCK_MUTAGEN_NOT_INSTALLED", "1"
+        "CAMPERS_MUTAGEN_NOT_INSTALLED", "1"
     )
     context.mutagen_not_installed = True
 
@@ -165,7 +165,7 @@ def step_mutagen_sync_completes(context: Context) -> None:
 @given("sync does not complete within timeout")
 def step_sync_timeout(context: Context) -> None:
     """Mark that sync will timeout."""
-    context.harness.services.configuration_env.set("MOONDOCK_SYNC_TIMEOUT", "1")
+    context.harness.services.configuration_env.set("CAMPERS_SYNC_TIMEOUT", "1")
     context.mutagen_sync_timeout = True
 
 
@@ -330,9 +330,9 @@ def step_sync_remote_path(context: Context, path: str) -> None:
     context.sync_remote_path = path
 
 
-@then('moondock waits for sync state "{state}"')
+@then('campers waits for sync state "{state}"')
 def step_waits_for_sync_state(context: Context, state: str) -> None:
-    """Verify moondock waits for specific sync state."""
+    """Verify campers waits for specific sync state."""
     context.expected_sync_state = state
 
 
@@ -367,7 +367,7 @@ def step_mutagen_session_terminated(context: Context) -> None:
             timeout=5,
         )
 
-        session_count = result.stdout.count("moondock-")
+        session_count = result.stdout.count("campers-")
         if session_count > 0:
             logger.warning(
                 f"Found {session_count} Mutagen sessions still running after test"
@@ -421,7 +421,7 @@ def step_session_removed_from_list(context: Context) -> None:
     """Verify session was removed from mutagen list.
 
     For @localstack scenarios, verifies that Mutagen sync list no longer contains
-    moondock sessions. For @dry_run scenarios, just sets a flag.
+    campers sessions. For @dry_run scenarios, just sets a flag.
 
     Parameters
     ----------
@@ -448,7 +448,7 @@ def step_session_removed_from_list(context: Context) -> None:
                 timeout=5,
             )
 
-            if "moondock-" not in result.stdout:
+            if "campers-" not in result.stdout:
                 logger.info("Confirmed: all Mutagen sessions removed from list")
                 return
 
@@ -482,7 +482,7 @@ def step_orphaned_session_terminated(context: Context, session_name: str) -> Non
 def step_new_mutagen_session_created(context: Context) -> None:
     """Verify new mutagen session was created.
 
-    For @localstack scenarios, verifies that a new moondock Mutagen session
+    For @localstack scenarios, verifies that a new campers Mutagen session
     exists. For @dry_run scenarios, just sets a flag.
 
     Parameters
@@ -510,7 +510,7 @@ def step_new_mutagen_session_created(context: Context) -> None:
                 timeout=5,
             )
 
-            if "moondock-" in result.stdout:
+            if "campers-" in result.stdout:
                 logger.info("Confirmed: new Mutagen session created")
                 return
 
@@ -561,7 +561,7 @@ def step_startup_script_execution_skipped(context: Context) -> None:
 def step_ssh_not_attempted_for_startup_script(context: Context) -> None:
     """Verify SSH was not attempted for startup_script in test mode.
 
-    This step verifies that when MOONDOCK_TEST_MODE is enabled, SSH connections
+    This step verifies that when CAMPERS_TEST_MODE is enabled, SSH connections
     are not actually made for startup_script execution. Used in test scenarios
     to ensure the test mode flag is properly honored.
 
@@ -718,7 +718,7 @@ def step_mutagen_watching_state(context: Context) -> None:
     if "localstack" not in context.tags:
         return
 
-    session_name = getattr(context, "mutagen_session_name", "moondock-")
+    session_name = getattr(context, "mutagen_session_name", "campers-")
     timeout = 60
     start_time = time.time()
 

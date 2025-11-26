@@ -81,9 +81,9 @@ def create_test_instance(
     return instance_id, launch_time
 
 
-@given("no moondock instances exist")
+@given("no campers instances exist")
 def step_no_instances_exist(context: Context) -> None:
-    """Ensure no moondock-managed instances exist.
+    """Ensure no campers-managed instances exist.
 
     Parameters
     ----------
@@ -93,10 +93,10 @@ def step_no_instances_exist(context: Context) -> None:
     context.instances = []
 
 
-@given('{count:d} moondock instance exists in "{region}"')
-@given('{count:d} moondock instances exist in "{region}"')
+@given('{count:d} campers instance exists in "{region}"')
+@given('{count:d} campers instances exist in "{region}"')
 def step_instances_exist_in_region(context: Context, count: int, region: str) -> None:
-    """Create moondock-managed instances in specified region.
+    """Create campers-managed instances in specified region.
 
     Parameters
     ----------
@@ -112,9 +112,9 @@ def step_instances_exist_in_region(context: Context, count: int, region: str) ->
 
     for i in range(count):
         tags = {
-            "ManagedBy": "moondock",
-            "Name": f"moondock-test-{i}",
-            "MachineConfig": f"test-machine-{i}",
+            "ManagedBy": "campers",
+            "Name": f"campers-test-{i}",
+            "CampConfig": f"test-machine-{i}",
         }
 
         instance_id, launch_time = create_test_instance(region, tags)
@@ -124,7 +124,7 @@ def step_instances_exist_in_region(context: Context, count: int, region: str) ->
                 "instance_id": instance_id,
                 "region": region,
                 "launch_time": launch_time,
-                "machine_config": f"test-machine-{i}",
+                "camp_config": f"test-machine-{i}",
             }
         )
 
@@ -147,7 +147,7 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
         for patch_obj in context.region_patches:
             patch_obj.start()
 
-    moondock = context.moondock_module.Moondock()
+    campers = context.campers_module.Campers()
 
     captured_output = StringIO()
     original_stdout = sys.stdout
@@ -155,13 +155,13 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
 
     try:
         if context.mock_time_instances is not None and context.mock_time_instances:
-            with patch("moondock.ec2.EC2Manager.list_instances") as mock_list, \
-                 patch("moondock.ec2.EC2Manager.get_volume_size") as mock_volume:
+            with patch("campers.ec2.EC2Manager.list_instances") as mock_list, \
+                 patch("campers.ec2.EC2Manager.get_volume_size") as mock_volume:
                 mock_list.return_value = context.instances
                 mock_volume.return_value = 0
-                moondock.list(region=region)
+                campers.list(region=region)
         else:
-            moondock.list(region=region)
+            campers.list(region=region)
 
         context.stdout = captured_output.getvalue()
         context.exit_code = 0
@@ -196,9 +196,9 @@ def step_output_displays_text(context: Context, text: str) -> None:
     if text == "AWS credentials not found":
         assert (
             "AWS credentials not found" in context.stdout
-            or "No moondock-managed instances found" in context.stdout
+            or "No campers-managed instances found" in context.stdout
         ), (
-            f"Expected 'AWS credentials not found' or 'No moondock-managed instances found' "
+            f"Expected 'AWS credentials not found' or 'No campers-managed instances found' "
             f"in output but got: {context.stdout}"
         )
     else:
@@ -334,11 +334,11 @@ def step_instances_sorted_by_launch_time(context: Context) -> None:
         )
 
 
-@given('instance "{instance_id}" exists with no MachineConfig tag')
-def step_instance_exists_without_machine_config(
+@given('instance "{instance_id}" exists with no CampConfig tag')
+def step_instance_exists_without_camp_config(
     context: Context, instance_id: str
 ) -> None:
-    """Create instance without MachineConfig tag.
+    """Create instance without CampConfig tag.
 
     Parameters
     ----------
@@ -352,7 +352,7 @@ def step_instance_exists_without_machine_config(
 
     region = "us-east-1"
     tags = {
-        "ManagedBy": "moondock",
+        "ManagedBy": "campers",
         "Name": "test-instance",
     }
 
@@ -363,7 +363,7 @@ def step_instance_exists_without_machine_config(
             "instance_id": actual_instance_id,
             "region": region,
             "launch_time": launch_time,
-            "machine_config": "ad-hoc",
+            "camp_config": "ad-hoc",
         }
     )
     context.test_instance_id_mapping = {instance_id: actual_instance_id}
@@ -444,7 +444,7 @@ def step_instance_launched_hours_ago(context: Context, hours: int) -> None:
             "instance_id": instance_id,
             "region": region,
             "launch_time": launch_time,
-            "machine_config": f"test-{hours}h",
+            "camp_config": f"test-{hours}h",
             "state": "running",
             "instance_type": "t3.medium",
         }
@@ -484,7 +484,7 @@ def step_instance_launched_minutes_ago(context: Context, minutes: int) -> None:
             "instance_id": instance_id,
             "region": region,
             "launch_time": launch_time,
-            "machine_config": f"test-{minutes}m",
+            "camp_config": f"test-{minutes}m",
             "state": "running",
             "instance_type": "t3.medium",
         }
@@ -524,7 +524,7 @@ def step_instance_launched_days_ago(context: Context, days: int) -> None:
             "instance_id": instance_id,
             "region": region,
             "launch_time": launch_time,
-            "machine_config": f"test-{days}d",
+            "camp_config": f"test-{days}d",
             "state": "running",
             "instance_type": "t3.medium",
         }
@@ -622,9 +622,9 @@ def step_third_instance_shows_time(context: Context, time_str: str) -> None:
     assert time_str in third_line, f"Expected '{time_str}' in third line: {third_line}"
 
 
-@given('moondock instances exist in "{region}"')
-def step_moondock_instances_exist_in_region(context: Context, region: str) -> None:
-    """Create moondock instances in specific region.
+@given('campers instances exist in "{region}"')
+def step_campers_instances_exist_in_region(context: Context, region: str) -> None:
+    """Create campers instances in specific region.
 
     Parameters
     ----------
@@ -637,9 +637,9 @@ def step_moondock_instances_exist_in_region(context: Context, region: str) -> No
         context.instances = []
 
     tags = {
-        "ManagedBy": "moondock",
+        "ManagedBy": "campers",
         "Name": "test-instance",
-        "MachineConfig": "test-machine",
+        "CampConfig": "test-machine",
     }
 
     instance_id, launch_time = create_test_instance(region, tags)
@@ -649,7 +649,7 @@ def step_moondock_instances_exist_in_region(context: Context, region: str) -> No
             "instance_id": instance_id,
             "region": region,
             "launch_time": launch_time,
-            "machine_config": "test-machine",
+            "camp_config": "test-machine",
         }
     )
 
@@ -726,10 +726,10 @@ def step_output_displays_instances_from_region(context: Context, region: str) ->
 
 @given('instance "{instance_id}" in state "{state}"')
 @given(
-    'instance "{instance_id}" in state "{state}" with MachineConfig "{machine_config}"'
+    'instance "{instance_id}" in state "{state}" with CampConfig "{camp_config}"'
 )
 def step_instance_in_state(
-    context: Context, instance_id: str, state: str, machine_config: str | None = None
+    context: Context, instance_id: str, state: str, camp_config: str | None = None
 ) -> None:
     """Create instance in specific state.
 
@@ -741,8 +741,8 @@ def step_instance_in_state(
         Instance ID
     state : str
         Instance state
-    machine_config : str | None
-        Optional MachineConfig tag value
+    camp_config : str | None
+        Optional CampConfig tag value
     """
     if context.instances is None:
         context.instances = []
@@ -751,11 +751,11 @@ def step_instance_in_state(
         context.state_test_instances = {}
 
     region = "us-east-1"
-    config_name = machine_config if machine_config else f"test-{state}"
+    config_name = camp_config if camp_config else f"test-{state}"
     tags = {
-        "ManagedBy": "moondock",
+        "ManagedBy": "campers",
         "Name": f"test-{state}",
-        "MachineConfig": config_name,
+        "CampConfig": config_name,
     }
 
     actual_instance_id, launch_time = create_test_instance(region, tags)
@@ -772,7 +772,7 @@ def step_instance_in_state(
             "instance_id": actual_instance_id,
             "region": region,
             "launch_time": launch_time,
-            "machine_config": config_name,
+            "camp_config": config_name,
             "state": state,
         }
     )
@@ -833,15 +833,15 @@ def step_status_column_shows_correct_state(context: Context) -> None:
     assert len(data_lines) > 0, "No instances found in output"
 
 
-@given('instance with MachineConfig "{machine_config}"')
-def step_instance_with_machine_config(context: Context, machine_config: str) -> None:
-    """Create instance with specific MachineConfig.
+@given('instance with CampConfig "{camp_config}"')
+def step_instance_with_camp_config(context: Context, camp_config: str) -> None:
+    """Create instance with specific CampConfig.
 
     Parameters
     ----------
     context : Context
         Behave test context
-    machine_config : str
+    camp_config : str
         Machine config name
     """
     if context.instances is None:
@@ -849,9 +849,9 @@ def step_instance_with_machine_config(context: Context, machine_config: str) -> 
 
     region = "us-east-1"
     tags = {
-        "ManagedBy": "moondock",
+        "ManagedBy": "campers",
         "Name": "test-long-name",
-        "MachineConfig": machine_config,
+        "CampConfig": camp_config,
     }
 
     instance_id, launch_time = create_test_instance(region, tags)
@@ -861,14 +861,14 @@ def step_instance_with_machine_config(context: Context, machine_config: str) -> 
             "instance_id": instance_id,
             "region": region,
             "launch_time": launch_time,
-            "machine_config": machine_config,
+            "camp_config": camp_config,
         }
     )
-    context.long_machine_config = machine_config
+    context.long_camp_config = camp_config
 
 
 @then("machine config name is truncated to {length:d} characters")
-def step_machine_config_truncated(context: Context, length: int) -> None:
+def step_camp_config_truncated(context: Context, length: int) -> None:
     """Verify machine config name is truncated.
 
     Parameters
@@ -921,7 +921,7 @@ def step_table_formatting_aligned(context: Context) -> None:
     assert header_line is not None, "No header line found"
 
 
-@given('no moondock instances exist in "{region}"')
+@given('no campers instances exist in "{region}"')
 def step_no_instances_in_region(context: Context, region: str) -> None:
     """Ensure no instances exist in specific region.
 

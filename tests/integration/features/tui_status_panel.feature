@@ -4,7 +4,7 @@ Feature: TUI Status Panel and Layout
 Scenario: TUI launches with two-panel layout
   Given config file with defaults section
   And stdout is an interactive terminal
-  When I run moondock command "run"
+  When I run campers command "run"
   Then TUI displays status panel
   And TUI displays log panel
   And status panel height is one-third of screen
@@ -18,7 +18,7 @@ Scenario: Status panel displays placeholder text on startup
   Then status panel shows placeholder text for instance ID
   And status panel shows placeholder text for instance type
   And status panel shows placeholder text for region
-  And status panel shows placeholder text for machine name
+  And status panel shows placeholder text for camp name
   And status panel shows placeholder text for command
   And status panel shows placeholder text for forwarded ports
   And status panel shows placeholder text for SSH connection
@@ -31,7 +31,7 @@ Scenario: Status panel updates with instance data
   Then status panel shows instance ID
   And status panel shows instance type
   And status panel shows AWS region
-  And status panel shows machine name
+  And status panel shows camp name
   And status panel shows command
   And status panel shows forwarded URLs
   And status panel shows SSH connection string

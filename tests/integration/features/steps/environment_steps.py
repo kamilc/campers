@@ -25,9 +25,9 @@ def step_setup_two_env_vars(context, var1, var2):
     env = context.harness.services.configuration_env
     env.set("PATH", context.saved_env.get("PATH", ""))
     env.set("HOME", context.saved_env.get("HOME", ""))
-    env.set("MOONDOCK_DIR", context.saved_env.get("MOONDOCK_DIR", ""))
-    env.set("MOONDOCK_TEST_MODE", "1")
-    env.set("MOONDOCK_CONFIG", context.saved_env.get("MOONDOCK_CONFIG", ""))
+    env.set("CAMPERS_DIR", context.saved_env.get("CAMPERS_DIR", ""))
+    env.set("CAMPERS_TEST_MODE", "1")
+    env.set("CAMPERS_CONFIG", context.saved_env.get("CAMPERS_CONFIG", ""))
 
     is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
@@ -77,9 +77,9 @@ def step_setup_three_env_vars(context, var1, var2, var3):
     env = context.harness.services.configuration_env
     env.set("PATH", context.saved_env.get("PATH", ""))
     env.set("HOME", context.saved_env.get("HOME", ""))
-    env.set("MOONDOCK_DIR", context.saved_env.get("MOONDOCK_DIR", ""))
-    env.set("MOONDOCK_TEST_MODE", "1")
-    env.set("MOONDOCK_CONFIG", context.saved_env.get("MOONDOCK_CONFIG", ""))
+    env.set("CAMPERS_DIR", context.saved_env.get("CAMPERS_DIR", ""))
+    env.set("CAMPERS_TEST_MODE", "1")
+    env.set("CAMPERS_CONFIG", context.saved_env.get("CAMPERS_CONFIG", ""))
 
     is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
@@ -165,16 +165,16 @@ def step_config_no_env_filter(context):
         context.config_data["defaults"].pop("env_filter", None)
 
 
-@when("I execute the moondock run")
-def step_execute_moondock_run(context):
-    """Simulate executing moondock run in test mode.
+@when("I execute the campers run")
+def step_execute_campers_run(context):
+    """Simulate executing campers run in test mode.
 
     Parameters
     ----------
     context : behave.runner.Context
         Behave context object
     """
-    context.harness.services.configuration_env.set("MOONDOCK_TEST_MODE", "1")
+    context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "1")
     context.command_executed = True
 
 
@@ -187,7 +187,7 @@ def step_filter_environment_variables(context):
     context : behave.runner.Context
         Behave context object
     """
-    from moondock.ssh import SSHManager
+    from campers.ssh import SSHManager
 
     ssh_manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem")
 
@@ -209,7 +209,7 @@ def step_config_validation_runs(context):
     context : behave.runner.Context
         Behave context object
     """
-    from moondock.config import ConfigLoader
+    from campers.config import ConfigLoader
 
     config_loader = ConfigLoader()
 

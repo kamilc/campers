@@ -50,9 +50,9 @@ class FakeEC2Manager:
         tuple[str, Path]
             Tuple of (key_name, key_file_path)
         """
-        key_name = f"moondock-{unique_id}"
-        moondock_dir = Path("/tmp/test-moondock")
-        keys_dir = moondock_dir / "keys"
+        key_name = f"campers-{unique_id}"
+        campers_dir = Path("/tmp/test-campers")
+        keys_dir = campers_dir / "keys"
         keys_dir.mkdir(parents=True, exist_ok=True)
 
         key_file = keys_dir / f"{unique_id}.pem"
@@ -80,7 +80,7 @@ class FakeEC2Manager:
         sg_id = f"sg-fake{unique_id}"
         self.security_groups[sg_id] = {
             "GroupId": sg_id,
-            "GroupName": f"moondock-{unique_id}",
+            "GroupName": f"campers-{unique_id}",
             "IpPermissions": [
                 {
                     "IpProtocol": "tcp",
@@ -116,7 +116,7 @@ class FakeEC2Manager:
         sg_id = self.create_security_group(unique_id)
 
         public_ip = (
-            None if os.environ.get("MOONDOCK_NO_PUBLIC_IP") == "1" else "203.0.113.1"
+            None if os.environ.get("CAMPERS_NO_PUBLIC_IP") == "1" else "203.0.113.1"
         )
 
         instance = {
@@ -126,7 +126,7 @@ class FakeEC2Manager:
             "key_file": str(key_file),
             "security_group_id": sg_id,
             "unique_id": unique_id,
-            "machine_config": instance_name,
+            "camp_config": instance_name,
         }
 
         self.instances[instance_id] = instance
@@ -153,14 +153,14 @@ class FakeEC2Manager:
                     instances_list.append(
                         {
                             "instance_id": instance["instance_id"],
-                            "name": instance.get("name", f"moondock-{instance['unique_id']}"),
+                            "name": instance.get("name", f"campers-{instance['unique_id']}"),
                             "state": instance["state"],
                             "region": instance.get("region", manager.region),
                             "instance_type": instance.get("instance_type", "t3.medium"),
                             "launch_time": instance.get(
                                 "launch_time", "2024-01-01T00:00:00+00:00"
                             ),
-                            "machine_config": instance.get("machine_config", "test"),
+                            "camp_config": instance.get("camp_config", "test"),
                             "volume_size": instance.get("volume_size", 30),
                         }
                     )
@@ -169,14 +169,14 @@ class FakeEC2Manager:
                 instances_list.append(
                     {
                         "instance_id": instance["instance_id"],
-                        "name": instance.get("name", f"moondock-{instance['unique_id']}"),
+                        "name": instance.get("name", f"campers-{instance['unique_id']}"),
                         "state": instance["state"],
                         "region": instance.get("region", self.region),
                         "instance_type": instance.get("instance_type", "t3.medium"),
                         "launch_time": instance.get(
                             "launch_time", "2024-01-01T00:00:00+00:00"
                         ),
-                        "machine_config": instance.get("machine_config", "test"),
+                        "camp_config": instance.get("camp_config", "test"),
                         "volume_size": instance.get("volume_size", 30),
                     }
                 )
@@ -203,7 +203,7 @@ class FakeEC2Manager:
         return [
             inst
             for inst in all_instances
-            if inst["instance_id"] == name_or_id or inst["machine_config"] == name_or_id
+            if inst["instance_id"] == name_or_id or inst["camp_config"] == name_or_id
         ]
 
     def stop_instance(self, instance_id: str) -> dict[str, Any]:
@@ -301,6 +301,6 @@ class FakeEC2Manager:
             if key_file.exists():
                 key_file.unlink()
 
-            self.key_pairs.pop(f"moondock-{unique_id}", None)
+            self.key_pairs.pop(f"campers-{unique_id}", None)
             self.security_groups.pop(instance["security_group_id"], None)
             del self.instances[instance_id]

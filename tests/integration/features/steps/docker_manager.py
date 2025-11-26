@@ -13,10 +13,10 @@ import docker
 logger = logging.getLogger(__name__)
 
 SSH_CONTAINER_BOOT_BASE_TIMEOUT = int(
-    os.environ.get("MOONDOCK_SSH_CONTAINER_BOOT_TIMEOUT", "20")
+    os.environ.get("CAMPERS_SSH_CONTAINER_BOOT_TIMEOUT", "20")
 )
 
-SSH_CONTAINER_IMAGE = os.environ.get("MOONDOCK_SSH_IMAGE", "moondock/python-ssh:latest")
+SSH_CONTAINER_IMAGE = os.environ.get("CAMPERS_SSH_IMAGE", "campers/python-ssh:latest")
 
 
 def get_ssh_container_boot_timeout() -> int:
@@ -28,7 +28,7 @@ def get_ssh_container_boot_timeout() -> int:
         Total timeout in seconds
     """
     base = SSH_CONTAINER_BOOT_BASE_TIMEOUT
-    delay = int(os.environ.get("MOONDOCK_SSH_DELAY_SECONDS", "0"))
+    delay = int(os.environ.get("CAMPERS_SSH_DELAY_SECONDS", "0"))
     buffer_for_init = 5
     total = base + delay + buffer_for_init
     logger.debug(
@@ -58,8 +58,8 @@ class EC2ContainerManager:
         self.instance_map: dict[str, tuple] = {}
         self.next_port = 2222
         self.ssh_key_lock = threading.Lock()
-        moondock_dir = os.environ.get("MOONDOCK_DIR", str(Path.home() / ".moondock"))
-        self.keys_dir = Path(moondock_dir) / "keys"
+        campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+        self.keys_dir = Path(campers_dir) / "keys"
         self.keys_dir.mkdir(parents=True, exist_ok=True)
 
     def is_ssh_server_ready(self, port: int, max_attempts: int = 5) -> bool:
@@ -245,14 +245,14 @@ class EC2ContainerManager:
         """
         logger.debug(f"Starting create_instance_container for {instance_id}")
         logger.debug(
-            f"Checking SSH delay env var: MOONDOCK_SSH_DELAY_SECONDS={os.environ.get('MOONDOCK_SSH_DELAY_SECONDS', 'not set')}"
+            f"Checking SSH delay env var: CAMPERS_SSH_DELAY_SECONDS={os.environ.get('CAMPERS_SSH_DELAY_SECONDS', 'not set')}"
         )
         logger.debug(
-            f"Checking SSH block env var: MOONDOCK_SSH_BLOCK_CONNECTIONS={os.environ.get('MOONDOCK_SSH_BLOCK_CONNECTIONS', 'not set')}"
+            f"Checking SSH block env var: CAMPERS_SSH_BLOCK_CONNECTIONS={os.environ.get('CAMPERS_SSH_BLOCK_CONNECTIONS', 'not set')}"
         )
 
-        ssh_delay = int(os.environ.get("MOONDOCK_SSH_DELAY_SECONDS", "0"))
-        block_ssh = os.environ.get("MOONDOCK_SSH_BLOCK_CONNECTIONS") == "1"
+        ssh_delay = int(os.environ.get("CAMPERS_SSH_DELAY_SECONDS", "0"))
+        block_ssh = os.environ.get("CAMPERS_SSH_BLOCK_CONNECTIONS") == "1"
 
         container_name = f"ssh-{instance_id}"
         self.remove_existing_container(container_name)
@@ -383,7 +383,7 @@ exec /init
             self.instance_map[instance_id] = (container, None, key_file)
 
         timeout = get_ssh_container_boot_timeout()
-        ssh_delay = int(os.environ.get("MOONDOCK_SSH_DELAY_SECONDS", "0"))
+        ssh_delay = int(os.environ.get("CAMPERS_SSH_DELAY_SECONDS", "0"))
         logger.info(
             f"Polling container status for up to {timeout}s (delay={ssh_delay}s)..."
         )
