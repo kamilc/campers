@@ -36,34 +36,56 @@ class InstanceOverviewWidget(Static):
     DEFAULT_CLASSES = "instance-overview"
 
     def __init__(self, campers_instance: "Campers") -> None:
-        super().__init__(id="instance-overview-widget")
-        from campers.config import ConfigLoader
-        from campers.pricing import PricingService
-
-        default_region = ConfigLoader.BUILT_IN_DEFAULTS["region"]
-        self.ec2_manager = campers_instance._ec2_manager_factory(region=default_region)
-        self.pricing_service = PricingService()
+        super().__init__("Initializing...", id="instance-overview-widget")
+        self._campers_instance = campers_instance
+        self._ec2_manager_factory = campers_instance._ec2_manager_factory
+        self.ec2_manager = None
+        self.pricing_service = None
         self.running_count = 0
         self.stopped_count = 0
         self.daily_cost: Optional[float] = None
         self.last_update: Optional[datetime] = None
         self._interval_timer = None
+        self._initialized = False
 
     async def on_mount(self) -> None:
-        """Initialize widget: refresh stats immediately and start 30-second interval."""
-        await self.refresh_stats()
-        self._interval_timer = self.set_interval(30, self.refresh_stats)
+        """Initialize widget: defer AWS initialization to background worker."""
+        self.run_worker(self._initialize_services, thread=True)
 
     async def on_unmount(self) -> None:
         """Clean up interval timer when widget is unmounted."""
         if self._interval_timer is not None:
             self._interval_timer.stop()
 
-    async def refresh_stats(self) -> None:
-        """Query EC2 API for all instances across regions and calculate costs.
+    def _initialize_services(self) -> None:
+        """Initialize AWS services in background thread."""
+        from campers.config import ConfigLoader
+        from campers.pricing import PricingService
 
-        Maintains last known state if API call fails. Logs errors at DEBUG level only.
-        """
+        try:
+            default_region = ConfigLoader.BUILT_IN_DEFAULTS["region"]
+            self.ec2_manager = self._ec2_manager_factory(region=default_region)
+            self.pricing_service = PricingService()
+            self._initialized = True
+            self.app.call_from_thread(self._start_refresh_timer)
+        except Exception as e:
+            logger.debug(f"Failed to initialize AWS services: {e}")
+            self.app.call_from_thread(self._show_init_error)
+
+    def _start_refresh_timer(self) -> None:
+        """Start the refresh timer and do initial refresh after initialization."""
+        self._interval_timer = self.set_interval(30, self.refresh_stats)
+        self.run_worker(self._refresh_stats_sync, thread=True)
+
+    def _show_init_error(self) -> None:
+        """Update widget to show initialization error."""
+        self.update("AWS unavailable")
+
+    def _refresh_stats_sync(self) -> None:
+        """Synchronous version of refresh_stats for worker thread."""
+        if not self._initialized or self.ec2_manager is None:
+            return
+
         try:
             all_instances = self.ec2_manager.list_instances(region_filter=None)
 
@@ -73,7 +95,7 @@ class InstanceOverviewWidget(Static):
             self.running_count = len(running)
             self.stopped_count = len(stopped)
 
-            if self.pricing_service.pricing_available:
+            if self.pricing_service and self.pricing_service.pricing_available:
                 from campers.pricing import calculate_monthly_cost
 
                 monthly_costs = [
@@ -93,10 +115,18 @@ class InstanceOverviewWidget(Static):
                 self.daily_cost = None
 
             self.last_update = datetime.now()
-            self.update(self.render_stats())
+            self.app.call_from_thread(self._update_display)
 
         except Exception as e:
             logger.debug(f"Failed to refresh instance stats: {e}")
+
+    def _update_display(self) -> None:
+        """Update the widget display on the main thread."""
+        self.update(self.render_stats())
+
+    async def refresh_stats(self) -> None:
+        """Query EC2 API for all instances across regions and calculate costs."""
+        self.run_worker(self._refresh_stats_sync, thread=True)
 
     def render_stats(self) -> str:
         """Format stats for display.

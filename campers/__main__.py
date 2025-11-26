@@ -563,7 +563,7 @@ class CampersTUI(App):
             yield Static("Uptime: 0s", id="uptime-widget")
             yield Static("Instance Type: loading...", id="instance-type-widget")
             yield Static("Region: loading...", id="region-widget")
-            yield Static("Machine Name: loading...", id="machine-name-widget")
+            yield Static("Camp Name: loading...", id="camp-name-widget")
             yield Static("Command: loading...", id="command-widget")
             yield Static("Mutagen: Not syncing", id="mutagen-widget")
         with Container(id="log-panel"):
@@ -731,11 +731,9 @@ class CampersTUI(App):
         camp_name = config.get("camp_name", "ad-hoc")
 
         try:
-            self.query_one("#machine-name-widget").update(
-                f"Machine Name: {camp_name}"
-            )
+            self.query_one("#camp-name-widget").update(f"Camp Name: {camp_name}")
         except Exception as e:
-            logging.error("Failed to update machine name widget: %s", e)
+            logging.error("Failed to update camp name widget: %s", e)
 
         if "command" in config:
             try:
@@ -914,6 +912,25 @@ class CampersTUI(App):
         """Handle quit action (q key or first Ctrl+C)."""
         self.campers._abort_requested = True
 
+        try:
+            self.query_one("#status-widget").update("Status: shutting down")
+        except Exception:
+            pass
+
+        try:
+            log_widget = self.query_one(Log)
+            log_widget.write_line(
+                "Graceful shutdown initiated (press Ctrl+C again to force exit)"
+            )
+        except Exception:
+            pass
+
+        self.refresh()
+
+        self.run_worker(self._run_cleanup, thread=True, exit_on_error=False)
+
+    def _run_cleanup(self) -> None:
+        """Run cleanup in worker thread to keep TUI responsive."""
         if (
             hasattr(self.campers, "_resources")
             and "ssh_manager" in self.campers._resources
@@ -922,6 +939,8 @@ class CampersTUI(App):
 
         if not self.campers._cleanup_in_progress:
             self.campers._cleanup_resources()
+
+        self.call_from_thread(self.exit, 130)
 
 
 class Campers:

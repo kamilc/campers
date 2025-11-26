@@ -235,9 +235,9 @@ def step_status_panel_shows_placeholder_region(context: Context) -> None:
     asyncio.run(verify_placeholder())
 
 
-@then("status panel shows placeholder text for machine name")
+@then("status panel shows placeholder text for camp name")
 def step_status_panel_shows_placeholder_camp_name(context: Context) -> None:
-    """Verify machine name widget shows placeholder text.
+    """Verify camp name widget shows placeholder text.
 
     Parameters
     ----------
@@ -256,7 +256,7 @@ def step_status_panel_shows_placeholder_camp_name(context: Context) -> None:
             start_worker=False,
         )
         async with app.run_test():
-            widget = app.query_one("#machine-name-widget", Static)
+            widget = app.query_one("#camp-name-widget", Static)
             content = widget.render()
             text = str(content)
             assert "loading" in text.lower(), f"Expected placeholder text, got: {text}"
@@ -468,9 +468,9 @@ def step_status_panel_shows_aws_region(context: Context) -> None:
     asyncio.run(verify_region())
 
 
-@then("status panel shows machine name")
+@then("status panel shows camp name")
 def step_status_panel_shows_camp_name(context: Context) -> None:
-    """Verify machine name widget shows actual machine name.
+    """Verify camp name widget shows actual camp name.
 
     Parameters
     ----------
@@ -492,11 +492,11 @@ def step_status_panel_shows_camp_name(context: Context) -> None:
             update_queue.put({"type": "merged_config", "payload": test_config})
             app.check_for_updates()
             await pilot.pause()
-            widget = app.query_one("#machine-name-widget", Static)
+            widget = app.query_one("#camp-name-widget", Static)
             content = widget.render()
             text = str(content)
             assert "test-machine" in text, (
-                f"Expected machine name in widget, got: {text}"
+                f"Expected camp name in widget, got: {text}"
             )
 
     import asyncio
