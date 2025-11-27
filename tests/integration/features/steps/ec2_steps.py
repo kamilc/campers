@@ -1692,7 +1692,7 @@ def step_existing_instance_in_region(context: Context, camp_name: str, region: s
                 "ResourceType": "instance",
                 "Tags": [
                     {"Key": "ManagedBy", "Value": "campers"},
-                    {"Key": "MachineConfig", "Value": camp_name},
+                    {"Key": "CampConfig", "Value": camp_name},
                     {"Key": "UniqueId", "Value": unique_id},
                 ],
             }
@@ -1790,6 +1790,22 @@ def step_attempt_launch_with_region(
         Region to configure
     """
     setup_moto_environment(context)
+
+    ec2_client = boto3.client("ec2", region_name=region)
+    ec2_client.register_image(
+        Name="Amazon Ubuntu 24 LTS x86_64 20240101",
+        Description="Ubuntu 24 LTS",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+    if not vpcs["Vpcs"]:
+        try:
+            ec2_client.create_default_vpc()
+        except ClientError:
+            pass
 
     if not hasattr(context, "config_data"):
         context.config_data = {}

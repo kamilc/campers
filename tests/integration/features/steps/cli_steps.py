@@ -151,6 +151,7 @@ def create_cli_test_ec2_manager_factory():
 
     def mock_ec2_manager(region: str, **kwargs):
         mock_mgr = MagicMock()
+        mock_mgr.find_instances_by_name_or_id.return_value = []
         mock_mgr.launch_instance.return_value = {
             "instance_id": "i-test123456789",
             "public_ip": "192.168.1.1",

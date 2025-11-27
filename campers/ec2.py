@@ -345,6 +345,35 @@ class EC2Manager:
 
         return sg_id
 
+    def _check_region_mismatch(self, camp_name: str, target_region: str) -> None:
+        """Check if an existing instance with same camp name exists in another region.
+
+        Parameters
+        ----------
+        camp_name : str
+            Camp name to check for
+        target_region : str
+            Target region for the new instance
+
+        Raises
+        ------
+        RuntimeError
+            If an existing instance with the same camp name exists in a different region
+        """
+        if camp_name == "ad-hoc":
+            return
+
+        existing_instances = self.find_instances_by_name_or_id(camp_name)
+
+        for instance in existing_instances:
+            if instance["region"] != target_region and instance["camp_config"] == camp_name:
+                raise RuntimeError(
+                    f"An instance for camp '{camp_name}' already exists in region "
+                    f"'{instance['region']}', but you are trying to launch in region "
+                    f"'{target_region}'. Please use the existing instance or terminate "
+                    f"it first if you want to launch in a different region."
+                )
+
     def launch_instance(
         self, config: dict[str, Any], instance_name: str | None = None
     ) -> dict[str, Any]:
@@ -366,7 +395,8 @@ class EC2Manager:
         Raises
         ------
         RuntimeError
-            If instance fails to reach running state within timeout
+            If instance fails to reach running state within timeout or if an
+            existing instance with the same camp name exists in a different region
         ClientError
             If instance type is invalid
         """
@@ -383,9 +413,12 @@ class EC2Manager:
                 "RunInstances",
             )
 
+        camp_name = config.get("camp_name", "ad-hoc")
+
+        self._check_region_mismatch(camp_name, config.get("region", self.region))
+
         ami_id = self.resolve_ami(config)
         unique_id = str(int(time.time()))
-        camp_name = config.get("camp_name", "ad-hoc")
 
         instance_tag_name = instance_name if instance_name else f"campers-{unique_id}"
 

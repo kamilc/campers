@@ -716,6 +716,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     if hasattr(context, "mock_aws_env") and context.mock_aws_env:
         try:
             context.mock_aws_env.stop()
+            delattr(context, "mock_aws_env")
         except (RuntimeError, Exception):
             pass
 
@@ -1152,6 +1153,9 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         if hasattr(context, "started_instance_id") and context.started_instance_id:
             instance_ids_to_terminate.append(context.started_instance_id)
 
+        if hasattr(context, "instance_id") and context.instance_id:
+            instance_ids_to_terminate.append(context.instance_id)
+
         if hasattr(context, "created_instance_ids") and context.created_instance_ids:
             instance_ids_to_terminate.extend(context.created_instance_ids)
 
@@ -1232,10 +1236,14 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     try:
         if hasattr(context, "mock_aws_env") and context.mock_aws_env:
             context.mock_aws_env.stop()
+            delattr(context, "mock_aws_env")
     except (RuntimeError, AttributeError) as e:
         logger.debug(f"Expected error stopping mock AWS: {e}")
     except Exception as e:
         logger.error(f"Unexpected error stopping mock AWS: {e}", exc_info=True)
+
+    if hasattr(context, "instance_id"):
+        delattr(context, "instance_id")
 
     try:
         if hasattr(context, "cleanup_key_file") and context.cleanup_key_file:
