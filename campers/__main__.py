@@ -62,6 +62,9 @@ import boto3  # noqa: E402
 import fire  # noqa: E402
 import paramiko  # noqa: E402
 from botocore.exceptions import ClientError, NoCredentialsError  # noqa: E402
+
+for _boto_module in ["botocore", "boto3", "urllib3"]:
+    logging.getLogger(_boto_module).setLevel(logging.WARNING)
 from textual import events  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
 from textual.containers import Container  # noqa: E402
@@ -397,17 +400,17 @@ class TuiLogHandler(logging.Handler):
         msg = self.format(record)
 
         try:
+            if not hasattr(self.app, "_running") or not self.app._running:
+                return
+
             if self.app._thread_id == threading.get_ident():
                 self.log_widget.write_line(msg)
                 return
 
             if not self.app.post_message(TuiLogMessage(msg)):
-                self.log_widget.write_line(msg)
-        except Exception:
-            try:
-                self.log_widget.write_line(msg)
-            except Exception:
                 pass
+        except Exception:
+            pass
 
 
 def detect_terminal_background() -> tuple[str, bool]:
@@ -587,6 +590,9 @@ class CampersTUI(App):
             module_logger.propagate = True
             module_logger.setLevel(logging.INFO)
 
+        for boto_module in ["botocore", "boto3", "urllib3"]:
+            logging.getLogger(boto_module).setLevel(logging.WARNING)
+
         self.instance_start_time = datetime.now()
         self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
         self.set_interval(1.0, self.update_uptime, name="uptime-timer")
@@ -633,12 +639,19 @@ class CampersTUI(App):
                 break
 
     def update_uptime(self) -> None:
-        """Update uptime widget with elapsed time since instance start."""
+        """Update uptime widget with elapsed time since instance launch."""
         if self.instance_start_time is None:
             return
 
-        elapsed = datetime.now() - self.instance_start_time
+        from datetime import timezone
+
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+        elapsed = now_utc - self.instance_start_time
         total_seconds = int(elapsed.total_seconds())
+
+        if total_seconds < 0:
+            total_seconds = 0
+
         hours = total_seconds // 3600
         minutes = (total_seconds % 3600) // 60
         seconds = total_seconds % 60
@@ -756,6 +769,12 @@ class CampersTUI(App):
                 self.query_one("#status-widget").update(f"Status: {details['state']}")
             except Exception as e:
                 logging.error("Failed to update status widget: %s", e)
+
+        if "launch_time" in details and details["launch_time"]:
+            launch_time = details["launch_time"]
+
+            if hasattr(launch_time, "replace"):
+                self.instance_start_time = launch_time.replace(tzinfo=None)
 
         if "public_ip" in details and details["public_ip"]:
             try:

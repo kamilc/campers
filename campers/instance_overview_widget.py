@@ -134,10 +134,11 @@ class InstanceOverviewWidget(Static):
         Returns
         -------
         str
-            Formatted string "Running: X  Stopped: Y  $Z/day"
-            or "Running: X  Stopped: Y  N/A"
+            Formatted string "Instances - Running: X  Stopped: Y  $Z/day"
+            or "Instances - Running: X  Stopped: Y  N/A"
         """
         cost_str = f"${self.daily_cost:.2f}/day" if self.daily_cost else "N/A"
         return (
-            f"Running: {self.running_count}  Stopped: {self.stopped_count}  {cost_str}"
+            f"Instances - Running: {self.running_count}  "
+            f"Stopped: {self.stopped_count}  {cost_str}"
         )

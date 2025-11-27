@@ -449,6 +449,7 @@ class EC2Manager:
                 "key_file": str(key_file),
                 "security_group_id": sg_id,
                 "unique_id": unique_id,
+                "launch_time": instance.launch_time,
             }
 
         except Exception as e:
@@ -693,6 +694,7 @@ class EC2Manager:
                 "private_ip": instance.get("PrivateIpAddress"),
                 "state": current_state,
                 "instance_type": instance.get("InstanceType"),
+                "launch_time": instance.get("LaunchTime"),
             }
 
         if current_state != "stopped":
@@ -745,6 +747,7 @@ class EC2Manager:
             "instance_type": instance.get("InstanceType"),
             "unique_id": unique_id,
             "key_file": key_file,
+            "launch_time": instance.get("LaunchTime"),
         }
 
     def get_volume_size(self, instance_id: str) -> int | None:

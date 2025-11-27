@@ -118,9 +118,9 @@ class PricingService:
         try:
             self.pricing_client = boto3.client("pricing", region_name="us-east-1")
             self.pricing_available = True
-            logger.info("AWS Pricing API initialized successfully")
+            logger.debug("AWS Pricing API initialized successfully")
         except Exception as e:
-            logger.warning(f"Failed to initialize AWS Pricing API: {e}")
+            logger.debug(f"Failed to initialize AWS Pricing API: {e}")
             self.pricing_client = None
 
     def get_ec2_hourly_rate(
