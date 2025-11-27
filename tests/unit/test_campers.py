@@ -2341,3 +2341,133 @@ def test_destroy_command_no_matches_error(campers_module) -> None:
         campers_instance.destroy("nonexistent")
 
     assert exc_info.value.code == 1
+
+
+def test_launch_raises_error_when_instance_region_mismatches_config(
+    campers_module,
+) -> None:
+    """Verify error is raised when existing instance region differs from config."""
+    from unittest.mock import MagicMock, patch
+
+    campers_instance = campers_module()
+    campers_instance._config_loader = MagicMock()
+    campers_instance._config_loader.load_config.return_value = {"defaults": {}}
+    campers_instance._config_loader.get_camp_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+    }
+    campers_instance._config_loader.validate_config.return_value = None
+
+    with patch("campers_cli.EC2Manager") as mock_ec2_class:
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.find_instances_by_name_or_id.return_value = [
+            {
+                "instance_id": "i-123",
+                "state": "running",
+                "region": "us-west-2",
+                "camp_config": "test-camp",
+            }
+        ]
+        mock_ec2_class.return_value = mock_ec2_instance
+
+        with pytest.raises(RuntimeError) as exc_info:
+            campers_instance.run("test-camp")
+
+        error_message = str(exc_info.value)
+        assert "us-west-2" in error_message
+        assert "us-east-1" in error_message
+
+
+def test_launch_succeeds_when_instance_region_matches_config(campers_module) -> None:
+    """Verify no error when existing instance region matches config region."""
+    from unittest.mock import MagicMock, patch
+
+    campers_instance = campers_module()
+    campers_instance._config_loader = MagicMock()
+    campers_instance._config_loader.load_config.return_value = {"defaults": {}}
+    campers_instance._config_loader.get_camp_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+    }
+    campers_instance._config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+        "launch_time": None,
+    }
+
+    with patch("campers_cli.EC2Manager") as mock_ec2_class:
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.find_instances_by_name_or_id.return_value = [
+            {
+                "instance_id": "i-123",
+                "state": "stopped",
+                "region": "us-east-1",
+                "camp_config": "test-camp",
+            }
+        ]
+        mock_ec2_instance.start_instance.return_value = mock_instance_details
+        mock_ec2_instance.get_instance_info.return_value = mock_instance_details
+        mock_ec2_class.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+
+        with patch("builtins.print"):
+            result = campers_instance.run("test-camp")
+
+        assert result["instance_id"] == "i-test123"
+
+
+def test_launch_succeeds_when_instance_has_no_region_field(campers_module) -> None:
+    """Verify no error when existing instance has no region field."""
+    from unittest.mock import MagicMock, patch
+
+    campers_instance = campers_module()
+    campers_instance._config_loader = MagicMock()
+    campers_instance._config_loader.load_config.return_value = {"defaults": {}}
+    campers_instance._config_loader.get_camp_config.return_value = {
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+    }
+    campers_instance._config_loader.validate_config.return_value = None
+
+    mock_instance_details = {
+        "instance_id": "i-test123",
+        "public_ip": "203.0.113.1",
+        "state": "running",
+        "key_file": "/tmp/test.pem",
+        "security_group_id": "sg-test123",
+        "unique_id": "test123",
+        "launch_time": None,
+    }
+
+    with patch("campers_cli.EC2Manager") as mock_ec2_class:
+        mock_ec2_instance = MagicMock()
+        mock_ec2_instance.find_instances_by_name_or_id.return_value = [
+            {
+                "instance_id": "i-123",
+                "state": "stopped",
+                "camp_config": "test-camp",
+            }
+        ]
+        mock_ec2_instance.start_instance.return_value = mock_instance_details
+        mock_ec2_instance.get_instance_info.return_value = mock_instance_details
+        mock_ec2_class.return_value = mock_ec2_instance
+
+        mock_ssh_instance = MagicMock()
+        mock_ssh_instance.filter_environment_variables.return_value = {}
+        mock_ssh_instance.connect.return_value = None
+        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
+
+        with patch("builtins.print"):
+            result = campers_instance.run("test-camp")
+
+        assert result["instance_id"] == "i-test123"

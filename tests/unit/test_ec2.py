@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1052,3 +1053,165 @@ def test_get_volume_size_api_error(ec2_manager, registered_ami):
 
         with pytest.raises(RuntimeError, match="Failed to get volume size"):
             ec2_manager.get_volume_size(instance_id)
+
+
+def test_launch_instance_returns_launch_time(ec2_manager, cleanup_keys, registered_ami):
+    """Verify launch_instance includes launch_time in return value."""
+    config = {
+        "instance_type": "t3.micro",
+        "disk_size": 20,
+        "region": "us-east-1",
+        "camp_name": "test-launch-time",
+        "ami": {"image_id": registered_ami},
+    }
+
+    result = ec2_manager.launch_instance(config)
+    cleanup_keys.append(result["key_file"])
+
+    assert "launch_time" in result
+    assert isinstance(result["launch_time"], datetime)
+
+
+def test_start_instance_returns_launch_time_when_already_running(
+    ec2_manager, cleanup_keys, registered_ami
+):
+    """Verify start_instance includes launch_time when instance is running."""
+    config = {
+        "instance_type": "t3.micro",
+        "disk_size": 20,
+        "region": "us-east-1",
+        "camp_name": "test-start-running",
+        "ami": {"image_id": registered_ami},
+    }
+
+    launch_result = ec2_manager.launch_instance(config)
+    cleanup_keys.append(launch_result["key_file"])
+    instance_id = launch_result["instance_id"]
+
+    info = ec2_manager.start_instance(instance_id)
+
+    assert "launch_time" in info
+    assert isinstance(info["launch_time"], datetime)
+
+
+def test_list_instances_returns_launch_time(ec2_manager, cleanup_keys, registered_ami):
+    """Verify list_instances includes launch_time for each instance."""
+    config = {
+        "instance_type": "t3.micro",
+        "disk_size": 20,
+        "region": "us-east-1",
+        "camp_name": "test-list-time",
+        "ami": {"image_id": registered_ami},
+    }
+
+    launch_result = ec2_manager.launch_instance(config)
+    cleanup_keys.append(launch_result["key_file"])
+
+    instances = ec2_manager.list_instances()
+
+    assert len(instances) > 0
+
+    for instance in instances:
+        assert "launch_time" in instance
+        assert isinstance(instance["launch_time"], datetime)
+
+
+def test_start_instance_extracts_unique_id_from_tags(
+    ec2_manager, cleanup_keys, registered_ami
+):
+    """Verify unique_id is extracted from instance tags when started."""
+    config = {
+        "instance_type": "t3.micro",
+        "disk_size": 20,
+        "region": "us-east-1",
+        "camp_name": "test-extract-id",
+        "ami": {"image_id": registered_ami},
+    }
+
+    launch_result = ec2_manager.launch_instance(config)
+    cleanup_keys.append(launch_result["key_file"])
+    instance_id = launch_result["instance_id"]
+    original_unique_id = launch_result["unique_id"]
+
+    ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
+
+    result = ec2_manager.start_instance(instance_id)
+
+    assert result["unique_id"] == original_unique_id
+
+
+def test_start_instance_calculates_key_file_path(
+    ec2_manager, cleanup_keys, registered_ami
+):
+    """Verify key_file path is calculated correctly using CAMPERS_DIR."""
+    config = {
+        "instance_type": "t3.micro",
+        "disk_size": 20,
+        "region": "us-east-1",
+        "camp_name": "test-key-file",
+        "ami": {"image_id": registered_ami},
+    }
+
+    launch_result = ec2_manager.launch_instance(config)
+    cleanup_keys.append(launch_result["key_file"])
+    instance_id = launch_result["instance_id"]
+    unique_id = launch_result["unique_id"]
+
+    ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
+
+    result = ec2_manager.start_instance(instance_id)
+
+    campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+    expected_key_file = str(Path(campers_dir) / "keys" / f"{unique_id}.pem")
+
+    assert result["key_file"] == expected_key_file
+
+
+def test_start_instance_returns_none_unique_id_when_tag_missing(
+    ec2_manager, cleanup_keys, registered_ami
+):
+    """Verify unique_id is None when UniqueId tag is missing."""
+    config = {
+        "instance_type": "t3.micro",
+        "disk_size": 20,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    launch_result = ec2_manager.launch_instance(config)
+    cleanup_keys.append(launch_result["key_file"])
+    instance_id = launch_result["instance_id"]
+
+    instance = ec2_manager.ec2_resource.Instance(instance_id)
+    instance.delete_tags(Tags=[{"Key": "UniqueId"}])
+
+    ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
+
+    result = ec2_manager.start_instance(instance_id)
+
+    assert result["unique_id"] is None
+
+
+def test_start_instance_returns_none_key_file_when_unique_id_missing(
+    ec2_manager, cleanup_keys, registered_ami
+):
+    """Verify key_file is None when unique_id is not found."""
+    config = {
+        "instance_type": "t3.micro",
+        "disk_size": 20,
+        "region": "us-east-1",
+        "ami": {"image_id": registered_ami},
+    }
+
+    launch_result = ec2_manager.launch_instance(config)
+    cleanup_keys.append(launch_result["key_file"])
+    instance_id = launch_result["instance_id"]
+
+    instance = ec2_manager.ec2_resource.Instance(instance_id)
+    instance.delete_tags(Tags=[{"Key": "UniqueId"}])
+
+    ec2_manager.ec2_client.stop_instances(InstanceIds=[instance_id])
+
+    result = ec2_manager.start_instance(instance_id)
+
+    assert result["key_file"] is None

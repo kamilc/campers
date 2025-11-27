@@ -281,3 +281,32 @@ def campers(
         Campers instance with all managers mocked
     """
     return campers_module.Campers()
+
+
+@pytest.fixture
+def campers_tui(campers_module: Any) -> Any:
+    """Create CampersTUI instance with mocked widgets.
+
+    Parameters
+    ----------
+    campers_module : Any
+        The campers module from campers_module fixture
+
+    Returns
+    -------
+    Any
+        CampersTUI instance with mocked widgets
+    """
+    import queue
+
+    mock_campers = MagicMock()
+    mock_update_queue = queue.Queue()
+    app = campers_module.CampersTUI(
+        campers_instance=mock_campers,
+        run_kwargs={},
+        update_queue=mock_update_queue,
+    )
+
+    mock_uptime_widget = MagicMock()
+    app.query_one = MagicMock(return_value=mock_uptime_widget)
+    return app
