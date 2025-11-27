@@ -2228,7 +2228,11 @@ class Campers:
                 instance_details["command_exit_code"] = exit_code
 
             if json_output:
-                return json.dumps(instance_details, indent=2)
+                return json.dumps(
+                    instance_details,
+                    indent=2,
+                    default=lambda obj: obj.isoformat() if isinstance(obj, datetime) else obj,
+                )
 
             return instance_details
 
