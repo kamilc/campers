@@ -1793,12 +1793,6 @@ class Campers:
 
             exit_code = app.run()
 
-            if exit_code == 130:
-                print("\nCtrl+C received. Cleaning up the instance...")
-                print("Press Ctrl+C again to force exit")
-                self._cleanup_resources()
-                print("Cleanup complete.")
-
             return {
                 "exit_code": exit_code if exit_code is not None else 0,
                 "tui_mode": True,
