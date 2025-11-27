@@ -162,6 +162,7 @@ class FakeEC2Manager:
                             ),
                             "camp_config": instance.get("camp_config", "test"),
                             "volume_size": instance.get("volume_size", 30),
+                            "unique_id": instance.get("unique_id"),
                         }
                     )
         else:
@@ -178,6 +179,7 @@ class FakeEC2Manager:
                         ),
                         "camp_config": instance.get("camp_config", "test"),
                         "volume_size": instance.get("volume_size", 30),
+                        "unique_id": instance.get("unique_id"),
                     }
                 )
         return instances_list

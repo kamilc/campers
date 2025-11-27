@@ -458,7 +458,7 @@ class EC2Manager:
                         "Tags": [
                             {"Key": "ManagedBy", "Value": "campers"},
                             {"Key": "Name", "Value": instance_tag_name},
-                            {"Key": "CampConfig", "Value": camp_name},
+                            {"Key": "MachineConfig", "Value": camp_name},
                             {"Key": "UniqueId", "Value": unique_id},
                         ],
                     }
@@ -597,7 +597,7 @@ class EC2Manager:
                                     "region": region,
                                     "instance_type": instance["InstanceType"],
                                     "launch_time": instance["LaunchTime"],
-                                    "camp_config": tags.get("CampConfig", "ad-hoc"),
+                                    "camp_config": tags.get("MachineConfig", "ad-hoc"),
                                 }
                             )
 
@@ -622,12 +622,12 @@ class EC2Manager:
     def find_instances_by_name_or_id(
         self, name_or_id: str, region_filter: str | None = None
     ) -> list[dict[str, Any]]:
-        """Find campers-managed instances matching ID, Name tag, or CampConfig.
+        """Find campers-managed instances matching ID, Name tag, or MachineConfig.
 
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID, Name tag, or CampConfig name to search for
+            EC2 instance ID, Name tag, or MachineConfig name to search for
         region_filter : str | None
             Optional AWS region to filter results
 

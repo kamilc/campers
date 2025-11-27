@@ -2596,12 +2596,12 @@ class Campers:
             raise
 
     def stop(self, name_or_id: str, region: str | None = None) -> None:
-        """Stop a running campers-managed EC2 instance by CampConfig or ID.
+        """Stop a running campers-managed EC2 instance by MachineConfig or ID.
 
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID or CampConfig name to stop
+            EC2 instance ID or MachineConfig name to stop
         region : str | None
             Optional AWS region to narrow search scope
 
@@ -2756,12 +2756,12 @@ class Campers:
             sys.exit(1)
 
     def start(self, name_or_id: str, region: str | None = None) -> None:
-        """Start a stopped campers-managed EC2 instance by CampConfig or ID.
+        """Start a stopped campers-managed EC2 instance by MachineConfig or ID.
 
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID or CampConfig name to start
+            EC2 instance ID or MachineConfig name to start
         region : str | None
             Optional AWS region to narrow search scope
 
@@ -2919,13 +2919,148 @@ class Campers:
             self._log_and_print_error("AWS API error: %s", e)
             sys.exit(1)
 
-    def destroy(self, name_or_id: str, region: str | None = None) -> None:
-        """Destroy a campers-managed EC2 instance by CampConfig or ID.
+    def info(self, name_or_id: str, region: str | None = None) -> None:
+        """Display detailed information about a campers-managed EC2 instance.
 
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID or CampConfig name to destroy
+            EC2 instance ID or MachineConfig name
+        region : str | None
+            Optional AWS region to narrow search scope
+
+        Raises
+        ------
+        SystemExit
+            Exits with code 1 if no instance matches, multiple instances match,
+            or AWS errors occur. Returns normally on successful info display.
+        """
+        default_region = self._config_loader.BUILT_IN_DEFAULTS["region"]
+
+        if region:
+            self._validate_region(region)
+
+        target: dict[str, Any] | None = None
+
+        try:
+            search_manager = self._create_ec2_manager(region=region or default_region)
+            matches = search_manager.find_instances_by_name_or_id(
+                name_or_id=name_or_id, region_filter=region
+            )
+
+            if not matches:
+                self._log_and_print_error(
+                    "No campers-managed instances matched '%s'.", name_or_id
+                )
+                sys.exit(1)
+
+            if len(matches) > 1:
+                logging.error(
+                    "Ambiguous machine config '%s'; matches multiple instances.",
+                    name_or_id,
+                )
+                print(
+                    "Multiple instances found. Please use a specific instance ID:",
+                    file=sys.stderr,
+                )
+
+                for match in matches:
+                    print(
+                        f"  {match['instance_id']} ({match['region']})", file=sys.stderr
+                    )
+
+                sys.exit(1)
+
+            target = matches[0]
+            instance_id = target["instance_id"]
+            regional_manager = self._create_ec2_manager(region=target["region"])
+
+            unique_id = target.get("unique_id")
+            if not unique_id:
+                try:
+                    response = regional_manager.ec2_client.describe_instances(
+                        InstanceIds=[instance_id]
+                    )
+                    instance = response["Reservations"][0]["Instances"][0]
+
+                    tags = instance.get("Tags", [])
+                    for tag in tags:
+                        if tag["Key"] == "UniqueId":
+                            unique_id = tag["Value"]
+                            break
+                except (AttributeError, KeyError):
+                    pass
+
+            key_file = None
+            if unique_id:
+                key_file = f"~/.campers/keys/{unique_id}.pem"
+
+            launch_time = target.get("launch_time")
+            if isinstance(launch_time, str):
+                try:
+                    launch_time = datetime.fromisoformat(launch_time.replace("Z", "+00:00"))
+                except (ValueError, AttributeError):
+                    launch_time = None
+
+            launch_time_str = launch_time.isoformat() if launch_time else "Unknown"
+
+            from datetime import timezone
+            now_utc = datetime.now(timezone.utc)
+            if launch_time:
+                try:
+                    if launch_time.tzinfo is None:
+                        launch_time = launch_time.replace(tzinfo=timezone.utc)
+                    elapsed = now_utc - launch_time
+                    total_seconds = int(elapsed.total_seconds())
+                    if total_seconds < 0:
+                        total_seconds = 0
+
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+
+                    if hours > 0:
+                        uptime_str = f"{hours}h {minutes}m"
+                    else:
+                        uptime_str = f"{minutes}m"
+                except (TypeError, ValueError):
+                    uptime_str = "Unknown"
+            else:
+                uptime_str = "Unknown"
+
+            print(f"Instance Information: {target.get('camp_config', 'N/A')}")
+            print(f"  Instance ID: {instance_id}")
+            print(f"  State: {target.get('state', 'Unknown')}")
+            print(f"  Instance Type: {target.get('instance_type', 'N/A')}")
+            print(f"  Region: {target['region']}")
+            print(f"  Launch Time: {launch_time_str}")
+            print(f"  Unique ID: {unique_id if unique_id else 'N/A'}")
+            print(f"  Key File: {key_file if key_file else 'N/A'}")
+            print(f"  Uptime: {uptime_str}")
+
+        except NoCredentialsError:
+            self._log_and_print_error(
+                "AWS credentials not configured. Please set up AWS credentials."
+            )
+            sys.exit(1)
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+
+            if error_code == "UnauthorizedOperation":
+                self._log_and_print_error(
+                    "Insufficient AWS permissions to perform this operation."
+                )
+                sys.exit(1)
+
+            self._log_and_print_error("AWS API error: %s", e)
+            sys.exit(1)
+
+    def destroy(self, name_or_id: str, region: str | None = None) -> None:
+        """Destroy a campers-managed EC2 instance by MachineConfig or ID.
+
+        Parameters
+        ----------
+        name_or_id : str
+            EC2 instance ID or MachineConfig name to destroy
         region : str | None
             Optional AWS region to narrow search scope
 

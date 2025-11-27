@@ -388,9 +388,14 @@ def parse_cli_args(args: list[str]) -> dict[str, any]:
         "port": None,
         "include_vcs": None,
         "ignore": None,
+        "name_or_id": None,
     }
 
-    if not args or args[0] != "run":
+    if not args:
+        return params
+
+    command = args[0]
+    if command not in ("run", "info", "stop", "start"):
         return params
 
     i = 1
@@ -446,8 +451,11 @@ def parse_cli_args(args: list[str]) -> dict[str, any]:
             else:
                 i += 1
 
-        elif not arg.startswith("-") and params["camp_name"] is None:
-            params["camp_name"] = arg
+        elif not arg.startswith("-"):
+            if command == "run" and params["camp_name"] is None:
+                params["camp_name"] = arg
+            elif command in ("info", "stop", "start") and params["name_or_id"] is None:
+                params["name_or_id"] = arg
             i += 1
 
         else:
@@ -513,6 +521,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                 "port": params.get("port"),
                 "include_vcs": params.get("include_vcs"),
                 "ignore": params.get("ignore"),
+                "name_or_id": params.get("name_or_id"),
             },
         )
         return
@@ -606,6 +615,16 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                     )
                     logger.info("Starting HTTP servers for configured ports")
                     start_http_servers_for_all_configured_ports(context)
+
+                elif args[0] == "info":
+                    cli.info(
+                        name_or_id=params["name_or_id"],
+                        region=params["region"],
+                    )
+                    context.exit_code = 0
+                    context.stdout = stderr_capture.getvalue()
+                    context.stderr = ""
+
                 else:
                     raise ValueError(
                         f"Unsupported command for in-process execution: {args[0]}"

@@ -114,7 +114,7 @@ def step_instances_exist_in_region(context: Context, count: int, region: str) ->
         tags = {
             "ManagedBy": "campers",
             "Name": f"campers-test-{i}",
-            "CampConfig": f"test-machine-{i}",
+            "MachineConfig": f"test-machine-{i}",
         }
 
         instance_id, launch_time = create_test_instance(region, tags)
@@ -339,6 +339,41 @@ def step_instance_exists_without_camp_config(
     context: Context, instance_id: str
 ) -> None:
     """Create instance without CampConfig tag.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    instance_id : str
+        Instance ID to create
+    """
+    if context.instances is None:
+        context.instances = []
+
+    region = "us-east-1"
+    tags = {
+        "ManagedBy": "campers",
+        "Name": "test-instance",
+    }
+
+    actual_instance_id, launch_time = create_test_instance(region, tags)
+
+    context.instances.append(
+        {
+            "instance_id": actual_instance_id,
+            "region": region,
+            "launch_time": launch_time,
+            "camp_config": "ad-hoc",
+        }
+    )
+    context.test_instance_id_mapping = {instance_id: actual_instance_id}
+
+
+@given('instance "{instance_id}" exists with no MachineConfig tag')
+def step_instance_exists_without_machine_config(
+    context: Context, instance_id: str
+) -> None:
+    """Create instance without MachineConfig tag.
 
     Parameters
     ----------
@@ -639,7 +674,7 @@ def step_campers_instances_exist_in_region(context: Context, region: str) -> Non
     tags = {
         "ManagedBy": "campers",
         "Name": "test-instance",
-        "CampConfig": "test-machine",
+        "MachineConfig": "test-machine",
     }
 
     instance_id, launch_time = create_test_instance(region, tags)
@@ -742,7 +777,7 @@ def step_instance_in_state(
     state : str
         Instance state
     camp_config : str | None
-        Optional CampConfig tag value
+        Optional MachineConfig tag value
     """
     if context.instances is None:
         context.instances = []
@@ -755,7 +790,7 @@ def step_instance_in_state(
     tags = {
         "ManagedBy": "campers",
         "Name": f"test-{state}",
-        "CampConfig": config_name,
+        "MachineConfig": config_name,
     }
 
     actual_instance_id, launch_time = create_test_instance(region, tags)
@@ -835,7 +870,7 @@ def step_status_column_shows_correct_state(context: Context) -> None:
 
 @given('instance with CampConfig "{camp_config}"')
 def step_instance_with_camp_config(context: Context, camp_config: str) -> None:
-    """Create instance with specific CampConfig.
+    """Create instance with specific MachineConfig.
 
     Parameters
     ----------
@@ -851,7 +886,7 @@ def step_instance_with_camp_config(context: Context, camp_config: str) -> None:
     tags = {
         "ManagedBy": "campers",
         "Name": "test-long-name",
-        "CampConfig": camp_config,
+        "MachineConfig": camp_config,
     }
 
     instance_id, launch_time = create_test_instance(region, tags)
@@ -865,6 +900,40 @@ def step_instance_with_camp_config(context: Context, camp_config: str) -> None:
         }
     )
     context.long_camp_config = camp_config
+
+
+@given('instance with MachineConfig "{machine_config}"')
+def step_instance_with_machine_config(context: Context, machine_config: str) -> None:
+    """Create instance with specific MachineConfig.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    machine_config : str
+        Machine config name
+    """
+    if context.instances is None:
+        context.instances = []
+
+    region = "us-east-1"
+    tags = {
+        "ManagedBy": "campers",
+        "Name": "test-long-name",
+        "MachineConfig": machine_config,
+    }
+
+    instance_id, launch_time = create_test_instance(region, tags)
+
+    context.instances.append(
+        {
+            "instance_id": instance_id,
+            "region": region,
+            "launch_time": launch_time,
+            "camp_config": machine_config,
+        }
+    )
+    context.long_camp_config = machine_config
 
 
 @then("camp config name is truncated to {length:d} characters")

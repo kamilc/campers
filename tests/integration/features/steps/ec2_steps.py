@@ -1694,7 +1694,7 @@ def step_existing_instance_in_region(
                 "ResourceType": "instance",
                 "Tags": [
                     {"Key": "ManagedBy", "Value": "campers"},
-                    {"Key": "CampConfig", "Value": camp_name},
+                    {"Key": "MachineConfig", "Value": camp_name},
                     {"Key": "UniqueId", "Value": unique_id},
                 ],
             }

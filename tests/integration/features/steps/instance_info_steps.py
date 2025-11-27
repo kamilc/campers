@@ -51,7 +51,7 @@ def step_running_instance_with_camp(context: Context, camp_name: str) -> None:
         )
     vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
-    unique_id = str(uuid.uuid4())[:12]
+    unique_id = str(uuid.uuid4()).replace("-", "")[:12]
     sg_response = ec2_client.create_security_group(
         GroupName=f"campers-{unique_id}",
         Description=f"Test SG {unique_id}",
@@ -98,7 +98,21 @@ def step_running_instance_with_camp(context: Context, camp_name: str) -> None:
     context.ec2_client = ec2_client
     context.key_file = str(key_file)
 
-    if not hasattr(context, "config_data"):
+    if not hasattr(context, "instances") or context.instances is None:
+        context.instances = []
+
+    context.instances.append({
+        "instance_id": instance.id,
+        "name": f"campers-{unique_id}",
+        "state": "running",
+        "region": region,
+        "instance_type": "t3.medium",
+        "launch_time": instance.launch_time,
+        "camp_config": camp_name,
+        "unique_id": unique_id,
+    })
+
+    if context.config_data is None:
         context.config_data = {}
 
     if "camps" not in context.config_data:
@@ -131,6 +145,12 @@ def step_running_instance_launched_ago(context: Context, duration: str) -> None:
         minutes_ago = hours_ago * 60
 
     context.expected_uptime_minutes = minutes_ago
+
+    time_delta = timedelta(minutes=minutes_ago)
+    launch_time_in_past = datetime.now(timezone.utc) - time_delta
+
+    if context.instances and len(context.instances) > 0:
+        context.instances[-1]["launch_time"] = launch_time_in_past
 
 
 @then("output contains launch time information")

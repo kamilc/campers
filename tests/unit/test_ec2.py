@@ -229,7 +229,7 @@ def test_launch_instance_success(ec2_manager, cleanup_keys, registered_ami):
     tags = {tag["Key"]: tag["Value"] for tag in instance.tags}
     assert tags["ManagedBy"] == "campers"
     assert tags["Name"] == "campers-1234567890"
-    assert tags["CampConfig"] == "jupyter-lab"
+    assert tags["MachineConfig"] == "jupyter-lab"
     assert tags["UniqueId"] == "1234567890"
 
     assert instance.key_name == "campers-1234567890"
@@ -252,7 +252,7 @@ def test_launch_instance_ad_hoc(ec2_manager, cleanup_keys, registered_ami):
     instance.load()
 
     tags = {tag["Key"]: tag["Value"] for tag in instance.tags}
-    assert tags["CampConfig"] == "ad-hoc"
+    assert tags["MachineConfig"] == "ad-hoc"
 
 
 def test_launch_instance_rollback_on_failure(ec2_manager, cleanup_keys):
@@ -344,7 +344,7 @@ def test_list_instances_all_regions(ec2_manager, registered_ami) -> None:
                 "ResourceType": "instance",
                 "Tags": [
                     {"Key": "ManagedBy", "Value": "campers"},
-                    {"Key": "CampConfig", "Value": "test-machine"},
+                    {"Key": "MachineConfig", "Value": "test-machine"},
                 ],
             }
         ],
@@ -376,7 +376,7 @@ def test_list_instances_filtered_by_region(ec2_manager, registered_ami) -> None:
                 "ResourceType": "instance",
                 "Tags": [
                     {"Key": "ManagedBy", "Value": "campers"},
-                    {"Key": "CampConfig", "Value": "filtered-machine"},
+                    {"Key": "MachineConfig", "Value": "filtered-machine"},
                 ],
             }
         ],
@@ -415,7 +415,7 @@ def test_list_instances_sorts_by_launch_time(ec2_manager, registered_ami) -> Non
                     "ResourceType": "instance",
                     "Tags": [
                         {"Key": "ManagedBy", "Value": "campers"},
-                        {"Key": "CampConfig", "Value": f"machine-{i}"},
+                        {"Key": "MachineConfig", "Value": f"machine-{i}"},
                     ],
                 }
             ],

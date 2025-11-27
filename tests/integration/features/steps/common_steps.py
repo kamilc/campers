@@ -131,6 +131,14 @@ def execute_command_direct(
             campers.start(name_or_id=name_or_id, region=region)
             context.exit_code = 0
 
+        elif command == "info":
+            if not args or "name_or_id" not in args:
+                raise ValueError("info command requires name_or_id argument")
+            name_or_id = args["name_or_id"]
+            region = args.get("region")
+            campers.info(name_or_id=name_or_id, region=region)
+            context.exit_code = 0
+
         elif command == "run":
             result = campers.run(
                 camp_name=args.get("camp_name") if args else None,
