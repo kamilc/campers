@@ -34,6 +34,27 @@ def step_running_instance_with_camp_config(
     context.instances.append(instance)
 
 
+@given('running instance "{instance_id}" with MachineConfig "{machine_config}"')
+def step_running_instance_with_machine_config(
+    context: Context, instance_id: str, machine_config: str
+) -> None:
+    """Create a running instance with specific machine config."""
+    if context.instances is None:
+        context.instances = []
+
+    instance = {
+        "instance_id": instance_id,
+        "name": f"campers-{instance_id}",
+        "state": "running",
+        "region": "us-east-1",
+        "instance_type": "t3.medium",
+        "launch_time": datetime.now(timezone.utc),
+        "camp_config": machine_config,
+    }
+
+    context.instances.append(instance)
+
+
 @given("terminate_instance raises RuntimeError")
 def step_terminate_raises_runtime_error(context: Context) -> None:
     """Configure terminate_instance to raise RuntimeError."""

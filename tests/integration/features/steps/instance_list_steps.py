@@ -763,6 +763,9 @@ def step_output_displays_instances_from_region(context: Context, region: str) ->
 @given(
     'instance "{instance_id}" in state "{state}" with CampConfig "{camp_config}"'
 )
+@given(
+    'instance "{instance_id}" in state "{state}" with MachineConfig "{camp_config}"'
+)
 def step_instance_in_state(
     context: Context, instance_id: str, state: str, camp_config: str | None = None
 ) -> None:

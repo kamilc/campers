@@ -30,7 +30,7 @@ Scenario: Ambiguous MachineConfig name
   And running instance "i-second" with MachineConfig "dev-workstation"
   When I run stop command with "dev-workstation"
   Then command fails with exit code 1
-  And error message contains "Ambiguous camp config"
+  And error message contains "Ambiguous machine config"
   And disambiguation help lists instance IDs "i-first" and "i-second"
   And error is printed to stderr
 
