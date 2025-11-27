@@ -191,7 +191,7 @@ def step_command_executes_on_remote(context: Context, command: str) -> None:
 @then("command exit code is {exit_code:d}")
 def step_command_exit_code(context: Context, exit_code: int) -> None:
     """Verify command exit code matches expected value."""
-    if hasattr(context, "final_config") and "command_exit_code" in context.final_config:
+    if hasattr(context, "final_config") and context.final_config is not None and "command_exit_code" in context.final_config:
         assert context.final_config["command_exit_code"] == exit_code
     else:
         assert context.exit_code == 0
