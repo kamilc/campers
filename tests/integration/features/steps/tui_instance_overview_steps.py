@@ -278,5 +278,5 @@ def step_widget_refreshes(context: Context) -> None:
     running_count = sum(1 for i in instances if i["state"] == "running")
     stopped_count = sum(1 for i in instances if i["state"] == "stopped")
 
-    widget_text = f"Running: {running_count}  Stopped: {stopped_count}  N/A"
+    widget_text = f"Instances - Running: {running_count}  Stopped: {stopped_count}  N/A"
     context.overview_widget_text = widget_text

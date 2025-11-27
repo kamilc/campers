@@ -175,6 +175,7 @@ def mock_ec2_manager(campers_module):
 
     with patch.object(campers_module, "EC2Manager") as MockEC2Manager:
         mock_manager = MagicMock()
+        mock_manager.find_instances_by_name_or_id.return_value = []
         mock_manager.launch_instance.return_value = mock_instance_details
         MockEC2Manager.return_value = mock_manager
         yield mock_manager
