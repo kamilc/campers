@@ -19,15 +19,12 @@ import logging
 import os
 import queue
 import re
-import select
 import shlex
 import signal
 import socket
 import sys
-import termios
 import threading
 import time
-import tty
 import types
 from datetime import datetime
 from pathlib import Path
@@ -65,16 +62,10 @@ from botocore.exceptions import ClientError, NoCredentialsError  # noqa: E402
 
 for _boto_module in ["botocore", "boto3", "urllib3"]:
     logging.getLogger(_boto_module).setLevel(logging.WARNING)
-from textual import events  # noqa: E402
-from textual.app import App, ComposeResult  # noqa: E402
-from textual.containers import Container  # noqa: E402
-from textual.message import Message  # noqa: E402
-from textual.widgets import Log, Static  # noqa: E402
 
 from campers.ansible import AnsibleManager  # noqa: E402
 from campers.config import ConfigLoader  # noqa: E402
 from campers.ec2 import EC2Manager  # noqa: E402
-from campers.instance_overview_widget import InstanceOverviewWidget  # noqa: E402
 from campers.portforward import PortForwardManager  # noqa: E402
 from campers.ssh import SSHManager, get_ssh_connection_info  # noqa: E402
 from campers.sync import MutagenManager  # noqa: E402
@@ -87,6 +78,10 @@ from campers.utils import (  # noqa: E402
     format_time_ago,
     generate_instance_name,
 )
+from campers.logging import StreamFormatter, StreamRoutingFilter  # noqa: E402
+from campers.templates import CONFIG_TEMPLATE  # noqa: E402
+from campers.tui import CampersTUI  # noqa: E402
+from campers.tui.app import TUI_STATUS_UPDATE_PROCESSING_DELAY  # noqa: E402
 
 SYNC_TIMEOUT = 300
 """Mutagen initial sync timeout in seconds.
@@ -100,866 +95,6 @@ MAX_NAME_COLUMN_WIDTH = 19
 
 Names exceeding this width are truncated to maintain table alignment.
 """
-
-TUI_UPDATE_INTERVAL = 0.1
-"""TUI update check interval in seconds.
-
-Checks the update queue every 100ms for new data from the worker thread.
-"""
-
-MAX_UPDATES_PER_TICK = 10
-"""Maximum number of queue updates processed per timer tick.
-
-Prevents queue flooding from blocking the UI thread by limiting updates per interval.
-"""
-
-TUI_STATUS_UPDATE_PROCESSING_DELAY = 1.0
-"""Delay in seconds to ensure TUI processes status updates before cleanup events.
-
-This prevents a race condition where the TUI exits before rendering the final
-'terminating' status. The delay is 10x the TUI_UPDATE_INTERVAL to ensure at
-least ten update cycles complete before cleanup proceeds. Extended to accommodate
-container operations and event processing in integration testing scenarios.
-"""
-
-CONFIG_TEMPLATE = """# Campers Configuration File
-# Location: campers.yaml (or set CAMPERS_CONFIG environment variable)
-#
-# Structure:
-#   vars:      - Reusable variables (use ${var_name} to reference)
-#   playbooks: - Ansible playbooks for provisioning (recommended)
-#   defaults:  - Settings inherited by all camps
-#   camps:     - Named configurations that override defaults
-
-# ==============================================================================
-# Variables - Define once, use everywhere with ${var_name}
-# ==============================================================================
-vars:
-  project: my-project
-  remote_dir: /home/ubuntu/${project}
-  python_version: "3.12"
-
-# ==============================================================================
-# Ansible Playbooks - Recommended for provisioning (idempotent, declarative)
-# ==============================================================================
-# Define playbooks here, reference them in camps with:
-#   ansible_playbook: playbook-name      (single)
-#   ansible_playbooks: [play1, play2]    (multiple, run in order)
-
-playbooks:
-  base:
-    - name: Base system setup
-      hosts: all
-      become: true
-      tasks:
-        - name: Update apt cache
-          apt:
-            update_cache: yes
-            cache_valid_time: 3600
-
-        - name: Install essential packages
-          apt:
-            name:
-              - git
-              - htop
-              - tmux
-              - curl
-              - unzip
-            state: present
-
-  python-dev:
-    - name: Python development environment
-      hosts: all
-      tasks:
-        - name: Install uv package manager
-          shell: curl -LsSf https://astral.sh/uv/install.sh | sh
-          args:
-            creates: ~/.local/bin/uv
-
-        - name: Create project directory
-          file:
-            path: ${remote_dir}
-            state: directory
-
-  jupyter:
-    - name: Jupyter Lab setup
-      hosts: all
-      tasks:
-        - name: Install Jupyter and data science packages
-          shell: |
-            ~/.local/bin/uv pip install --system \
-              jupyter jupyterlab pandas numpy matplotlib
-
-# ==============================================================================
-# Defaults - Inherited by all camps
-# ==============================================================================
-defaults:
-  region: us-east-1
-  instance_type: t3.medium
-  disk_size: 50
-
-  ports:
-    - 8888
-
-  include_vcs: false
-  ignore:
-    - "*.pyc"
-    - __pycache__
-    - "*.log"
-    - .DS_Store
-    - node_modules/
-    - .venv/
-
-  env_filter:
-    - AWS_.*
-    - HF_TOKEN
-    - WANDB_API_KEY
-
-# ==============================================================================
-# Camps - Named configurations (override defaults as needed)
-# ==============================================================================
-camps:
-  dev:
-    instance_type: t3.large
-    disk_size: 100
-    ansible_playbooks:
-      - base
-      - python-dev
-    command: cd ${remote_dir} && bash
-
-  jupyter:
-    instance_type: m5.xlarge
-    disk_size: 200
-    ports:
-      - 8888
-      - 6006
-    ansible_playbooks:
-      - base
-      - python-dev
-      - jupyter
-    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
-    ignore:
-      - "*.pyc"
-      - __pycache__
-      - data/
-      - models/
-      - "*.parquet"
-
-  gpu:
-    instance_type: g5.xlarge
-    disk_size: 200
-    region: us-west-2
-    ports:
-      - 8888
-      - 6006
-    env_filter:
-      - AWS_.*
-      - HF_.*
-      - WANDB_.*
-      - CUDA_.*
-    ansible_playbooks:
-      - base
-      - python-dev
-      - jupyter
-    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
-
-# ==============================================================================
-# Alternative: Shell Scripts (simpler, but not idempotent)
-# ==============================================================================
-# Instead of Ansible playbooks, you can use shell scripts:
-#
-# camps:
-#   simple-dev:
-#     setup_script: |
-#       sudo apt update
-#       sudo apt install -y git htop
-#       curl -LsSf https://astral.sh/uv/install.sh | sh
-#     startup_script: |
-#       cd ${remote_dir}
-#       source .venv/bin/activate
-#     command: bash
-"""
-
-
-class StreamFormatter(logging.Formatter):
-    """Logging formatter that prepends stream tags based on extra parameter."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Format log record with stream prefix if present.
-
-        Parameters
-        ----------
-        record : logging.LogRecord
-            Log record to format
-
-        Returns
-        -------
-        str
-            Formatted log message with optional stream prefix
-        """
-        msg = super().format(record)
-        stream = getattr(record, "stream", None)
-
-        if stream == "stdout":
-            return f"[stdout] {msg}"
-        elif stream == "stderr":
-            return f"[stderr] {msg}"
-
-        return msg
-
-
-class StreamRoutingFilter(logging.Filter):
-    """Filter that routes log records based on stream extra parameter.
-
-    Parameters
-    ----------
-    stream_type : str
-        Stream type to allow: "stdout" or "stderr"
-    """
-
-    def __init__(self, stream_type: str) -> None:
-        """Initialize filter.
-
-        Parameters
-        ----------
-        stream_type : str
-            Stream type to allow: "stdout" or "stderr"
-        """
-        super().__init__()
-        self.stream_type = stream_type
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Filter log records by stream type.
-
-        Parameters
-        ----------
-        record : logging.LogRecord
-            Log record to filter
-
-        Returns
-        -------
-        bool
-            True if record should be emitted by this handler
-        """
-        record_stream = getattr(record, "stream", None)
-
-        if record_stream is None:
-            return self.stream_type == "stderr"
-
-        return record_stream == self.stream_type
-
-
-class TuiLogMessage(Message):
-    """Message delivering a log line to the TUI log widget."""
-
-    def __init__(self, text: str) -> None:
-        self.text = text
-        super().__init__()
-
-
-class TuiLogHandler(logging.Handler):
-    """Logging handler that writes to a Textual Log widget.
-
-    Parameters
-    ----------
-    app : CampersTUI
-        Textual app instance
-    log_widget : Log
-        Log widget to write to
-
-    Attributes
-    ----------
-    app : CampersTUI
-        Textual app instance
-    log_widget : Log
-        Log widget to write to
-    """
-
-    def __init__(self, app: "CampersTUI", log_widget: Log) -> None:
-        """Initialize TuiLogHandler.
-
-        Parameters
-        ----------
-        app : CampersTUI
-            Textual app instance
-        log_widget : Log
-            Log widget to write to
-        """
-        super().__init__()
-        self.app = app
-        self.log_widget = log_widget
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """Emit log record to TUI widget.
-
-        Parameters
-        ----------
-        record : logging.LogRecord
-            Log record to emit
-        """
-        msg = self.format(record)
-
-        try:
-            if not hasattr(self.app, "_running") or not self.app._running:
-                return
-
-            if self.app._thread_id == threading.get_ident():
-                self.log_widget.write_line(msg)
-                return
-
-            if not self.app.post_message(TuiLogMessage(msg)):
-                pass
-        except Exception:
-            pass
-
-
-def detect_terminal_background() -> tuple[str, bool]:
-    """Detect terminal background color using OSC 11 query.
-
-    Returns
-    -------
-    tuple[str, bool]
-        (background_color_hex, is_light)
-        Example: ("#1e1e1e", False) for dark or ("#ffffff", True) for light
-    """
-    try:
-        sys.stdout.write("\033]11;?\033\\")
-        sys.stdout.flush()
-
-        old_settings = termios.tcgetattr(sys.stdin)
-        tty.setraw(sys.stdin.fileno())
-
-        response = ""
-        start_time = time.time()
-
-        while time.time() - start_time < 0.1:
-            if select.select([sys.stdin], [], [], 0)[0]:
-                char = sys.stdin.read(1)
-                response += char
-                if response.endswith("\033\\") or response.endswith("\007"):
-                    break
-
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-
-        if match := re.search(
-            r"rgb:([0-9a-fA-F]{4})/([0-9a-fA-F]{4})/([0-9a-fA-F]{4})", response
-        ):
-            r = int(match.group(1), 16) / 65535
-            g = int(match.group(2), 16) / 65535
-            b = int(match.group(3), 16) / 65535
-
-            luminance = 0.299 * r + 0.587 * g + 0.114 * b
-            is_light = luminance > 0.5
-
-            r_hex = int(r * 255)
-            g_hex = int(g * 255)
-            b_hex = int(b * 255)
-            bg_color = f"#{r_hex:02x}{g_hex:02x}{b_hex:02x}"
-
-            return (bg_color, is_light)
-
-    except Exception:
-        pass
-
-    return ("#000000", False)
-
-
-class CampersTUI(App):
-    """Textual TUI application for campers.
-
-    Parameters
-    ----------
-    campers_instance : Campers
-        Campers instance to run
-    run_kwargs : dict[str, Any]
-        Keyword arguments for run method
-    update_queue : queue.Queue
-        Queue for receiving updates from worker thread
-
-    Attributes
-    ----------
-    campers : Campers
-        Campers instance to run
-    run_kwargs : dict[str, Any]
-        Keyword arguments for run method
-    update_queue : queue.Queue
-        Queue for receiving updates from worker thread
-    original_handlers : list[logging.Handler]
-        Original logging handlers to restore on exit
-    worker_exit_code : int
-        Exit code from worker thread
-    """
-
-    CSS = """
-    #status-panel {
-        height: auto;
-        background: #383838;
-        padding: 1;
-    }
-    #log-panel {
-        height: 1fr;
-    }
-    InstanceOverviewWidget {
-        height: 1;
-        background: #383838;
-        content-align: center middle;
-        text-style: dim;
-    }
-    Log {
-        scrollbar-background: #383838;
-        scrollbar-color: #606060;
-        scrollbar-background-hover: #404040;
-        scrollbar-color-hover: #707070;
-        scrollbar-background-active: #383838;
-        scrollbar-color-active: #606060;
-    }
-    """
-
-    def __init__(
-        self,
-        campers_instance: "Campers",
-        run_kwargs: dict[str, Any],
-        update_queue: queue.Queue,
-        start_worker: bool = True,
-    ) -> None:
-        """Initialize CampersTUI.
-
-        Parameters
-        ----------
-        campers_instance : Campers
-            Campers instance to run
-        run_kwargs : dict[str, Any]
-            Keyword arguments for run method
-        update_queue : queue.Queue
-            Queue for receiving updates from worker thread
-        start_worker : bool
-            Whether to start the worker thread on mount (default: True)
-            Set to False for tests that verify initial placeholder state
-        """
-        self.terminal_bg, self.is_light_theme = detect_terminal_background()
-        super().__init__()
-        self.campers = campers_instance
-        self.run_kwargs = run_kwargs
-        self._update_queue = update_queue
-        self._start_worker = start_worker
-        self.original_handlers: list[logging.Handler] = []
-        self.worker_exit_code = 0
-        self.instance_start_time: datetime | None = None
-        self.last_ctrl_c_time: float = 0.0
-        self.log_widget: Log | None = None
-        self.styles.background = self.terminal_bg
-
-    def compose(self) -> ComposeResult:
-        """Compose TUI layout.
-
-        Yields
-        ------
-        Container
-            Status panel container with static widgets
-        Container
-            Log panel container with log widget
-        """
-        with Container(id="status-panel"):
-            yield InstanceOverviewWidget(self.campers)
-            yield Static("SSH: loading...", id="ssh-widget")
-            yield Static("Status: launching...", id="status-widget")
-            yield Static("Uptime: 0s", id="uptime-widget")
-            yield Static("Instance Type: loading...", id="instance-type-widget")
-            yield Static("Region: loading...", id="region-widget")
-            yield Static("Camp Name: loading...", id="camp-name-widget")
-            yield Static("Command: loading...", id="command-widget")
-            yield Static("Mutagen: Not syncing", id="mutagen-widget")
-        with Container(id="log-panel"):
-            yield Log()
-
-    def on_mount(self) -> None:
-        """Handle mount event - setup logging, start worker, and timer."""
-        root_logger = logging.getLogger()
-        self.original_handlers = root_logger.handlers[:]
-
-        log_widget = self.query_one(Log)
-        self.log_widget = log_widget
-        tui_handler = TuiLogHandler(self, log_widget)
-        tui_handler.setFormatter(StreamFormatter("%(message)s"))
-
-        root_logger.handlers = [tui_handler]
-        root_logger.setLevel(logging.INFO)
-
-        for module in ["portforward", "ssh", "sync", "ec2"]:
-            module_logger = logging.getLogger(f"campers.{module}")
-            module_logger.propagate = True
-            module_logger.setLevel(logging.INFO)
-
-        for boto_module in ["botocore", "boto3", "urllib3"]:
-            logging.getLogger(boto_module).setLevel(logging.WARNING)
-
-        self.instance_start_time = datetime.now()
-        self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
-        self.set_interval(1.0, self.update_uptime, name="uptime-timer")
-
-        if self._start_worker:
-            self.run_worker(self.run_campers_logic, exit_on_error=False, thread=True)
-
-    async def on_tui_log_message(self, message: TuiLogMessage) -> None:
-        """Append log messages emitted from worker threads to the log widget."""
-
-        if self.log_widget is None:
-            return
-
-        self.log_widget.write_line(message.text)
-
-    def check_for_updates(self) -> None:
-        """Check queue for updates and update widgets accordingly.
-
-        Processes up to MAX_UPDATES_PER_TICK updates per call to prevent
-        unbounded processing that could block the UI thread.
-        """
-        updates_processed = 0
-
-        while updates_processed < MAX_UPDATES_PER_TICK:
-            try:
-                data = self._update_queue.get_nowait()
-                logging.debug("Processing update from queue: type=%s", data.get("type"))
-                update_type = data.get("type")
-                payload = data.get("payload", {})
-
-                if update_type == "merged_config":
-                    self.update_from_config(payload)
-                elif update_type == "instance_details":
-                    self.update_from_instance_details(payload)
-                elif update_type == "status_update":
-                    self.update_status(payload)
-                elif update_type == "mutagen_status":
-                    self.update_mutagen_status(payload)
-                elif update_type == "cleanup_event":
-                    self.handle_cleanup_event(payload)
-
-                updates_processed += 1
-            except queue.Empty:
-                break
-
-    def update_uptime(self) -> None:
-        """Update uptime widget with elapsed time since instance launch."""
-        if self.instance_start_time is None:
-            return
-
-        from datetime import timezone
-
-        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
-        elapsed = now_utc - self.instance_start_time
-        total_seconds = int(elapsed.total_seconds())
-
-        if total_seconds < 0:
-            total_seconds = 0
-
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        seconds = total_seconds % 60
-
-        if hours > 0:
-            uptime_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-        elif minutes > 0:
-            uptime_str = f"{minutes:02d}:{seconds:02d}"
-        else:
-            uptime_str = f"{seconds}s"
-
-        try:
-            self.query_one("#uptime-widget").update(f"Uptime: {uptime_str}")
-        except Exception as e:
-            logging.error("Failed to update uptime widget: %s", e)
-
-    def update_status(self, payload: dict[str, Any]) -> None:
-        """Update status widget from status update event.
-
-        Parameters
-        ----------
-        payload : dict[str, Any]
-            Status update payload containing 'status' field
-        """
-        if "status" in payload:
-            status = payload["status"]
-
-            try:
-                self.query_one("#status-widget").update(f"Status: {status}")
-            except Exception as e:
-                logging.error("Failed to update status widget: %s", e)
-
-    def update_mutagen_status(self, payload: dict[str, Any]) -> None:
-        """Update mutagen widget from mutagen status event.
-
-        Parameters
-        ----------
-        payload : dict[str, Any]
-            Mutagen status payload containing 'state' and optionally 'files_synced'
-        """
-        state = payload.get("state", "unknown")
-        files_synced = payload.get("files_synced")
-
-        if state == "not_configured":
-            display_text = "Mutagen: Not syncing"
-        elif files_synced is not None:
-            display_text = f"Mutagen: {state} ({files_synced} files)"
-        else:
-            display_text = f"Mutagen: {state}"
-
-        try:
-            self.query_one("#mutagen-widget").update(display_text)
-        except Exception as e:
-            logging.error("Failed to update mutagen widget: %s", e)
-
-    def handle_cleanup_event(self, payload: dict[str, Any]) -> None:
-        """Handle cleanup event by logging to the log panel.
-
-        Parameters
-        ----------
-        payload : dict[str, Any]
-            Cleanup event payload containing 'step' and 'status'
-        """
-        step = payload.get("step", "unknown")
-        status = payload.get("status", "unknown")
-        logging.info("Cleanup: %s - %s", step, status)
-
-    def update_from_config(self, config: dict[str, Any]) -> None:
-        """Update widgets from merged config data.
-
-        Parameters
-        ----------
-        config : dict[str, Any]
-            Merged configuration data
-        """
-        if "instance_type" in config:
-            try:
-                self.query_one("#instance-type-widget").update(
-                    f"Instance Type: {config['instance_type']}"
-                )
-            except Exception as e:
-                logging.error("Failed to update instance type widget: %s", e)
-
-        if "region" in config:
-            try:
-                self.query_one("#region-widget").update(f"Region: {config['region']}")
-            except Exception as e:
-                logging.error("Failed to update region widget: %s", e)
-
-        camp_name = config.get("camp_name", "ad-hoc")
-
-        try:
-            self.query_one("#camp-name-widget").update(f"Camp Name: {camp_name}")
-        except Exception as e:
-            logging.error("Failed to update camp name widget: %s", e)
-
-        if "command" in config:
-            try:
-                self.query_one("#command-widget").update(
-                    f"Command: {config['command']}"
-                )
-            except Exception as e:
-                logging.error("Failed to update command widget: %s", e)
-
-    def update_from_instance_details(self, details: dict[str, Any]) -> None:
-        """Update widgets from instance details data.
-
-        Parameters
-        ----------
-        details : dict[str, Any]
-            Instance details data
-        """
-        if "state" in details:
-            try:
-                self.query_one("#status-widget").update(f"Status: {details['state']}")
-            except Exception as e:
-                logging.error("Failed to update status widget: %s", e)
-
-        if "launch_time" in details and details["launch_time"]:
-            launch_time = details["launch_time"]
-
-            if hasattr(launch_time, "replace"):
-                self.instance_start_time = launch_time.replace(tzinfo=None)
-
-        if "public_ip" in details and details["public_ip"]:
-            try:
-                ssh_username = details.get("ssh_username", "ubuntu")
-                ssh_string = f"ssh -o IdentitiesOnly=yes -i {details.get('key_file', 'key.pem')} {ssh_username}@{details['public_ip']}"
-                self.query_one("#ssh-widget").update(f"SSH: {ssh_string}")
-            except Exception as e:
-                logging.error("Failed to update SSH widget: %s", e)
-
-    def on_unmount(self) -> None:
-        """Handle unmount event - restore logging and cleanup resources."""
-        root_logger = logging.getLogger()
-        root_logger.handlers = self.original_handlers
-
-        while not self._update_queue.empty():
-            try:
-                self._update_queue.get_nowait()
-            except queue.Empty:
-                break
-
-        if (
-            not self.campers._abort_requested
-            and not self.campers._cleanup_in_progress
-        ):
-            self.campers._cleanup_resources()
-
-    def run_campers_logic(self) -> None:
-        """Run campers logic in worker thread."""
-        error_message = None
-
-        try:
-            result = self.campers._execute_run(
-                tui_mode=True, update_queue=self._update_queue, **self.run_kwargs
-            )
-            self.worker_exit_code = 0
-
-            if isinstance(result, dict) and "command_exit_code" in result:
-                self.worker_exit_code = result["command_exit_code"]
-
-            if self.worker_exit_code == 0:
-                logging.info("Command completed successfully")
-        except KeyboardInterrupt:
-            logging.info("Operation cancelled by user")
-            self.worker_exit_code = 130
-        except NoCredentialsError:
-            error_message = (
-                "AWS credentials not found\n\n"
-                "Configure your credentials:\n"
-                "  aws configure\n\n"
-                "Or set environment variables:\n"
-                "  export AWS_ACCESS_KEY_ID=...\n"
-                "  export AWS_SECRET_ACCESS_KEY=..."
-            )
-            logging.error("AWS credentials not found")
-            self.worker_exit_code = 1
-        except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code", "")
-            error_msg = e.response.get("Error", {}).get("Message", str(e))
-
-            if error_code in [
-                "ExpiredToken",
-                "RequestExpired",
-                "ExpiredTokenException",
-            ]:
-                error_message = (
-                    "AWS credentials have expired\n\n"
-                    "This usually means:\n"
-                    "  - Your temporary credentials (STS) have expired\n"
-                    "  - Your session token needs to be refreshed\n\n"
-                    "Fix it:\n"
-                    "  aws sso login           # If using AWS SSO\n"
-                    "  aws configure           # Re-configure credentials\n"
-                    "  # Or refresh your temporary credentials"
-                )
-                logging.error("AWS credentials have expired")
-            elif error_code == "UnauthorizedOperation":
-                error_message = (
-                    "Insufficient IAM permissions\n\n"
-                    "Your AWS credentials don't have the required permissions.\n"
-                    "Contact your AWS administrator to grant:\n"
-                    "  - EC2 permissions (DescribeInstances, RunInstances, TerminateInstances)\n"
-                    "  - VPC permissions (DescribeVpcs, CreateDefaultVpc)\n"
-                    "  - Key Pair permissions (CreateKeyPair, DeleteKeyPair, DescribeKeyPairs)\n"
-                    "  - Security Group permissions"
-                )
-                logging.error("Insufficient IAM permissions")
-            else:
-                error_message = f"AWS API error: {error_msg}"
-                logging.error("AWS API error: %s", error_msg)
-            self.worker_exit_code = 1
-        except ValueError as e:
-            error_message = f"Configuration error: {e}"
-            logging.error(error_message)
-            self.worker_exit_code = 2
-        except RuntimeError as e:
-            error_message = f"Runtime error: {e}"
-            logging.error(error_message)
-            self.worker_exit_code = 3
-        except Exception as e:
-            error_message = f"Unexpected error: {e}"
-            logging.exception("Unexpected error during command execution")
-            self.worker_exit_code = 1
-        finally:
-            if error_message:
-                logging.error(error_message)
-
-                if self._update_queue is not None:
-                    self._update_queue.put(
-                        {"type": "status_update", "payload": {"status": "error"}}
-                    )
-                    time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
-
-            if self.campers._abort_requested:
-                self.worker_exit_code = 130
-            elif not self.campers._cleanup_in_progress:
-                self.campers._cleanup_resources()
-
-            self.call_from_thread(self.exit, self.worker_exit_code)
-
-    def on_key(self, event: events.Key) -> None:
-        """Handle key press events.
-
-        Parameters
-        ----------
-        event : events.Key
-            Key event
-        """
-        if event.key == "q":
-            self.action_quit()
-        elif event.key == "ctrl+c":
-            current_time = time.time()
-
-            if (
-                self.last_ctrl_c_time > 0
-                and (current_time - self.last_ctrl_c_time) < 1.5
-            ):
-                try:
-                    log_widget = self.query_one(Log)
-                    log_widget.write_line("Force exit - skipping cleanup!")
-                except Exception:
-                    pass
-
-                if hasattr(self, "_driver") and self._driver is not None:
-                    self.exit(130)
-                else:
-                    import os
-
-                    os._exit(130)
-            else:
-                self.last_ctrl_c_time = current_time
-                self.action_quit()
-
-    def action_quit(self) -> None:
-        """Handle quit action (q key or first Ctrl+C)."""
-        self.campers._abort_requested = True
-
-        try:
-            self.query_one("#status-widget").update("Status: shutting down")
-        except Exception:
-            pass
-
-        try:
-            log_widget = self.query_one(Log)
-            log_widget.write_line(
-                "Graceful shutdown initiated (press Ctrl+C again to force exit)"
-            )
-        except Exception:
-            pass
-
-        self.refresh()
-
-        self.run_worker(self._run_cleanup, thread=True, exit_on_error=False)
-
-    def _run_cleanup(self) -> None:
-        """Run cleanup in worker thread to keep TUI responsive."""
-        if (
-            hasattr(self.campers, "_resources")
-            and "ssh_manager" in self.campers._resources
-        ):
-            self.campers._resources["ssh_manager"].abort_active_command()
-
-        if not self.campers._cleanup_in_progress:
-            self.campers._cleanup_resources()
-
-        self.call_from_thread(self.exit, 130)
 
 
 class Campers:
@@ -1455,9 +590,7 @@ class Campers:
             )
 
         try:
-            campers_dir = os.environ.get(
-                "CAMPERS_DIR", str(Path.home() / ".campers")
-            )
+            campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
             host = resources.get("instance_details", {}).get("public_ip")
             resources["mutagen_mgr"].terminate_session(
                 resources["mutagen_session_name"],
@@ -1534,9 +667,7 @@ class Campers:
             self._cleanup_ssh_connections(resources_to_clean, errors)
 
             if "instance_details" not in resources_to_clean:
-                logging.debug(
-                    "No instance to stop - launch may not have completed"
-                )
+                logging.debug("No instance to stop - launch may not have completed")
             else:
                 instance_details = resources_to_clean["instance_details"]
                 instance_id = instance_details.get(
@@ -1572,9 +703,7 @@ class Campers:
 
                         print("\nInstance stopped successfully")
                         print(f"  Instance ID: {instance_id}")
-                        print(
-                            f"  Estimated storage cost: ~${storage_cost:.2f}/month"
-                        )
+                        print(f"  Estimated storage cost: ~${storage_cost:.2f}/month")
                         print(f"  Restart with: campers start {instance_id}")
 
                     if self._update_queue is not None:
@@ -1948,7 +1077,9 @@ class Campers:
                     return json.dumps(
                         instance_details,
                         indent=2,
-                        default=lambda obj: obj.isoformat() if isinstance(obj, datetime) else obj,
+                        default=lambda obj: obj.isoformat()
+                        if isinstance(obj, datetime)
+                        else obj,
                     )
 
                 return instance_details
@@ -2235,7 +1366,9 @@ class Campers:
                 return json.dumps(
                     instance_details,
                     indent=2,
-                    default=lambda obj: obj.isoformat() if isinstance(obj, datetime) else obj,
+                    default=lambda obj: obj.isoformat()
+                    if isinstance(obj, datetime)
+                    else obj,
                 )
 
             return instance_details
@@ -2729,7 +1862,9 @@ class Campers:
                 print("\n\U0001f4b0 Cost Impact:")
                 print(f"  Previous: {format_cost(running_cost)}")
                 print(f"  New: {format_cost(stopped_cost)}")
-                print(f"  Savings: {format_cost(savings)} (~{savings_pct:.0f}% reduction)")
+                print(
+                    f"  Savings: {format_cost(savings)} (~{savings_pct:.0f}% reduction)"
+                )
             else:
                 print("\n(Cost information unavailable)")
 
@@ -3006,13 +2141,16 @@ class Campers:
             launch_time = target.get("launch_time")
             if isinstance(launch_time, str):
                 try:
-                    launch_time = datetime.fromisoformat(launch_time.replace("Z", "+00:00"))
+                    launch_time = datetime.fromisoformat(
+                        launch_time.replace("Z", "+00:00")
+                    )
                 except (ValueError, AttributeError):
                     launch_time = None
 
             launch_time_str = launch_time.isoformat() if launch_time else "Unknown"
 
             from datetime import timezone
+
             now_utc = datetime.now(timezone.utc)
             if launch_time:
                 try:

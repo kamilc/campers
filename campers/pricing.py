@@ -162,7 +162,9 @@ class PricingService:
                 return cached
 
         try:
-            rate = self._fetch_ec2_rate_from_api(instance_type, region, operating_system)
+            rate = self._fetch_ec2_rate_from_api(
+                instance_type, region, operating_system
+            )
 
             if self.cache and rate is not None:
                 self.cache.set(cache_key, rate)
