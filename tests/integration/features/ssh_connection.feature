@@ -35,7 +35,7 @@ Scenario: SSH connection retry progress shown in TUI
   And LocalStack is healthy and responding
   And SSH container will delay startup by 10 seconds
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Attempting SSH connection (attempt 1/"
@@ -51,7 +51,7 @@ Scenario: SSH connection failure shown in TUI
   And LocalStack is healthy and responding
   And SSH container is not accessible
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Attempting SSH connection"

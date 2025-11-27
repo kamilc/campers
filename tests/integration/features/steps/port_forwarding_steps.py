@@ -460,7 +460,7 @@ def start_http_server_in_container(context: Context, port: int) -> None:
         cmd = f"nohup python3 /tmp/http_server.py {port} > /tmp/http_server_{port}.log 2>&1 &"
 
         try:
-            result = container.exec_run(["sh", "-c", cmd], detach=True, user="root")
+            container.exec_run(["sh", "-c", cmd], detach=True, user="root")
         except (docker.errors.APIError, docker.errors.ContainerError) as e:
             logger.warning(f"Failed to start HTTP server on port {port}: {e}")
             return

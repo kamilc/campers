@@ -867,7 +867,7 @@ def step_instance_with_camp_config(context: Context, camp_config: str) -> None:
     context.long_camp_config = camp_config
 
 
-@then("machine config name is truncated to {length:d} characters")
+@then("camp config name is truncated to {length:d} characters")
 def step_camp_config_truncated(context: Context, length: int) -> None:
     """Verify machine config name is truncated.
 

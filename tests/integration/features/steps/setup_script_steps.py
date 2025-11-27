@@ -5,17 +5,17 @@ import logging
 from behave import given, then
 from behave.runner import Context
 
-from tests.integration.features.steps.cli_steps import ensure_machine_exists
+from tests.integration.features.steps.cli_steps import ensure_camp_exists
 from tests.integration.features.steps.docker_helpers import exec_in_ssh_container
 
 logger = logging.getLogger(__name__)
 
 
-@given('machine "{camp_name}" has multi-line setup_script')
-def step_machine_has_multi_line_setup_script(
+@given('camp "{camp_name}" has multi-line setup_script')
+def step_camp_has_multi_line_setup_script(
     context: Context, camp_name: str
 ) -> None:
-    """Configure machine with multi-line setup_script with shell features.
+    """Configure camp with multi-line setup_script with shell features.
 
     Parameters
     ----------
@@ -24,7 +24,7 @@ def step_machine_has_multi_line_setup_script(
     camp_name : str
         Machine name
     """
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
 
     multi_line_script = "set -e; mkdir -p /tmp/workspace; echo 'Ready' > /tmp/workspace/status.txt; if [ -d /tmp/workspace ]; then echo 'Workspace created'; fi"
 

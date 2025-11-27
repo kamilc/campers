@@ -60,8 +60,8 @@ def _write_temp_config(context) -> str:
     return path
 
 
-@given('machine "{camp_name}" with instance_type "{instance_type}"')
-def step_machine_with_instance_type(
+@given('camp "{camp_name}" with instance_type "{instance_type}"')
+def step_camp_with_instance_type(
     context, camp_name: str, instance_type: str
 ) -> None:
     if "camps" not in context.config_data:
@@ -69,7 +69,7 @@ def step_machine_with_instance_type(
     context.config_data["camps"][camp_name] = {"instance_type": instance_type}
 
 
-@when("I load configuration without machine name")
+@when("I load configuration without camp name")
 def step_load_config_without_machine(context) -> None:
     config_path = _write_temp_config(context)
     context.temp_config_file = config_path
@@ -79,7 +79,7 @@ def step_load_config_without_machine(context) -> None:
     context.merged_config = loader.get_camp_config(context.yaml_config)
 
 
-@when('I load configuration for machine "{camp_name}"')
+@when('I load configuration for camp "{camp_name}"')
 def step_load_config_for_machine(context, camp_name: str) -> None:
     config_path = _write_temp_config(context)
     context.temp_config_file = config_path
@@ -213,8 +213,8 @@ def step_yaml_defaults_override_disk_size(context, disk_size: int) -> None:
     context.config_data["defaults"]["disk_size"] = disk_size
 
 
-@given('machine "{camp_name}" overrides disk_size to {disk_size:d}')
-def step_machine_overrides_disk_size(
+@given('camp "{camp_name}" overrides disk_size to {disk_size:d}')
+def step_camp_overrides_disk_size(
     context, camp_name: str, disk_size: int
 ) -> None:
     if "camps" not in context.config_data:
@@ -230,8 +230,8 @@ def step_yaml_defaults_with_ignore(context, ignore_patterns: str) -> None:
     context.config_data = {"defaults": {"ignore": patterns}}
 
 
-@given('machine "{camp_name}" with ignore {ignore_patterns}')
-def step_machine_with_ignore(context, camp_name: str, ignore_patterns: str) -> None:
+@given('camp "{camp_name}" with ignore {ignore_patterns}')
+def step_camp_with_ignore(context, camp_name: str, ignore_patterns: str) -> None:
     import json
 
     patterns = json.loads(ignore_patterns)

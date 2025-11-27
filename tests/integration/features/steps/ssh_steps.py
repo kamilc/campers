@@ -67,8 +67,8 @@ def step_campers_test_mode(context: Context, value: str) -> None:
     context.test_mode_enabled = value == "1"
 
 
-@given('machine "{camp_name}" has no public IP')
-def step_machine_no_public_ip(context: Context, camp_name: str) -> None:
+@given('camp "{camp_name}" has no public IP')
+def step_camp_no_public_ip(context: Context, camp_name: str) -> None:
     """Set up machine configuration to return no public IP."""
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {"defaults": {}, "camps": {}}
@@ -365,14 +365,14 @@ def step_setup_script_exit_code(context: Context, exit_code: int) -> None:
         )
 
 
-@given('machine "{camp_name}" has multi-line setup_script with shell features')
-def step_machine_has_multiline_setup_script(
+@given('camp "{camp_name}" has multi-line setup_script with shell features')
+def step_camp_has_multiline_setup_script(
     context: Context, camp_name: str
 ) -> None:
     """Set up machine with multi-line setup_script."""
-    from tests.integration.features.steps.cli_steps import ensure_machine_exists
+    from tests.integration.features.steps.cli_steps import ensure_camp_exists
 
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     script = """echo "Installing dependencies..."
 sudo apt update > /dev/null
 sudo apt install -y python3-pip
@@ -417,12 +417,12 @@ def step_command_does_not_execute(context: Context, command: str) -> None:
     assert context.exit_code != 0
 
 
-@given('machine "{camp_name}" has no setup_script')
-def step_machine_has_no_setup_script(context: Context, camp_name: str) -> None:
+@given('camp "{camp_name}" has no setup_script')
+def step_camp_has_no_setup_script(context: Context, camp_name: str) -> None:
     """Set up machine without setup_script."""
-    from tests.integration.features.steps.cli_steps import ensure_machine_exists
+    from tests.integration.features.steps.cli_steps import ensure_camp_exists
 
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
 
 
 @then("setup_script execution is skipped")
@@ -450,12 +450,12 @@ def step_status_message_logged(context: Context, message: str) -> None:
     )
 
 
-@given('machine "{camp_name}" has no command')
-def step_machine_has_no_command_field(context: Context, camp_name: str) -> None:
+@given('camp "{camp_name}" has no command')
+def step_camp_has_no_command_field(context: Context, camp_name: str) -> None:
     """Set up machine without command field."""
-    from tests.integration.features.steps.cli_steps import ensure_machine_exists
+    from tests.integration.features.steps.cli_steps import ensure_camp_exists
 
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
 
 
 @given("SSH container will delay startup by {seconds:d} seconds")

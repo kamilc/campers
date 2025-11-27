@@ -1,4 +1,4 @@
-Feature: Moondock CLI Execution
+Feature: Campers CLI Execution
 
 @smoke
 Scenario: Execute CLI with help flag
@@ -22,7 +22,7 @@ Scenario: Verify dependency installation
 @smoke
 Scenario: Fire CLI routing
   Given campers.py exists in project root
-  And campers.py defines Moondock class
+  And campers.py defines Campers class
   When I run "uv run -m campers --help"
   Then Fire routes to CLI commands
   And output contains "campers"

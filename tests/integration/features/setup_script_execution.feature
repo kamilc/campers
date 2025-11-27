@@ -76,7 +76,7 @@ Scenario: Execute setup_script before command via TUI
   And camp "dev-box" has command "test -f /tmp/setup_marker && echo success"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "dev-box" in the TUI
 
   Then the TUI log panel contains "Running setup_script..."
@@ -92,7 +92,7 @@ Scenario: Multi-line setup_script via TUI
   And camp "dev-box" has command "cat /tmp/workspace/status.txt"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "dev-box" in the TUI
 
   Then the TUI log panel contains "Setup script completed successfully"
@@ -107,7 +107,7 @@ Scenario: Setup_script failure shown in TUI
   And camp "test-box" has command "echo hello"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Running setup_script..."
@@ -122,7 +122,7 @@ Scenario: Skip setup_script via TUI when not defined
   And camp "minimal-box" has command "hostname"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "minimal-box" in the TUI
 
   Then the TUI log panel does not contain "Running setup_script..."
@@ -137,7 +137,7 @@ Scenario: Machine config overrides defaults via TUI
   And camp "override-box" has command "ls /tmp"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "override-box" in the TUI
 
   Then the TUI log panel contains "Setup script completed successfully"

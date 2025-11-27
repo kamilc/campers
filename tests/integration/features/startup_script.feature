@@ -83,7 +83,7 @@ Scenario: Execute startup_script after sync via TUI
   And defaults have command "test -f ~/myproject/.startup_marker && echo success"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the camp in the TUI
 
   Then the TUI log panel contains "Running startup_script..."
@@ -100,7 +100,7 @@ Scenario: Multi-line startup_script via TUI
   And defaults have command "cat ~/myproject/.venv/status.txt"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the camp in the TUI
 
   Then the TUI log panel contains "Startup script completed successfully"
@@ -115,7 +115,7 @@ Scenario: Startup_script failure shown in TUI
   And defaults have command "echo hello"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the camp in the TUI
 
   Then the TUI log panel contains "Running startup_script..."
@@ -131,7 +131,7 @@ Scenario: Skip startup_script via TUI when not defined
   And defaults have command "hostname"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the camp in the TUI
 
   Then the TUI log panel does not contain "Running startup_script..."
@@ -147,7 +147,7 @@ Scenario: Configuration hierarchy via TUI
   And camp "override-box" has command "ls ~/myproject"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "override-box" in the TUI
 
   Then the TUI log panel contains "Startup script completed successfully"

@@ -45,7 +45,7 @@ Scenario: Create single SSH tunnel via TUI
   And LocalStack is healthy and responding
   And HTTP server runs on port 48888 in SSH container
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Creating SSH tunnel for port 48888..."
@@ -62,7 +62,7 @@ Scenario: Create multiple SSH tunnels via TUI
   And HTTP server runs on port 48889 in SSH container
   And HTTP server runs on port 48890 in SSH container
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Creating SSH tunnel for port 48888..."
@@ -79,7 +79,7 @@ Scenario: Skip port forwarding when no ports configured via TUI
   And camp "test-box" has no ports specified
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel does not contain "Creating SSH tunnel"
@@ -92,7 +92,7 @@ Scenario: Port forwarding lifecycle via TUI
   And LocalStack is healthy and responding
   And HTTP server runs on port 48891 in SSH container
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Creating SSH tunnel for port 48891..."

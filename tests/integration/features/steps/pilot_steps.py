@@ -72,7 +72,7 @@ def step_config_file_with_defaults_section(context: Context) -> None:
         }
 
 
-@given('a config file with machine "{camp_name}" defined')
+@given('a config file with camp "{camp_name}" defined')
 def step_config_file_with_machine(context: Context, camp_name: str) -> None:
     """Create a config file with a machine definition.
 
@@ -81,7 +81,7 @@ def step_config_file_with_machine(context: Context, camp_name: str) -> None:
     context : Context
         Behave context object
     camp_name : str
-        Name of the machine to define
+        Name of the camp to define
     """
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {
@@ -131,7 +131,7 @@ def step_simulate_running_machine_in_tui(context: Context, camp_name: str) -> No
     context : Context
         Behave context object
     camp_name : str
-        Name of the machine to run
+        Name of the camp to run
     """
     if not hasattr(context, "config_path"):
         raise AssertionError(
@@ -450,7 +450,7 @@ def run_tui_test_with_machine(
     Parameters
     ----------
     camp_name : str
-        Name of the machine to run
+        Name of the camp to run
     config_path : str
         Path to the config file
     max_wait : int

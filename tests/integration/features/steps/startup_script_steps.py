@@ -135,7 +135,7 @@ def step_startup_script_executes_successfully(context: Context) -> None:
     logger.info("Verified startup_script executed successfully")
 
 
-@when("I simulate running the machine in the TUI")
+@when("I simulate running the camp in the TUI")
 def step_simulate_running_machine_in_tui(context: Context) -> None:
     """Simulate running the machine in the TUI using Textual Pilot.
 

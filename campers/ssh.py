@@ -26,7 +26,7 @@ def get_ssh_connection_info(
 
     LocalStack path: If instance has no public IP and LocalStack is detected
     via boto3 endpoint URL inspection, reads SSH connection details from EC2
-    instance tags (MoondockSSHHost, MoondockSSHPort, MoondockSSHKeyFile).
+    instance tags (CampersSSHHost, CampersSSHPort, CampersSSHKeyFile).
     This enables high-fidelity BDD testing against LocalStack.
 
     LocalStack detection is defensive: checks actual boto3 endpoint URL for

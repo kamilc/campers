@@ -54,7 +54,7 @@ Scenario: Execute command via TUI with real SSH
   And camp "test-box" has instance_type "t3.micro"
   And camp "test-box" has region "us-east-1"
   And LocalStack is healthy and responding
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
   Then the TUI status widget shows "Status: terminating" within 180 seconds
   And the TUI log panel contains "Command completed successfully"
@@ -65,7 +65,7 @@ Scenario: Execute command from camp config via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "hostname"
   And LocalStack is healthy and responding
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
   Then the TUI log panel contains "Waiting for SSH to be ready"
   And the TUI log panel contains "SSH connection established"
@@ -76,7 +76,7 @@ Scenario: Skip SSH when no command specified via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has no command field
   And LocalStack is healthy and responding
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
   Then the TUI log panel does not contain "Waiting for SSH to be ready"
   And the TUI log panel does not contain "Attempting SSH connection"
@@ -88,7 +88,7 @@ Scenario: Command fails with non-zero exit code via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "exit 42"
   And LocalStack is healthy and responding
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
   Then the TUI log panel contains "Command completed with exit code: 42"
   And the TUI status widget shows "Status: terminating" within 180 seconds

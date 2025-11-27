@@ -431,7 +431,7 @@ def step_launch_instance(context: Context) -> None:
     context.ec2_client = ec2_manager.ec2_client
 
 
-@when('I launch instance with machine "{camp_name}"')
+@when('I launch instance with camp "{camp_name}"')
 def step_launch_instance_with_machine(context: Context, camp_name: str) -> None:
     """Launch instance using machine config."""
     if hasattr(context, "config_data") and context.config_data:
@@ -1631,3 +1631,186 @@ def step_verify_amazon_ubuntu_24_ami_selected(context: Context) -> None:
     """Verify Amazon Ubuntu 24 x86_64 AMI was selected."""
     assert context.instance_details is not None
     assert context.instance_details["instance_id"].startswith("i-")
+
+
+@given('an existing instance for camp "{camp_name}" in region "{region}"')
+def step_existing_instance_in_region(context: Context, camp_name: str, region: str) -> None:
+    """Create an existing EC2 instance in specified region with camp tag.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    camp_name : str
+        Camp name to tag instance with
+    region : str
+        AWS region for instance
+    """
+    setup_moto_environment(context)
+
+    ec2_client = boto3.client("ec2", region_name=region)
+    ec2_resource = boto3.resource("ec2", region_name=region)
+
+    ami_id = ec2_client.register_image(
+        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+        Description="Ubuntu 22.04 LTS",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )["ImageId"]
+
+    vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+    if not vpcs["Vpcs"]:
+        try:
+            ec2_client.create_default_vpc()
+        except ClientError:
+            pass
+        vpcs = ec2_client.describe_vpcs(
+            Filters=[{"Name": "isDefault", "Values": ["true"]}]
+        )
+    vpc_id = vpcs["Vpcs"][0]["VpcId"]
+
+    unique_id = str(uuid.uuid4())[:12]
+    sg_response = ec2_client.create_security_group(
+        GroupName=f"campers-{unique_id}",
+        Description=f"Test SG {unique_id}",
+        VpcId=vpc_id,
+    )
+    security_group_id = sg_response["GroupId"]
+
+    ec2_client.create_key_pair(KeyName=f"campers-{unique_id}")
+
+    instances = ec2_resource.create_instances(
+        ImageId=ami_id,
+        InstanceType="t3.medium",
+        KeyName=f"campers-{unique_id}",
+        SecurityGroupIds=[security_group_id],
+        MinCount=1,
+        MaxCount=1,
+        TagSpecifications=[
+            {
+                "ResourceType": "instance",
+                "Tags": [
+                    {"Key": "ManagedBy", "Value": "campers"},
+                    {"Key": "MachineConfig", "Value": camp_name},
+                    {"Key": "UniqueId", "Value": unique_id},
+                ],
+            }
+        ],
+    )
+
+    if not hasattr(context, "instances_by_region"):
+        context.instances_by_region = {}
+
+    context.instances_by_region[region] = {
+        "instance_id": instances[0].id,
+        "instance": instances[0],
+        "region": region,
+        "camp_name": camp_name,
+    }
+
+
+def get_error_message(context: Context) -> str:
+    """Retrieve error message from context.
+
+    Checks for exception or stderr in the context and returns the error message.
+    Prioritizes exception over stderr.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+
+    Returns
+    -------
+    str
+        Error message string
+
+    Raises
+    ------
+    AssertionError
+        If no error message is found in context
+    """
+    if hasattr(context, "exception") and context.exception is not None:
+        return str(context.exception)
+
+    if hasattr(context, "stderr") and context.stderr:
+        return str(context.stderr)
+
+    assert False, "No error message found in context"
+
+
+@then('error message mentions existing region "{region}"')
+def step_error_mentions_existing_region(context: Context, region: str) -> None:
+    """Verify error message mentions the existing region.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    region : str
+        Region name that should be mentioned
+    """
+    error_message = get_error_message(context)
+    assert region in error_message, (
+        f"Expected region '{region}' in error message but got: {error_message}"
+    )
+
+
+@then('error message mentions configured region "{region}"')
+def step_error_mentions_configured_region(context: Context, region: str) -> None:
+    """Verify error message mentions the configured region.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    region : str
+        Region name that should be mentioned
+    """
+    error_message = get_error_message(context)
+    assert region in error_message, (
+        f"Expected region '{region}' in error message but got: {error_message}"
+    )
+
+
+@when('I attempt to launch instance with camp "{camp_name}" in region "{region}"')
+def step_attempt_launch_with_region(
+    context: Context, camp_name: str, region: str
+) -> None:
+    """Attempt to launch instance with specified camp and region.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    camp_name : str
+        Camp name to launch
+    region : str
+        Region to configure
+    """
+    setup_moto_environment(context)
+
+    if not hasattr(context, "config_data"):
+        context.config_data = {}
+
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
+
+    context.config_data["camps"][camp_name] = {
+        "instance_type": "t3.medium",
+        "region": region,
+    }
+
+    if not context.temp_config_file:
+        from tests.integration.features.steps.config_steps import _write_temp_config
+        context.temp_config_file = _write_temp_config(context)
+
+    try:
+        from campers.__main__ import Campers
+
+        os.environ["CAMPERS_CONFIG"] = context.temp_config_file
+        campers = Campers()
+        context.instance_details = campers.run(camp_name)
+    except Exception as e:
+        context.exception = e

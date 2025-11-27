@@ -216,15 +216,15 @@ def create_cli_test_ssh_manager_factory():
     return mock_ssh_manager
 
 
-def ensure_machine_exists(context: Context, camp_name: str) -> None:
-    """Ensure machine configuration structure exists in context.
+def ensure_camp_exists(context: Context, camp_name: str) -> None:
+    """Ensure camp configuration structure exists in context.
 
     Parameters
     ----------
     context : behave.runner.Context
         Behave test context
     camp_name : str
-        Name of the machine configuration
+        Name of the camp configuration
     """
 
     if not hasattr(context, "config_data") or context.config_data is None:
@@ -242,92 +242,92 @@ def step_config_with_defaults_section_only(context: Context) -> None:
     context.config_data = {"defaults": {}, "camps": {}}
 
 
-@given('config file with machine "{camp_name}" defined')
-def step_config_with_machine_defined(context: Context, camp_name: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('config file with camp "{camp_name}" defined')
+def step_config_with_camp_defined(context: Context, camp_name: str) -> None:
+    ensure_camp_exists(context, camp_name)
 
 
-@given('machine "{camp_name}" has instance_type "{instance_type}"')
-def step_machine_has_instance_type(
+@given('camp "{camp_name}" has instance_type "{instance_type}"')
+def step_camp_has_instance_type(
     context: Context, camp_name: str, instance_type: str
 ) -> None:
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["instance_type"] = instance_type
 
 
-@given('machine "{camp_name}" has disk_size {disk_size:d}')
-def step_machine_has_disk_size(
+@given('camp "{camp_name}" has disk_size {disk_size:d}')
+def step_camp_has_disk_size(
     context: Context, camp_name: str, disk_size: int
 ) -> None:
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["disk_size"] = disk_size
 
 
-@given('machine "{camp_name}" has region "{region}"')
-def step_machine_has_region(context: Context, camp_name: str, region: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has region "{region}"')
+def step_camp_has_region(context: Context, camp_name: str, region: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["region"] = region
 
 
-@given('machine "{camp_name}" overrides region to "{region}"')
-def step_machine_overrides_region(
+@given('camp "{camp_name}" overrides region to "{region}"')
+def step_camp_overrides_region(
     context: Context, camp_name: str, region: str
 ) -> None:
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["region"] = region
 
 
-@given('machine "{camp_name}" has command "{command}"')
-def step_machine_has_command(context: Context, camp_name: str, command: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has command "{command}"')
+def step_camp_has_command(context: Context, camp_name: str, command: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["command"] = command
 
 
-@given('machine "{camp_name}" has no command field')
-def step_machine_has_no_command(context: Context, camp_name: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has no command field')
+def step_camp_has_no_command(context: Context, camp_name: str) -> None:
+    ensure_camp_exists(context, camp_name)
 
 
-@given('machine "{camp_name}" has setup_script "{script}"')
-def step_machine_has_setup_script(
+@given('camp "{camp_name}" has setup_script "{script}"')
+def step_camp_has_setup_script(
     context: Context, camp_name: str, script: str
 ) -> None:
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["setup_script"] = script
 
 
-@given('machine "{camp_name}" has startup_script "{script}"')
-def step_machine_has_startup_script(
+@given('camp "{camp_name}" has startup_script "{script}"')
+def step_camp_has_startup_script(
     context: Context, camp_name: str, script: str
 ) -> None:
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["startup_script"] = script
 
 
-@given('machine "{camp_name}" has env_filter "{env_filter}"')
-def step_machine_has_env_filter(
+@given('camp "{camp_name}" has env_filter "{env_filter}"')
+def step_camp_has_env_filter(
     context: Context, camp_name: str, env_filter: str
 ) -> None:
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["env_filter"] = [env_filter]
 
 
-@given('machine "{camp_name}" has on_exit "{on_exit_value}"')
-def step_machine_has_on_exit(
+@given('camp "{camp_name}" has on_exit "{on_exit_value}"')
+def step_camp_has_on_exit(
     context: Context, camp_name: str, on_exit_value: str
 ) -> None:
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["on_exit"] = on_exit_value
 
 
-@given("config file with camps {machine_list}")
-def step_config_with_camps(context: Context, machine_list: str) -> None:
-    camps = json.loads(machine_list)
+@given("config file with camps {camp_list}")
+def step_config_with_camps(context: Context, camp_list: str) -> None:
+    camps = json.loads(camp_list)
 
     context.config_data = {"defaults": {}, "camps": {}}
 
-    for machine in camps:
-        context.config_data["camps"][machine] = {}
+    for camp in camps:
+        context.config_data["camps"][camp] = {}
 
 
 @given('YAML defaults with region "{region}"')
@@ -769,8 +769,8 @@ def step_final_config_contains_env_filter(context: Context, expected: str) -> No
     assert context.exit_code == 0
 
 
-@given('machine "{camp_name}" has sync_paths configured')
-def step_machine_has_sync_paths_configured(context: Context, camp_name: str) -> None:
+@given('camp "{camp_name}" has sync_paths configured')
+def step_camp_has_sync_paths_configured(context: Context, camp_name: str) -> None:
     if not hasattr(context, "config_data"):
         context.config_data = {"defaults": {}, "camps": {}}
 
@@ -785,18 +785,18 @@ def step_machine_has_sync_paths_configured(context: Context, camp_name: str) -> 
     ]
 
 
-@given('machine "{camp_name}" has ports {ports_list}')
-def step_machine_has_ports(
+@given('camp "{camp_name}" has ports {ports_list}')
+def step_camp_has_ports(
     context: Context, camp_name: str, ports_list: str
 ) -> None:
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     ports = json.loads(ports_list)
     context.config_data["camps"][camp_name]["ports"] = ports
 
 
-@given('machine "{camp_name}" has no ports specified')
-def step_machine_has_no_ports(context: Context, camp_name: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has no ports specified')
+def step_camp_has_no_ports(context: Context, camp_name: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["ports"] = []
 
 
