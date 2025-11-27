@@ -366,7 +366,10 @@ class EC2Manager:
         existing_instances = self.find_instances_by_name_or_id(camp_name)
 
         for instance in existing_instances:
-            if instance["region"] != target_region and instance["camp_config"] == camp_name:
+            if (
+                instance["region"] != target_region
+                and instance["camp_config"] == camp_name
+            ):
                 raise RuntimeError(
                     f"An instance for camp '{camp_name}' already exists in region "
                     f"'{instance['region']}', but you are trying to launch in region "
@@ -594,9 +597,7 @@ class EC2Manager:
                                     "region": region,
                                     "instance_type": instance["InstanceType"],
                                     "launch_time": instance["LaunchTime"],
-                                    "camp_config": tags.get(
-                                        "CampConfig", "ad-hoc"
-                                    ),
+                                    "camp_config": tags.get("CampConfig", "ad-hoc"),
                                 }
                             )
 
@@ -866,9 +867,7 @@ class EC2Manager:
             except ClientError:
                 pass
 
-            campers_dir = os.environ.get(
-                "CAMPERS_DIR", str(Path.home() / ".campers")
-            )
+            campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
             key_file = Path(campers_dir) / "keys" / f"{unique_id}.pem"
 
             if key_file.exists():

@@ -1634,7 +1634,9 @@ def step_verify_amazon_ubuntu_24_ami_selected(context: Context) -> None:
 
 
 @given('an existing instance for camp "{camp_name}" in region "{region}"')
-def step_existing_instance_in_region(context: Context, camp_name: str, region: str) -> None:
+def step_existing_instance_in_region(
+    context: Context, camp_name: str, region: str
+) -> None:
     """Create an existing EC2 instance in specified region with camp tag.
 
     Parameters
@@ -1820,6 +1822,7 @@ def step_attempt_launch_with_region(
 
     if not context.temp_config_file:
         from tests.integration.features.steps.config_steps import _write_temp_config
+
         context.temp_config_file = _write_temp_config(context)
 
     try:
