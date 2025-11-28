@@ -61,9 +61,7 @@ def _write_temp_config(context) -> str:
 
 
 @given('camp "{camp_name}" with instance_type "{instance_type}"')
-def step_camp_with_instance_type(
-    context, camp_name: str, instance_type: str
-) -> None:
+def step_camp_with_instance_type(context, camp_name: str, instance_type: str) -> None:
     if "camps" not in context.config_data:
         context.config_data["camps"] = {}
     context.config_data["camps"][camp_name] = {"instance_type": instance_type}
@@ -214,9 +212,7 @@ def step_yaml_defaults_override_disk_size(context, disk_size: int) -> None:
 
 
 @given('camp "{camp_name}" overrides disk_size to {disk_size:d}')
-def step_camp_overrides_disk_size(
-    context, camp_name: str, disk_size: int
-) -> None:
+def step_camp_overrides_disk_size(context, camp_name: str, disk_size: int) -> None:
     if "camps" not in context.config_data:
         context.config_data["camps"] = {}
     context.config_data["camps"][camp_name] = {"disk_size": disk_size}

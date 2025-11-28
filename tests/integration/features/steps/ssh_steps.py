@@ -96,7 +96,9 @@ def step_ssh_connection_attempted(context: Context) -> None:
 
     with (
         patch("campers.services.ssh.paramiko.SSHClient") as mock_ssh_client,
-        patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch(
+            "campers.services.ssh.paramiko.RSAKey.from_private_key_file"
+        ) as mock_rsa_key,
         patch("campers.services.ssh.time.sleep") as mock_sleep,
     ):
         mock_client = MagicMock()
@@ -140,7 +142,9 @@ def step_ssh_connection_attempted_with_retries(context: Context, retries: int) -
 
     with (
         patch("campers.services.ssh.paramiko.SSHClient") as mock_ssh_client,
-        patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch(
+            "campers.services.ssh.paramiko.RSAKey.from_private_key_file"
+        ) as mock_rsa_key,
         patch("campers.services.ssh.time.sleep"),
     ):
         mock_client = MagicMock()
@@ -191,7 +195,11 @@ def step_command_executes_on_remote(context: Context, command: str) -> None:
 @then("command exit code is {exit_code:d}")
 def step_command_exit_code(context: Context, exit_code: int) -> None:
     """Verify command exit code matches expected value."""
-    if hasattr(context, "final_config") and context.final_config is not None and "command_exit_code" in context.final_config:
+    if (
+        hasattr(context, "final_config")
+        and context.final_config is not None
+        and "command_exit_code" in context.final_config
+    ):
         assert context.final_config["command_exit_code"] == exit_code
     else:
         assert context.exit_code == 0
@@ -366,9 +374,7 @@ def step_setup_script_exit_code(context: Context, exit_code: int) -> None:
 
 
 @given('camp "{camp_name}" has multi-line setup_script with shell features')
-def step_camp_has_multiline_setup_script(
-    context: Context, camp_name: str
-) -> None:
+def step_camp_has_multiline_setup_script(context: Context, camp_name: str) -> None:
     """Set up machine with multi-line setup_script."""
     from tests.integration.features.steps.cli_steps import ensure_camp_exists
 
@@ -484,9 +490,7 @@ def step_ssh_container_not_accessible(context: Context) -> None:
     context : Context
         Behave context object
     """
-    context.harness.services.configuration_env.set(
-        "CAMPERS_SSH_BLOCK_CONNECTIONS", "1"
-    )
+    context.harness.services.configuration_env.set("CAMPERS_SSH_BLOCK_CONNECTIONS", "1")
     logger.info("SSH container will be created without port mapping (blocked)")
 
 

@@ -29,7 +29,9 @@ def step_setup_two_env_vars(context, var1, var2):
     env.set("CAMPERS_TEST_MODE", "1")
     env.set("CAMPERS_CONFIG", context.saved_env.get("CAMPERS_CONFIG", ""))
 
-    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
+    is_localstack = (
+        hasattr(context, "scenario") and "localstack" in context.scenario.tags
+    )
 
     if is_localstack:
         baseline_env = {
@@ -81,7 +83,9 @@ def step_setup_three_env_vars(context, var1, var2, var3):
     env.set("CAMPERS_TEST_MODE", "1")
     env.set("CAMPERS_CONFIG", context.saved_env.get("CAMPERS_CONFIG", ""))
 
-    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
+    is_localstack = (
+        hasattr(context, "scenario") and "localstack" in context.scenario.tags
+    )
 
     if is_localstack:
         baseline_env = {

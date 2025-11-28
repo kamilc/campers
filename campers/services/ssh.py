@@ -7,6 +7,7 @@ import shlex
 import socket
 import time
 
+import boto3
 import paramiko
 from paramiko.channel import Channel, ChannelFile
 
@@ -61,9 +62,6 @@ def get_ssh_connection_info(
 
     if public_ip:
         return public_ip, 22, key_file
-
-    import boto3
-    import time
 
     logger.info(
         f"Instance {instance_id} has no public IP, checking for SSH tags in LocalStack"

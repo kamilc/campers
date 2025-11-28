@@ -16,7 +16,6 @@ from botocore.exceptions import (
 )
 
 from campers.providers.exceptions import (
-    ProviderAPIError,
     ProviderCredentialsError,
 )
 

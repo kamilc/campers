@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 @given('camp "{camp_name}" has multi-line setup_script')
-def step_camp_has_multi_line_setup_script(
-    context: Context, camp_name: str
-) -> None:
+def step_camp_has_multi_line_setup_script(context: Context, camp_name: str) -> None:
     """Configure camp with multi-line setup_script with shell features.
 
     Parameters

@@ -43,6 +43,7 @@ SAMPLE_EBS_PRICING_GP3 = {
 def step_mock_pricing_api_with_sample_rates(context: Context) -> None:
     """Mock AWS Pricing API with realistic sample pricing data."""
     import boto3
+
     original_boto3_client = boto3.client
 
     context.use_direct_instantiation = True
@@ -52,11 +53,21 @@ def step_mock_pricing_api_with_sample_rates(context: Context) -> None:
     def mock_get_products(**kwargs):
         filters = {f["Field"]: f["Value"] for f in kwargs.get("Filters", [])}
 
-        if filters.get("instanceType") == "t3.medium" and filters.get("location") == "US East (N. Virginia)":
+        if (
+            filters.get("instanceType") == "t3.medium"
+            and filters.get("location") == "US East (N. Virginia)"
+        ):
             return {"PriceList": [json.dumps(SAMPLE_EC2_PRICING_T3_MEDIUM)]}
-        elif filters.get("instanceType") == "g5.2xlarge" and filters.get("location") == "US East (N. Virginia)":
+        elif (
+            filters.get("instanceType") == "g5.2xlarge"
+            and filters.get("location") == "US East (N. Virginia)"
+        ):
             return {"PriceList": [json.dumps(SAMPLE_EC2_PRICING_G5_2XLARGE)]}
-        elif filters.get("productFamily") == "Storage" and filters.get("volumeApiName") == "gp3" and filters.get("location") == "US East (N. Virginia)":
+        elif (
+            filters.get("productFamily") == "Storage"
+            and filters.get("volumeApiName") == "gp3"
+            and filters.get("location") == "US East (N. Virginia)"
+        ):
             return {"PriceList": [json.dumps(SAMPLE_EBS_PRICING_GP3)]}
 
         return {"PriceList": []}
@@ -78,6 +89,7 @@ def step_mock_pricing_api_with_sample_rates(context: Context) -> None:
 def step_mock_pricing_api_with_call_counter(context: Context) -> None:
     """Mock AWS Pricing API and track number of API calls."""
     import boto3
+
     original_boto3_client = boto3.client
 
     context.use_direct_instantiation = True
@@ -90,7 +102,9 @@ def step_mock_pricing_api_with_call_counter(context: Context) -> None:
         instance_type = filters.get("instanceType", "")
 
         if instance_type:
-            context.pricing_api_call_count[instance_type] = context.pricing_api_call_count.get(instance_type, 0) + 1
+            context.pricing_api_call_count[instance_type] = (
+                context.pricing_api_call_count.get(instance_type, 0) + 1
+            )
 
         if filters.get("instanceType") == "t3.medium":
             return {"PriceList": [json.dumps(SAMPLE_EC2_PRICING_T3_MEDIUM)]}
@@ -116,6 +130,7 @@ def step_mock_pricing_api_with_call_counter(context: Context) -> None:
 def step_pricing_api_not_accessible(context: Context) -> None:
     """Mock AWS Pricing API as unavailable (LocalStack scenario)."""
     import boto3
+
     original_boto3_client = boto3.client
 
     context.use_direct_instantiation = True
@@ -135,6 +150,7 @@ def step_pricing_api_not_accessible(context: Context) -> None:
 def step_pricing_api_available(context: Context) -> None:
     """Set up AWS Pricing API as available."""
     import boto3
+
     original_boto3_client = boto3.client
 
     context.use_direct_instantiation = True
@@ -238,7 +254,9 @@ def step_stopped_instance_with_type(context: Context, instance_type: str) -> Non
     context.test_instances.append(instance_id)
 
 
-@given('I have a running instance of type "{instance_type}" with {volume_size:d}GB volume')
+@given(
+    'I have a running instance of type "{instance_type}" with {volume_size:d}GB volume'
+)
 def step_running_instance_with_type_and_volume(
     context: Context, instance_type: str, volume_size: int
 ) -> None:
@@ -283,7 +301,9 @@ def step_running_instance_with_type_and_volume(
     context.instance = instance_name
 
 
-@given('I have a stopped instance of type "{instance_type}" with {volume_size:d}GB volume')
+@given(
+    'I have a stopped instance of type "{instance_type}" with {volume_size:d}GB volume'
+)
 def step_stopped_instance_with_type_and_volume(
     context: Context, instance_type: str, volume_size: int
 ) -> None:
@@ -470,12 +490,16 @@ def step_run_list_twice(context: Context) -> None:
 
 
 @then('cost column shows "{cost}" for {instance_type}')
-def step_cost_column_shows_value(context: Context, cost: str, instance_type: str) -> None:
+def step_cost_column_shows_value(
+    context: Context, cost: str, instance_type: str
+) -> None:
     """Verify cost column displays expected value for instance type."""
     output = context.stdout
 
     if instance_type not in output:
-        raise AssertionError(f"Instance type {instance_type} not found in output:\n{output}")
+        raise AssertionError(
+            f"Instance type {instance_type} not found in output:\n{output}"
+        )
 
     if cost not in output:
         raise AssertionError(f"Cost '{cost}' not found in output:\n{output}")
@@ -499,7 +523,9 @@ def step_see_total_estimated_cost(context: Context, total_cost: str) -> None:
         raise AssertionError(f"'Total estimated cost:' not found in output:\n{output}")
 
     if total_cost not in output:
-        raise AssertionError(f"Total cost '{total_cost}' not found in output:\n{output}")
+        raise AssertionError(
+            f"Total cost '{total_cost}' not found in output:\n{output}"
+        )
 
 
 @then('I see "{text}" at top')
@@ -569,7 +595,9 @@ def step_start_operation_completes(context: Context) -> None:
     output = context.stdout
 
     if "successfully started" not in output:
-        raise AssertionError(f"Start operation did not complete successfully:\n{output}")
+        raise AssertionError(
+            f"Start operation did not complete successfully:\n{output}"
+        )
 
 
 @then('that instance shows "{text}" in cost column')

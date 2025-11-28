@@ -53,9 +53,7 @@ def campers_module() -> Any:
     campers_script_path = (
         Path(__file__).parent.parent.parent / "campers" / "__main__.py"
     )
-    spec = importlib.util.spec_from_file_location(
-        "campers_script", campers_script_path
-    )
+    spec = importlib.util.spec_from_file_location("campers_script", campers_script_path)
     campers_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(campers_module)
 

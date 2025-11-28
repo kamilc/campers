@@ -153,7 +153,9 @@ class FakeEC2Manager:
                     instances_list.append(
                         {
                             "instance_id": instance["instance_id"],
-                            "name": instance.get("name", f"campers-{instance['unique_id']}"),
+                            "name": instance.get(
+                                "name", f"campers-{instance['unique_id']}"
+                            ),
                             "state": instance["state"],
                             "region": instance.get("region", manager.region),
                             "instance_type": instance.get("instance_type", "t3.medium"),
@@ -170,7 +172,9 @@ class FakeEC2Manager:
                 instances_list.append(
                     {
                         "instance_id": instance["instance_id"],
-                        "name": instance.get("name", f"campers-{instance['unique_id']}"),
+                        "name": instance.get(
+                            "name", f"campers-{instance['unique_id']}"
+                        ),
                         "state": instance["state"],
                         "region": instance.get("region", self.region),
                         "instance_type": instance.get("instance_type", "t3.medium"),

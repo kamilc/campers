@@ -44,8 +44,10 @@ def step_status_widget_displays(context: Context, status: str) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_campers = context.campers_module.Campers()
         app = CampersTUI(
-            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
-            start_worker=False
+            campers_instance=mock_campers,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -89,8 +91,10 @@ def step_uptime_widget_displays_elapsed(context: Context) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_campers = context.campers_module.Campers()
         app = CampersTUI(
-            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
-            start_worker=False
+            campers_instance=mock_campers,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -143,8 +147,10 @@ def step_mutagen_widget_displays_state(context: Context, state: str) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_campers = context.campers_module.Campers()
         app = CampersTUI(
-            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
-            start_worker=False
+            campers_instance=mock_campers,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -182,8 +188,10 @@ def step_mutagen_widget_displays_text(context: Context, expected_text: str) -> N
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_campers = context.campers_module.Campers()
         app = CampersTUI(
-            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
-            start_worker=False
+            campers_instance=mock_campers,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -263,8 +271,10 @@ def step_graceful_shutdown_initiated(context: Context) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_campers = context.campers_module.Campers()
         app = CampersTUI(
-            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
-            start_worker=False
+            campers_instance=mock_campers,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test() as pilot:
             await pilot.pause()
@@ -326,8 +336,10 @@ def step_application_exits_immediately(context: Context) -> None:
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_campers = context.campers_module.Campers()
         app = CampersTUI(
-            campers_instance=mock_campers, run_kwargs={}, update_queue=update_queue,
-            start_worker=False
+            campers_instance=mock_campers,
+            run_kwargs={},
+            update_queue=update_queue,
+            start_worker=False,
         )
         async with app.run_test() as pilot:
             await pilot.pause()

@@ -38,9 +38,7 @@ def ensure_defaults_section(context: Context) -> dict[str, Any]:
 @given("mutagen is not installed locally")
 def step_mutagen_not_installed(context: Context) -> None:
     """Mark that mutagen is not installed locally."""
-    context.harness.services.configuration_env.set(
-        "CAMPERS_MUTAGEN_NOT_INSTALLED", "1"
-    )
+    context.harness.services.configuration_env.set("CAMPERS_MUTAGEN_NOT_INSTALLED", "1")
     context.mutagen_not_installed = True
 
 

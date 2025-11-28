@@ -1016,9 +1016,7 @@ class TestConfigLoaderVariableSubstitution:
         loader = ConfigLoader()
         config = loader.load_config(str(config_file))
 
-        assert (
-            config["camps"]["dev"]["env"]["PROJECT_ROOT"] == "/home/ubuntu/project"
-        )
+        assert config["camps"]["dev"]["env"]["PROJECT_ROOT"] == "/home/ubuntu/project"
 
     def test_variable_in_list(self, tmp_path: Path) -> None:
         config_file = tmp_path / "campers.yaml"
@@ -1130,9 +1128,7 @@ class TestConfigLoaderVariableSubstitution:
         loader = ConfigLoader()
         config = loader.load_config(str(config_file))
 
-        assert (
-            config["camps"]["dev"]["working_dir"] == "/path-with-dash_and_underscore"
-        )
+        assert config["camps"]["dev"]["working_dir"] == "/path-with-dash_and_underscore"
 
     def test_variable_reference_within_vars_section(self, tmp_path: Path) -> None:
         config_file = tmp_path / "campers.yaml"

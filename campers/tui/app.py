@@ -28,6 +28,8 @@ TUI_UPDATE_INTERVAL = 0.1
 MAX_UPDATES_PER_TICK = 10
 TUI_STATUS_UPDATE_PROCESSING_DELAY = 1.0
 
+logger = logging.getLogger(__name__)
+
 
 class CampersTUI(App):
     """Textual TUI application for campers.
@@ -455,8 +457,10 @@ class CampersTUI(App):
                 try:
                     log_widget = self.query_one(Log)
                     log_widget.write_line("Force exit - skipping cleanup!")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "Failed to write to log widget during force exit: %s", e
+                    )
 
                 if hasattr(self, "_driver") and self._driver is not None:
                     self.exit(130)
@@ -472,16 +476,16 @@ class CampersTUI(App):
 
         try:
             self.query_one(f"#{WidgetID.STATUS}").update("Status: shutting down")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to update status widget during quit: %s", e)
 
         try:
             log_widget = self.query_one(Log)
             log_widget.write_line(
                 "Graceful shutdown initiated (press Ctrl+C again to force exit)"
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to write shutdown message to log widget: %s", e)
 
         self.refresh()
 

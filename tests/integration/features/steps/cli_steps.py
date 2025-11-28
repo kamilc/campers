@@ -257,9 +257,7 @@ def step_camp_has_instance_type(
 
 
 @given('camp "{camp_name}" has disk_size {disk_size:d}')
-def step_camp_has_disk_size(
-    context: Context, camp_name: str, disk_size: int
-) -> None:
+def step_camp_has_disk_size(context: Context, camp_name: str, disk_size: int) -> None:
     ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["disk_size"] = disk_size
 
@@ -271,9 +269,7 @@ def step_camp_has_region(context: Context, camp_name: str, region: str) -> None:
 
 
 @given('camp "{camp_name}" overrides region to "{region}"')
-def step_camp_overrides_region(
-    context: Context, camp_name: str, region: str
-) -> None:
+def step_camp_overrides_region(context: Context, camp_name: str, region: str) -> None:
     ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["region"] = region
 
@@ -290,33 +286,25 @@ def step_camp_has_no_command(context: Context, camp_name: str) -> None:
 
 
 @given('camp "{camp_name}" has setup_script "{script}"')
-def step_camp_has_setup_script(
-    context: Context, camp_name: str, script: str
-) -> None:
+def step_camp_has_setup_script(context: Context, camp_name: str, script: str) -> None:
     ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["setup_script"] = script
 
 
 @given('camp "{camp_name}" has startup_script "{script}"')
-def step_camp_has_startup_script(
-    context: Context, camp_name: str, script: str
-) -> None:
+def step_camp_has_startup_script(context: Context, camp_name: str, script: str) -> None:
     ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["startup_script"] = script
 
 
 @given('camp "{camp_name}" has env_filter "{env_filter}"')
-def step_camp_has_env_filter(
-    context: Context, camp_name: str, env_filter: str
-) -> None:
+def step_camp_has_env_filter(context: Context, camp_name: str, env_filter: str) -> None:
     ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["env_filter"] = [env_filter]
 
 
 @given('camp "{camp_name}" has on_exit "{on_exit_value}"')
-def step_camp_has_on_exit(
-    context: Context, camp_name: str, on_exit_value: str
-) -> None:
+def step_camp_has_on_exit(context: Context, camp_name: str, on_exit_value: str) -> None:
     ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["on_exit"] = on_exit_value
 
@@ -613,6 +601,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                     from tests.integration.features.steps.port_forwarding_steps import (
                         start_http_servers_for_all_configured_ports,
                     )
+
                     logger.info("Starting HTTP servers for configured ports")
                     start_http_servers_for_all_configured_ports(context)
 
@@ -806,9 +795,7 @@ def step_camp_has_sync_paths_configured(context: Context, camp_name: str) -> Non
 
 
 @given('camp "{camp_name}" has ports {ports_list}')
-def step_camp_has_ports(
-    context: Context, camp_name: str, ports_list: str
-) -> None:
+def step_camp_has_ports(context: Context, camp_name: str, ports_list: str) -> None:
     ensure_camp_exists(context, camp_name)
     ports = json.loads(ports_list)
     context.config_data["camps"][camp_name]["ports"] = ports

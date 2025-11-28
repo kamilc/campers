@@ -181,7 +181,9 @@ def step_ansible_not_installed(context: Context) -> None:
     if not hasattr(context, "patches"):
         context.patches = []
 
-    patch = unittest.mock.patch("campers.services.ansible.shutil.which", side_effect=mock_which)
+    patch = unittest.mock.patch(
+        "campers.services.ansible.shutil.which", side_effect=mock_which
+    )
     patch.start()
     context.patches.append(patch)
 
@@ -208,7 +210,8 @@ def step_ansible_installed(context: Context) -> None:
         context.patches = []
 
     patch_which = unittest.mock.patch(
-        "campers.services.ansible.shutil.which", return_value="/usr/bin/ansible-playbook"
+        "campers.services.ansible.shutil.which",
+        return_value="/usr/bin/ansible-playbook",
     )
     patch_which.start()
     context.patches.append(patch_which)

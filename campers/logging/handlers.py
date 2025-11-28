@@ -10,6 +10,8 @@ from textual.widgets import Log
 if TYPE_CHECKING:
     from campers.tui import CampersTUI
 
+logger = logging.getLogger(__name__)
+
 
 class TuiLogMessage(Message):
     """Message delivering a log line to the TUI log widget."""
@@ -70,5 +72,5 @@ class TuiLogHandler(logging.Handler):
                 return
 
             self.app.post_message(TuiLogMessage(msg))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Error emitting log message to TUI: %s", e)

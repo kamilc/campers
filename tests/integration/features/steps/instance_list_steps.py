@@ -155,8 +155,14 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
 
     try:
         if context.mock_time_instances is not None and context.mock_time_instances:
-            with patch("campers.providers.aws.compute.EC2Manager.list_instances") as mock_list, \
-                 patch("campers.providers.aws.compute.EC2Manager.get_volume_size") as mock_volume:
+            with (
+                patch(
+                    "campers.providers.aws.compute.EC2Manager.list_instances"
+                ) as mock_list,
+                patch(
+                    "campers.providers.aws.compute.EC2Manager.get_volume_size"
+                ) as mock_volume,
+            ):
                 mock_list.return_value = context.instances
                 mock_volume.return_value = 0
                 campers.list(region=region)
@@ -760,12 +766,8 @@ def step_output_displays_instances_from_region(context: Context, region: str) ->
 
 
 @given('instance "{instance_id}" in state "{state}"')
-@given(
-    'instance "{instance_id}" in state "{state}" with CampConfig "{camp_config}"'
-)
-@given(
-    'instance "{instance_id}" in state "{state}" with MachineConfig "{camp_config}"'
-)
+@given('instance "{instance_id}" in state "{state}" with CampConfig "{camp_config}"')
+@given('instance "{instance_id}" in state "{state}" with MachineConfig "{camp_config}"')
 def step_instance_in_state(
     context: Context, instance_id: str, state: str, camp_config: str | None = None
 ) -> None:

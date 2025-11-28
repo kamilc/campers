@@ -430,7 +430,9 @@ def cleanup_sshtunnel_processes() -> None:
             except FileNotFoundError:
                 break
             except Exception as e:
-                logger.debug(f"Error searching for sshtunnel processes ({pattern}): {e}")
+                logger.debug(
+                    f"Error searching for sshtunnel processes ({pattern}): {e}"
+                )
 
         if not all_pids:
             logger.debug("No lingering sshtunnel processes found")
@@ -502,7 +504,9 @@ def cleanup_test_ports(port_list: list[int]) -> None:
                             killed_pids.append(pid)
                             logger.debug(f"Killed process {pid} using port {port}")
                         except subprocess.TimeoutExpired:
-                            logger.warning(f"Timeout killing process {pid} on port {port}")
+                            logger.warning(
+                                f"Timeout killing process {pid} on port {port}"
+                            )
                         except Exception as e:
                             logger.warning(
                                 f"Failed to kill process {pid} on port {port}: {e}"
@@ -538,9 +542,7 @@ def cleanup_test_ports(port_list: list[int]) -> None:
                 ["lsof", "-i", f":{port}"], capture_output=True, text=True
             )
             owner_info = owner_result.stdout.strip() if owner_result.stdout else ""
-            message = (
-                f"Port {port} remains in use after cleanup attempts. Owner info: {owner_info}"
-            )
+            message = f"Port {port} remains in use after cleanup attempts. Owner info: {owner_info}"
             logger.error(message)
             raise RuntimeError(message)
 
@@ -596,6 +598,7 @@ def before_all(context: Context) -> None:
     cleanup_test_ports(test_ports)
 
     import time
+
     logger.info("Waiting 2 seconds for OS to release ports...")
     time.sleep(2)
 
@@ -627,17 +630,23 @@ def before_all(context: Context) -> None:
             )
             all_instances = ec2_manager.list_instances(region_filter=None)
             if all_instances:
-                logger.info(f"Cleaning up {len(all_instances)} stale instances from LocalStack")
+                logger.info(
+                    f"Cleaning up {len(all_instances)} stale instances from LocalStack"
+                )
                 for instance in all_instances:
                     try:
                         ec2_manager.terminate_instance(instance["instance_id"])
-                        logger.info(f"Terminated stale instance: {instance['instance_id']}")
+                        logger.info(
+                            f"Terminated stale instance: {instance['instance_id']}"
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to terminate stale instance: {e}")
             else:
                 logger.info("LocalStack is clean - no stale instances found")
         except Exception as e:
-            logger.debug(f"Could not connect to LocalStack yet (may not be running): {e}")
+            logger.debug(
+                f"Could not connect to LocalStack yet (may not be running): {e}"
+            )
     except Exception as e:
         logger.warning(f"Failed to clean up LocalStack before tests: {e}")
 
@@ -666,7 +675,6 @@ def before_all(context: Context) -> None:
     spec.loader.exec_module(campers_module)
 
     context.campers_module = campers_module
-
 
     logging.info("Installing campers in editable mode...")
     result = subprocess.run(
@@ -739,6 +747,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         os.environ["CAMPERS_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
 
         import time
+
         time.sleep(2)
 
         try:
@@ -756,7 +765,9 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                 for instance in all_instances:
                     try:
                         ec2_manager.terminate_instance(instance["instance_id"])
-                        logger.info(f"Terminated stale instance: {instance['instance_id']}")
+                        logger.info(
+                            f"Terminated stale instance: {instance['instance_id']}"
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to terminate stale instance: {e}")
             else:
@@ -1141,7 +1152,10 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
 
     try:
         instance_ids_to_terminate = []
-        if hasattr(context, "state_test_instance_id") and context.state_test_instance_id:
+        if (
+            hasattr(context, "state_test_instance_id")
+            and context.state_test_instance_id
+        ):
             instance_ids_to_terminate.append(context.state_test_instance_id)
 
         if hasattr(context, "test_instance_id") and context.test_instance_id:
@@ -1170,7 +1184,9 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                             InstanceIds=[instance_id]
                         )
                     except Exception as e:
-                        logger.warning(f"Failed to terminate instance {instance_id}: {e}")
+                        logger.warning(
+                            f"Failed to terminate instance {instance_id}: {e}"
+                        )
 
         if hasattr(context, "state_test_instance_name"):
             delattr(context, "state_test_instance_name")
@@ -1511,11 +1527,15 @@ def before_feature(context: Context, feature) -> None:
                 for instance in all_instances:
                     try:
                         ec2_manager.terminate_instance(instance["instance_id"])
-                        logger.info(f"Terminated stale instance: {instance['instance_id']}")
+                        logger.info(
+                            f"Terminated stale instance: {instance['instance_id']}"
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to terminate stale instance: {e}")
             else:
-                logger.info("LocalStack is clean - no stale instances found at feature start")
+                logger.info(
+                    "LocalStack is clean - no stale instances found at feature start"
+                )
         except Exception as e:
             print(f"DEBUG: exception in cleanup: {e}")
             logger.debug(f"Could not connect to LocalStack: {e}")

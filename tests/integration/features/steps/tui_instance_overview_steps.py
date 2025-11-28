@@ -148,15 +148,16 @@ def step_view_tui(context: Context) -> None:
     )
 
     if is_localstack:
+
         def localstack_client_factory(service: str, **kwargs: Any) -> Any:
             kwargs.setdefault("endpoint_url", "http://localhost:4566")
             return boto3.client(service, **kwargs)
 
-        def localstack_ec2_factory(region: str = "us-east-1", **kwargs: Any) -> EC2Manager:
+        def localstack_ec2_factory(
+            region: str = "us-east-1", **kwargs: Any
+        ) -> EC2Manager:
             return EC2Manager(
-                region=region,
-                boto3_client_factory=localstack_client_factory,
-                **kwargs
+                region=region, boto3_client_factory=localstack_client_factory, **kwargs
             )
 
         campers = context.campers_module.Campers(
@@ -236,9 +237,9 @@ def step_launch_new_instance(context: Context) -> None:
 @then('overview widget shows "{expected_text}"')
 def step_overview_widget_shows_text(context: Context, expected_text: str) -> None:
     """Verify overview widget displays expected text."""
-    assert (
-        context.overview_widget_text == expected_text
-    ), f"Expected '{expected_text}', got '{context.overview_widget_text}'"
+    assert context.overview_widget_text == expected_text, (
+        f"Expected '{expected_text}', got '{context.overview_widget_text}'"
+    )
 
 
 @then("overview widget daily cost is approximately ${expected_cost:f}")

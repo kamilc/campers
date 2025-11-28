@@ -73,9 +73,7 @@ class TestPricingParsers:
             "terms": {
                 "OnDemand": {
                     "OFFER789": {
-                        "priceDimensions": {
-                            "DIM101": {"pricePerUnit": {"USD": "0.08"}}
-                        }
+                        "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}
                     }
                 }
             }
@@ -178,9 +176,7 @@ class TestPricingService:
                 }
             }
         }
-        mock_pricing.get_products.return_value = {
-            "PriceList": [json.dumps(price_data)]
-        }
+        mock_pricing.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
         mock_boto_client.return_value = mock_pricing
 
         service = PricingService(use_cache=False)
@@ -225,9 +221,7 @@ class TestPricingService:
                 }
             }
         }
-        mock_pricing.get_products.return_value = {
-            "PriceList": [json.dumps(price_data)]
-        }
+        mock_pricing.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
         mock_boto_client.return_value = mock_pricing
 
         service = PricingService(use_cache=True)
@@ -259,16 +253,12 @@ class TestPricingService:
             "terms": {
                 "OnDemand": {
                     "OFFER789": {
-                        "priceDimensions": {
-                            "DIM101": {"pricePerUnit": {"USD": "0.08"}}
-                        }
+                        "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}
                     }
                 }
             }
         }
-        mock_pricing.get_products.return_value = {
-            "PriceList": [json.dumps(price_data)]
-        }
+        mock_pricing.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
         mock_boto_client.return_value = mock_pricing
 
         service = PricingService(use_cache=False)
@@ -303,16 +293,12 @@ class TestPricingService:
             "terms": {
                 "OnDemand": {
                     "OFFER789": {
-                        "priceDimensions": {
-                            "DIM101": {"pricePerUnit": {"USD": "0.08"}}
-                        }
+                        "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}
                     }
                 }
             }
         }
-        mock_pricing.get_products.return_value = {
-            "PriceList": [json.dumps(price_data)]
-        }
+        mock_pricing.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
         mock_boto_client.return_value = mock_pricing
 
         service = PricingService(use_cache=True)

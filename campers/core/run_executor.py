@@ -12,13 +12,12 @@ from pathlib import Path
 from typing import Any
 
 from campers.cli import apply_cli_overrides
+from campers.constants import SYNC_TIMEOUT
 from campers.services.ansible import AnsibleManager
 from campers.services.portforward import PortForwardManager
 from campers.services.ssh import get_ssh_connection_info
 from campers.services.sync import MutagenManager
 from campers.utils import generate_instance_name
-
-SYNC_TIMEOUT = 300
 
 
 class RunExecutor:

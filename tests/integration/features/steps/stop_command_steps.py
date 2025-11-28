@@ -152,8 +152,12 @@ def step_run_stop_command_impl(
         else:
             mock_list.return_value = filtered_instances
 
-        with patch("campers.providers.aws.compute.EC2Manager.stop_instance") as mock_stop:
-            with patch("campers.providers.aws.compute.EC2Manager.get_volume_size") as mock_get_volume:
+        with patch(
+            "campers.providers.aws.compute.EC2Manager.stop_instance"
+        ) as mock_stop:
+            with patch(
+                "campers.providers.aws.compute.EC2Manager.get_volume_size"
+            ) as mock_get_volume:
                 if context.terminate_runtime_error is not None:
                     mock_stop.side_effect = context.terminate_runtime_error
                 elif context.terminate_client_error is not None:

@@ -37,9 +37,7 @@ def initialized_widget(mock_campers, mock_ec2_manager, mock_pricing_service):
 
     mock_campers._compute_provider_factory.return_value = mock_ec2_manager
 
-    with patch.object(
-        InstanceOverviewWidget, "app", new_callable=lambda: Mock()
-    ):
+    with patch.object(InstanceOverviewWidget, "app", new_callable=lambda: Mock()):
         widget = InstanceOverviewWidget(mock_campers)
         widget.ec2_manager = mock_ec2_manager
         widget.pricing_service = mock_pricing_service
@@ -248,7 +246,10 @@ def test_refresh_stats_shows_na_when_all_prices_none(
         initialized_widget._refresh_stats_sync()
 
         assert initialized_widget.daily_cost is None
-        assert initialized_widget.render_stats() == "Instances - Running: 1  Stopped: 0  N/A"
+        assert (
+            initialized_widget.render_stats()
+            == "Instances - Running: 1  Stopped: 0  N/A"
+        )
 
 
 def test_refresh_stats_skips_when_not_initialized(mock_campers, mock_ec2_manager):

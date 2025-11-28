@@ -156,6 +156,7 @@ def step_simulate_running_machine_in_tui(context: Context, camp_name: str) -> No
             from tests.integration.features.steps.port_forwarding_steps import (
                 start_http_servers_for_machine_ports,
             )
+
             logger.info(f"Starting HTTP servers for machine: {camp_name}")
             start_http_servers_for_machine_ports(context)
 
@@ -218,10 +219,10 @@ def setup_test_environment(
     }
 
     behave_context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "0")
-    behave_context.harness.services.configuration_env.set("CAMPERS_HARNESS_MANAGED", "1")
     behave_context.harness.services.configuration_env.set(
-        "CAMPERS_CONFIG", config_path
+        "CAMPERS_HARNESS_MANAGED", "1"
     )
+    behave_context.harness.services.configuration_env.set("CAMPERS_CONFIG", config_path)
 
     for key in [
         "AWS_ENDPOINT_URL",

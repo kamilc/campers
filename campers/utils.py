@@ -204,5 +204,3 @@ def truncate_name(name: str, max_width: int = 19) -> str:
         return name[: max_width - 3] + "..."
 
     return name
-
-

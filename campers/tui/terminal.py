@@ -1,11 +1,14 @@
 """Terminal background color detection."""
 
+import logging
 import re
 import select
 import sys
 import termios
 import time
 import tty
+
+logger = logging.getLogger(__name__)
 
 
 def detect_terminal_background() -> tuple[str, bool]:
@@ -53,7 +56,7 @@ def detect_terminal_background() -> tuple[str, bool]:
 
             return (bg_color, is_light)
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Terminal background detection failed: %s", e)
 
     return ("#000000", False)

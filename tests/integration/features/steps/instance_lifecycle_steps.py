@@ -391,6 +391,7 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
                         context.started_instance_id = matches[0]["instance_id"]
 
                 import re
+
                 ip_match = re.search(r"Public IP:\s+([^\s]+)", result.stdout)
                 if ip_match:
                     context.current_public_ip = ip_match.group(1)
@@ -1395,10 +1396,12 @@ def step_create_multiple_instances(context: Context) -> None:
 
     if not hasattr(context, "created_instance_ids"):
         context.created_instance_ids = []
-    context.created_instance_ids.extend([
-        instance_details_1["instance_id"],
-        instance_details_2["instance_id"],
-    ])
+    context.created_instance_ids.extend(
+        [
+            instance_details_1["instance_id"],
+            instance_details_2["instance_id"],
+        ]
+    )
 
 
 @given('instance "{instance_id}" is running')
@@ -1480,6 +1483,7 @@ def step_run_campers_run(context: Context, camp_name: str) -> None:
     if instance_name:
         matches = ec2_manager.find_instances_by_name_or_id(instance_name)
         import logging
+
         logging.info(
             f"DEBUG step_run_campers_run: instance_name={instance_name}, "
             f"matches={len(matches)}, "
@@ -1513,6 +1517,7 @@ def step_run_campers_run(context: Context, camp_name: str) -> None:
         elif len(matches) == 1 and matches[0]["state"] == "stopped":
             instance_id = matches[0]["instance_id"]
             import logging
+
             logging.info(f"DEBUG: Calling start_instance for {instance_id}")
             ec2_manager.start_instance(instance_id)
             logging.info(f"DEBUG: start_instance completed for {instance_id}")

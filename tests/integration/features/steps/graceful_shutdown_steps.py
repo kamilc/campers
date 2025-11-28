@@ -151,13 +151,9 @@ def step_instance_running_with_all_resources(context: Context) -> None:
         temp_file.close()
         context.temp_config_file = temp_file.name
 
-        context.harness.services.configuration_env.set(
-            "CAMPERS_CONFIG", temp_file.name
-        )
+        context.harness.services.configuration_env.set("CAMPERS_CONFIG", temp_file.name)
         context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "0")
-        context.harness.services.configuration_env.set(
-            "CAMPERS_FORCE_SIGNAL_EXIT", "1"
-        )
+        context.harness.services.configuration_env.set("CAMPERS_FORCE_SIGNAL_EXIT", "1")
         os.environ["CAMPERS_FORCE_SIGNAL_EXIT"] = "1"
         context.harness.services.configuration_env.set("CAMPERS_DISABLE_MUTAGEN", "1")
         os.environ["CAMPERS_DISABLE_MUTAGEN"] = "1"
@@ -245,13 +241,9 @@ def step_instance_launch_in_progress(context: Context) -> None:
         temp_file.close()
         context.temp_config_file = temp_file.name
 
-        context.harness.services.configuration_env.set(
-            "CAMPERS_CONFIG", temp_file.name
-        )
+        context.harness.services.configuration_env.set("CAMPERS_CONFIG", temp_file.name)
         context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "0")
-        context.harness.services.configuration_env.set(
-            "CAMPERS_FORCE_SIGNAL_EXIT", "1"
-        )
+        context.harness.services.configuration_env.set("CAMPERS_FORCE_SIGNAL_EXIT", "1")
         os.environ["CAMPERS_FORCE_SIGNAL_EXIT"] = "1"
         context.harness.services.configuration_env.set("CAMPERS_DISABLE_MUTAGEN", "1")
         os.environ["CAMPERS_DISABLE_MUTAGEN"] = "1"

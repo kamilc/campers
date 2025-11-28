@@ -16,9 +16,7 @@ def step_setup_completed_successfully(context: Context) -> None:
         Behave context
     """
     if not hasattr(context, "patched_ec2_client"):
-        raise AssertionError(
-            '"campers setup" precondition requires patched_ec2_client'
-        )
+        raise AssertionError('"campers setup" precondition requires patched_ec2_client')
 
     context.setup_user_input = "n"
     execute_command_direct(context, "setup")

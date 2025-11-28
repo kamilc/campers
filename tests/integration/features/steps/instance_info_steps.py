@@ -101,16 +101,18 @@ def step_running_instance_with_camp(context: Context, camp_name: str) -> None:
     if not hasattr(context, "instances") or context.instances is None:
         context.instances = []
 
-    context.instances.append({
-        "instance_id": instance.id,
-        "name": f"campers-{unique_id}",
-        "state": "running",
-        "region": region,
-        "instance_type": "t3.medium",
-        "launch_time": instance.launch_time,
-        "camp_config": camp_name,
-        "unique_id": unique_id,
-    })
+    context.instances.append(
+        {
+            "instance_id": instance.id,
+            "name": f"campers-{unique_id}",
+            "state": "running",
+            "region": region,
+            "instance_type": "t3.medium",
+            "launch_time": instance.launch_time,
+            "camp_config": camp_name,
+            "unique_id": unique_id,
+        }
+    )
 
     if context.config_data is None:
         context.config_data = {}
@@ -124,7 +126,7 @@ def step_running_instance_with_camp(context: Context, camp_name: str) -> None:
     }
 
 
-@given('I have a running instance launched {duration} ago')
+@given("I have a running instance launched {duration} ago")
 def step_running_instance_launched_ago(context: Context, duration: str) -> None:
     """Create a running instance that was launched specified duration ago.
 
@@ -165,10 +167,9 @@ def step_output_contains_launch_time(context: Context) -> None:
     log_output = get_combined_log_output(context)
     combined_output = context.stdout + context.stderr + log_output
 
-    assert (
-        "launch" in combined_output.lower()
-        or "time" in combined_output.lower()
-    ), f"Expected launch time information in output:\n{combined_output}"
+    assert "launch" in combined_output.lower() or "time" in combined_output.lower(), (
+        f"Expected launch time information in output:\n{combined_output}"
+    )
 
 
 @then("output contains ISO timestamp")
@@ -185,9 +186,7 @@ def step_output_contains_iso_timestamp(context: Context) -> None:
 
     iso_pattern = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"
     match = re.search(iso_pattern, combined_output)
-    assert match is not None, (
-        f"Expected ISO timestamp in output:\n{combined_output}"
-    )
+    assert match is not None, f"Expected ISO timestamp in output:\n{combined_output}"
     context.found_iso_timestamp = match.group()
 
 
@@ -208,9 +207,9 @@ def step_timestamp_is_recent(context: Context) -> None:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     time_diff = now - found_time
-    assert (
-        time_diff < timedelta(minutes=5)
-    ), f"Timestamp {timestamp_str} is not recent (diff: {time_diff})"
+    assert time_diff < timedelta(minutes=5), (
+        f"Timestamp {timestamp_str} is not recent (diff: {time_diff})"
+    )
 
 
 @then("output contains unique identifier")
@@ -261,9 +260,9 @@ def step_output_contains_key_file(context: Context) -> None:
     log_output = get_combined_log_output(context)
     combined_output = context.stdout + context.stderr + log_output
 
-    assert (
-        ".pem" in combined_output or "key" in combined_output.lower()
-    ), f"Expected key file path in output:\n{combined_output}"
+    assert ".pem" in combined_output or "key" in combined_output.lower(), (
+        f"Expected key file path in output:\n{combined_output}"
+    )
 
 
 @then("key file path matches expected format")
@@ -279,9 +278,9 @@ def step_key_file_path_format(context: Context) -> None:
     combined_output = context.stdout + context.stderr + log_output
 
     key_file_pattern = r"~?/?\.?campers/keys/[a-f0-9]{12}\.pem"
-    assert re.search(
-        key_file_pattern, combined_output
-    ), f"Expected key file path matching pattern in output:\n{combined_output}"
+    assert re.search(key_file_pattern, combined_output), (
+        f"Expected key file path matching pattern in output:\n{combined_output}"
+    )
 
 
 @then("output contains uptime information")
@@ -331,6 +330,6 @@ def step_uptime_is_approximate(context: Context, duration: str) -> None:
     actual_minutes = int(match.group(1))
     tolerance = max(2, expected_minutes // 5)
 
-    assert (
-        abs(actual_minutes - expected_minutes) <= tolerance
-    ), f"Expected ~{expected_minutes}m uptime but got {actual_minutes}m"
+    assert abs(actual_minutes - expected_minutes) <= tolerance, (
+        f"Expected ~{expected_minutes}m uptime but got {actual_minutes}m"
+    )
