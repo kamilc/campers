@@ -7,12 +7,11 @@ import shlex
 import socket
 import time
 
-import boto3
 import paramiko
 from paramiko.channel import Channel, ChannelFile
 
 from campers.constants import MAX_COMMAND_LENGTH
-from campers.utils import is_localstack_endpoint, validate_port
+from campers.providers.aws.ssh import get_aws_ssh_connection_info
 
 logger = logging.getLogger(__name__)
 
@@ -22,26 +21,13 @@ def get_ssh_connection_info(
 ) -> tuple[str, int, str]:
     """Determine SSH connection host, port, and key file.
 
-    Standard AWS path: If instance has a public IP, returns (public_ip, 22,
-    key_file) using standard AWS configuration. This is the normal path for
-    production AWS users and development on real EC2 instances.
-
-    LocalStack path: If instance has no public IP and LocalStack is detected
-    via boto3 endpoint URL inspection, reads SSH connection details from EC2
-    instance tags (CampersSSHHost, CampersSSHPort, CampersSSHKeyFile).
-    This enables high-fidelity BDD testing against LocalStack.
-
-    LocalStack detection is defensive: checks actual boto3 endpoint URL for
-    "localstack" or ":4566" (default LocalStack port) rather than using
-    environment variables or test mode flags. Real AWS users with public-facing
-    instances never trigger this code path because they have public IPs. For
-    production use cases requiring private subnets, standard SSH proxy patterns
-    apply (bastion hosts, VPNs, etc.).
+    Delegates to provider-specific SSH resolution. Currently only AWS is
+    supported, but this interface allows for multi-cloud support in the future.
 
     Parameters
     ----------
     instance_id : str
-        EC2 instance ID
+        Instance ID
     public_ip : str
         Instance public IP address
     key_file : str
@@ -55,83 +41,13 @@ def get_ssh_connection_info(
     Raises
     ------
     ValueError
-        If instance has no public IP address and LocalStack is not detected
+        If SSH connection details cannot be determined
     """
-    logger.info(
-        f"get_ssh_connection_info: instance_id={instance_id}, public_ip={public_ip!r}"
-    )
-
-    if public_ip:
-        return public_ip, 22, key_file
-
-    logger.info(
-        f"Instance {instance_id} has no public IP, checking for SSH tags in LocalStack"
-    )
-
-    try:
-        ec2_client = boto3.client("ec2")
-        logger.info(f"EC2 endpoint: {ec2_client.meta.endpoint_url}")
-
-        if is_localstack_endpoint(ec2_client):
-            logger.info("Detected LocalStack endpoint")
-            max_retries = 10
-            retry_delay = 0.5
-
-            for attempt in range(max_retries):
-                response = ec2_client.describe_tags(
-                    Filters=[
-                        {"Name": "resource-id", "Values": [instance_id]},
-                        {
-                            "Name": "key",
-                            "Values": [
-                                "CampersSSHHost",
-                                "CampersSSHPort",
-                                "CampersSSHKeyFile",
-                            ],
-                        },
-                    ]
-                )
-
-                tags = {tag["Key"]: tag["Value"] for tag in response.get("Tags", [])}
-
-                if (
-                    "CampersSSHHost" in tags
-                    and "CampersSSHPort" in tags
-                    and "CampersSSHKeyFile" in tags
-                ):
-                    host = tags["CampersSSHHost"]
-                    try:
-                        port = int(tags["CampersSSHPort"])
-                        validate_port(port)
-                    except (ValueError, TypeError) as e:
-                        logger.error("Invalid SSH port in tags: %s", e)
-                        raise ValueError(
-                            f"Invalid SSH port in instance tags: {e}"
-                        ) from e
-                    tag_key_file = tags["CampersSSHKeyFile"]
-                    logger.info(
-                        f"Using tag-based SSH config for {instance_id}: {host}:{port}"
-                    )
-                    return host, port, tag_key_file
-
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-
-            logger.warning(
-                f"SSH tags not found for {instance_id} after {max_retries} attempts"
-            )
-
-    except Exception as e:
-        logger.warning(f"Failed to read SSH tags from instance {instance_id}: {e}")
-
-    raise ValueError(
-        f"Instance {instance_id} does not have a public IP address. "
-        "SSH connection requires public networking configuration."
-    )
+    return get_aws_ssh_connection_info(instance_id, public_ip, key_file)
 
 
 class SSHManager:
-    """Manages SSH connections and command execution on EC2 instances.
+    """Manages SSH connections and command execution on cloud instances.
 
     Parameters
     ----------

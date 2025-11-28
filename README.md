@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Remote development environments on AWS EC2</strong>
+  <strong>Remote development environments on the cloud</strong>
 </p>
 
 <p align="center">
@@ -16,11 +16,11 @@
 
 ---
 
-Campers is a command-line tool for managing remote development environments on AWS EC2. It handles the full lifecycle of cloud development machines: provisioning instances, synchronizing files, forwarding ports, and executing commands.
+Campers is a command-line tool for managing remote development environments on the cloud. It handles the full lifecycle of cloud development machines: provisioning instances, synchronizing files, forwarding ports, and executing commands.
 
 ## Features
 
-- **Instance Management**: Launch, stop, start, and destroy EC2 instances with a single command
+- **Instance Management**: Launch, stop, start, and destroy cloud instances with a single command
 - **File Synchronization**: Bidirectional sync between local and remote directories using Mutagen
 - **Port Forwarding**: Automatic SSH tunnels for accessing remote services (Jupyter, databases, etc.)
 - **Ansible Provisioning**: Declarative, idempotent instance setup with reusable playbooks

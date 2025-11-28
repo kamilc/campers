@@ -162,6 +162,10 @@ class RunExecutor:
                 instance_details, merged_config, update_queue
             )
 
+            if ssh_manager is None:
+                logging.debug("Cleanup in progress, aborting further operations")
+                return instance_details
+
             env_vars = ssh_manager.filter_environment_variables(
                 merged_config.get("env_filter")
             )

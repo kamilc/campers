@@ -15,9 +15,9 @@ from typing import Any, Callable
 from campers.core.signals import set_cleanup_instance, setup_signal_handlers
 from campers.core.cleanup import CleanupManager
 from campers.core.run_executor import RunExecutor
-from campers.core.setup import SetupManager
 from campers.core.interfaces import ComputeProvider
 from campers.lifecycle import LifecycleManager
+from campers.providers.aws.setup import SetupManager
 
 setup_signal_handlers()
 

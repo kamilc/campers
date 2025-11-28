@@ -281,6 +281,89 @@ class CleanupManager:
 
             self._emit_cleanup_event("terminate_mutagen", "failed")
 
+    def _cleanup_instance_helper(
+        self,
+        resources_to_clean: dict[str, Any],
+        errors: list[Exception],
+        action: str,
+    ) -> None:
+        """Helper method for common cleanup logic between stop and terminate operations.
+
+        Parameters
+        ----------
+        resources_to_clean : dict[str, Any]
+            Dictionary of resources to clean up
+        errors : list[Exception]
+            List to accumulate errors during cleanup
+        action : str
+            Action to perform: 'stop' or 'terminate'
+
+        Notes
+        -----
+        Handles extraction of instance_id with None checks and emits appropriate
+        cleanup events. Common logic for both stop_instance_cleanup and
+        terminate_instance_cleanup methods.
+        """
+        if "instance_details" not in resources_to_clean:
+            if action == "stop":
+                logging.debug("No instance to stop - launch may not have completed")
+            else:
+                logging.debug(
+                    "No instance to terminate - launch may not have completed"
+                )
+            return
+
+        instance_details = resources_to_clean["instance_details"]
+        instance_id = instance_details.get("InstanceId") or instance_details.get(
+            "instance_id"
+        )
+
+        if instance_id is None:
+            logging.warning("Cannot %s instance: instance_id is None", action)
+            return
+
+        status_map = {"stop": "stopping", "terminate": "terminating"}
+        event_action = f"{action}_instance"
+        status_value = status_map.get(action, action)
+
+        logging.info("Cleaning up cloud instance %s...", instance_id)
+
+        if self.update_queue is not None:
+            self.update_queue.put(
+                {"type": "status_update", "payload": {"status": status_value}}
+            )
+            time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
+
+        self._emit_cleanup_event(event_action, "in_progress")
+
+        try:
+            compute_provider = resources_to_clean.get("compute_provider")
+            if compute_provider:
+                if action == "stop":
+                    compute_provider.stop_instance(instance_id)
+                    logging.info("Cloud instance stopped successfully")
+                    volume_size = compute_provider.get_volume_size(instance_id)
+                    storage_rate = self._get_storage_rate(compute_provider.region)
+                    storage_cost = (
+                        float(volume_size) * storage_rate
+                        if volume_size is not None
+                        else 0.0
+                    )
+
+                    print("\nInstance stopped successfully")
+                    print(f"  Instance ID: {instance_id}")
+                    print(f"  Estimated storage cost: ~${storage_cost:.2f}/month")
+                    print(f"  Restart with: campers start {instance_id}")
+                else:
+                    compute_provider.terminate_instance(instance_id)
+                    logging.info("Cloud instance terminated successfully")
+
+                self._emit_cleanup_event(event_action, "completed")
+        except Exception as e:
+            logging.error("Error %sing instance: %s", action, e)
+            errors.append(e)
+            self._emit_cleanup_event(event_action, "failed")
+
     def stop_instance_cleanup(self, signum: int | None = None) -> None:
         """Stop instance while preserving resources for later restart.
 
@@ -323,47 +406,7 @@ class CleanupManager:
             self.cleanup_mutagen_session(resources_to_clean, errors)
             self.cleanup_ssh_connections(resources_to_clean, errors)
 
-            if "instance_details" not in resources_to_clean:
-                logging.debug("No instance to stop - launch may not have completed")
-            else:
-                instance_details = resources_to_clean["instance_details"]
-                instance_id = instance_details.get(
-                    "InstanceId"
-                ) or instance_details.get("instance_id")
-                logging.info("Stopping cloud instance %s...", instance_id)
-
-                if self.update_queue is not None:
-                    self.update_queue.put(
-                        {"type": "status_update", "payload": {"status": "stopping"}}
-                    )
-                    time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
-
-                self._emit_cleanup_event("stop_instance", "in_progress")
-
-                try:
-                    compute_provider = resources_to_clean.get("compute_provider")
-                    if compute_provider:
-                        compute_provider.stop_instance(instance_id)
-                        logging.info("Cloud instance stopped successfully")
-                        volume_size = compute_provider.get_volume_size(instance_id)
-                        storage_rate = self._get_storage_rate(compute_provider.region)
-                        storage_cost = (
-                            float(volume_size) * storage_rate
-                            if volume_size is not None
-                            else 0.0
-                        )
-
-                        print("\nInstance stopped successfully")
-                        print(f"  Instance ID: {instance_id}")
-                        print(f"  Estimated storage cost: ~${storage_cost:.2f}/month")
-                        print(f"  Restart with: campers start {instance_id}")
-
-                    self._emit_cleanup_event("stop_instance", "completed")
-                except Exception as e:
-                    logging.error("Error stopping instance: %s", e)
-                    errors.append(e)
-
-                    self._emit_cleanup_event("stop_instance", "failed")
+            self._cleanup_instance_helper(resources_to_clean, errors, "stop")
 
             if errors:
                 logging.info("Cleanup completed with %s errors", len(errors))
@@ -413,37 +456,7 @@ class CleanupManager:
             self.cleanup_mutagen_session(resources_to_clean, errors)
             self.cleanup_ssh_connections(resources_to_clean, errors)
 
-            if "instance_details" not in resources_to_clean:
-                logging.debug(
-                    "No instance to terminate - launch may not have completed"
-                )
-            else:
-                instance_details = resources_to_clean["instance_details"]
-                instance_id = instance_details.get(
-                    "InstanceId"
-                ) or instance_details.get("instance_id")
-                logging.info("Terminating cloud instance %s...", instance_id)
-
-                if self.update_queue is not None:
-                    self.update_queue.put(
-                        {"type": "status_update", "payload": {"status": "terminating"}}
-                    )
-                    time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
-
-                self._emit_cleanup_event("terminate_instance", "in_progress")
-
-                try:
-                    compute_provider = resources_to_clean.get("compute_provider")
-                    if compute_provider:
-                        compute_provider.terminate_instance(instance_id)
-                        logging.info("Cloud instance terminated successfully")
-
-                    self._emit_cleanup_event("terminate_instance", "completed")
-                except Exception as e:
-                    logging.error("Error terminating instance: %s", e)
-                    errors.append(e)
-
-                    self._emit_cleanup_event("terminate_instance", "failed")
+            self._cleanup_instance_helper(resources_to_clean, errors, "terminate")
 
             if errors:
                 logging.info("Cleanup completed with %s errors", len(errors))

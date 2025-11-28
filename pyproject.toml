@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "campers"
 version = "0.1.0"
-description = "CLI tool for managing remote development environments on AWS EC2"
+description = "CLI tool for managing remote development environments on the cloud"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.12"
-keywords = ["aws", "ec2", "development", "remote", "cloud", "ssh", "ansible"]
+keywords = ["development", "remote", "cloud", "ssh", "ansible", "aws", "ec2"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
