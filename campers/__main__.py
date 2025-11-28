@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Campers - EC2 remote development tool."""
+"""Campers - cloud remote development tool."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ class Campers:
 
     def __init__(
         self,
-        ec2_manager_factory: Any | None = None,
+        compute_provider_factory: Any | None = None,
         ssh_manager_factory: Any | None = None,
         boto3_client_factory: Any | None = None,
         boto3_resource_factory: Any | None = None,
@@ -64,7 +64,7 @@ class Campers:
         self._boto3_client_factory = boto3_client_factory or boto3.client
         self._boto3_resource_factory = boto3_resource_factory or boto3.resource
 
-        self._ec2_manager_factory_override = ec2_manager_factory
+        self._compute_provider_factory_override = compute_provider_factory
 
         self._ssh_manager_factory = ssh_manager_factory or SSHManager
 
@@ -91,10 +91,10 @@ class Campers:
         set_cleanup_instance(self)
 
     @property
-    def ec2_manager_factory(self) -> Any:
-        """Get the EC2 manager factory."""
-        if self._ec2_manager_factory_override is not None:
-            return self._ec2_manager_factory_override
+    def compute_provider_factory(self) -> Any:
+        """Get the compute provider factory."""
+        if self._compute_provider_factory_override is not None:
+            return self._compute_provider_factory_override
         return self._create_compute_provider
 
     def _create_compute_provider(self, region: str) -> Any:
@@ -114,7 +114,17 @@ class Campers:
     def run_executor(self) -> RunExecutor:
         """Get the run executor instance."""
         if self._run_executor is None:
-            self._run_executor = RunExecutor(config_loader=self._config_loader, ec2_manager_factory=self.ec2_manager_factory, ssh_manager_factory=self._ssh_manager_factory, resources=self._resources, resources_lock=self._resources_lock, cleanup_in_progress_getter=lambda: self.cleanup_in_progress, update_queue=self._update_queue, mutagen_manager_factory=self._mutagen_manager_factory, portforward_manager_factory=self._portforward_manager_factory)
+            self._run_executor = RunExecutor(
+                config_loader=self._config_loader,
+                compute_provider_factory=self.compute_provider_factory,
+                ssh_manager_factory=self._ssh_manager_factory,
+                resources=self._resources,
+                resources_lock=self._resources_lock,
+                cleanup_in_progress_getter=lambda: self.cleanup_in_progress,
+                update_queue=self._update_queue,
+                mutagen_manager_factory=self._mutagen_manager_factory,
+                portforward_manager_factory=self._portforward_manager_factory,
+            )
         return self._run_executor
 
     def _validate_region_wrapper(self, region: str) -> None:
@@ -124,17 +134,30 @@ class Campers:
     def lifecycle_manager(self) -> LifecycleManager:
         """Get the lifecycle manager instance."""
         if self._lifecycle_manager is None:
-            self._lifecycle_manager = LifecycleManager(config_loader=self._config_loader, ec2_manager_factory=self.ec2_manager_factory, log_and_print_error=log_and_print_error, validate_region=self._validate_region_wrapper, truncate_name=truncate_name)
+            self._lifecycle_manager = LifecycleManager(
+                config_loader=self._config_loader,
+                compute_provider_factory=self.compute_provider_factory,
+                log_and_print_error=log_and_print_error,
+                validate_region=self._validate_region_wrapper,
+                truncate_name=truncate_name,
+            )
         return self._lifecycle_manager
 
     def run(
-        self, camp_name: str | None = None, command: str | None = None,
-        instance_type: str | None = None, disk_size: int | None = None,
-        region: str | None = None, port: str | list[int] | tuple[int, ...] | None = None,
-        include_vcs: str | bool | None = None, ignore: str | None = None,
-        json_output: bool = False, plain: bool = False, verbose: bool = False,
+        self,
+        camp_name: str | None = None,
+        command: str | None = None,
+        instance_type: str | None = None,
+        disk_size: int | None = None,
+        region: str | None = None,
+        port: str | list[int] | tuple[int, ...] | None = None,
+        include_vcs: str | bool | None = None,
+        ignore: str | None = None,
+        json_output: bool = False,
+        plain: bool = False,
+        verbose: bool = False,
     ) -> dict[str, Any] | str:
-        """Launch EC2 instance with file sync and command execution."""
+        """Launch cloud instance with file sync and command execution."""
         is_tty = sys.stdout.isatty()
 
         use_tui = not (plain or json_output or not is_tty)
@@ -178,12 +201,19 @@ class Campers:
         )
 
     def _execute_run(
-        self, camp_name: str | None = None, command: str | None = None,
-        instance_type: str | None = None, disk_size: int | None = None,
-        region: str | None = None, port: str | list[int] | tuple[int, ...] | None = None,
-        include_vcs: str | bool | None = None, ignore: str | None = None,
-        json_output: bool = False, tui_mode: bool = False,
-        update_queue: queue.Queue | None = None, verbose: bool = False,
+        self,
+        camp_name: str | None = None,
+        command: str | None = None,
+        instance_type: str | None = None,
+        disk_size: int | None = None,
+        region: str | None = None,
+        port: str | list[int] | tuple[int, ...] | None = None,
+        include_vcs: str | bool | None = None,
+        ignore: str | None = None,
+        json_output: bool = False,
+        tui_mode: bool = False,
+        update_queue: queue.Queue | None = None,
+        verbose: bool = False,
     ) -> dict[str, Any] | str:
         return self.run_executor.execute(
             camp_name=camp_name,
@@ -291,7 +321,6 @@ class Campers:
             f.write(CONFIG_TEMPLATE)
 
         print(f"Created {config_path} configuration file.")
-
 
 
 if __name__ == "__main__":

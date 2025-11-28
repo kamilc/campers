@@ -140,13 +140,13 @@ def create_cli_test_boto3_factory():
     return mock_boto3_client
 
 
-def create_cli_test_ec2_manager_factory():
-    """Create an EC2Manager factory that returns mock managers for CLI tests.
+def create_cli_test_compute_provider_factory():
+    """Create a compute provider factory that returns mock managers for CLI tests.
 
     Returns
     -------
     callable
-        Factory function that returns mock EC2Manager instances
+        Factory function that returns mock compute provider instances
     """
 
     def mock_ec2_manager(region: str, **kwargs):
@@ -535,12 +535,12 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
         from tests.integration.features.steps.mutagen_mocking import mutagen_mocked
 
         boto3_factory = None
-        ec2_manager_factory = None
+        compute_provider_factory = None
         ssh_manager_factory = None
 
         if is_cli_test and not is_localstack:
             boto3_factory = create_cli_test_boto3_factory()
-            ec2_manager_factory = create_cli_test_ec2_manager_factory()
+            compute_provider_factory = create_cli_test_compute_provider_factory()
             ssh_manager_factory = create_cli_test_ssh_manager_factory()
 
         stderr_capture = io.StringIO()
@@ -560,7 +560,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
 
             with mutagen_mocked(context):
                 cli = CampersCLI(
-                    ec2_manager_factory=ec2_manager_factory,
+                    compute_provider_factory=compute_provider_factory,
                     ssh_manager_factory=ssh_manager_factory,
                     boto3_client_factory=boto3_factory,
                 )

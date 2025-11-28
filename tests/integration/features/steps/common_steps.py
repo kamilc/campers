@@ -69,7 +69,7 @@ def execute_command_direct(
 
             return boto3.client(service_name, region_name=region_name)
 
-    def ec2_manager_factory(region: str) -> FakeEC2Manager:
+    def compute_provider_factory(region: str) -> FakeEC2Manager:
         if not hasattr(context, "fake_ec2_managers"):
             context.fake_ec2_managers = {}
 
@@ -86,12 +86,12 @@ def execute_command_direct(
 
     try:
         campers = Campers(
-            ec2_manager_factory=ec2_manager_factory,
+            compute_provider_factory=compute_provider_factory,
             ssh_manager_factory=FakeSSHManager,
             boto3_client_factory=mock_boto3_client_factory,
         )
 
-        campers._create_ec2_manager = ec2_manager_factory
+        campers._create_compute_provider = compute_provider_factory
 
         ec2_client = getattr(context, "patched_ec2_client", None)
 

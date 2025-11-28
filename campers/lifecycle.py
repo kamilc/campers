@@ -16,18 +16,18 @@ from campers.utils import format_time_ago
 
 
 class LifecycleManager:
-    """Manages EC2 instance lifecycle commands (list, stop, start, destroy, info).
+    """Manages cloud instance lifecycle commands (list, stop, start, destroy, info).
 
     Parameters
     ----------
     config_loader : Any
         Configuration loader instance
-    ec2_manager_factory : Any
-        Factory function to create EC2Manager instances
+    compute_provider_factory : Any
+        Factory function to create compute provider instances
     log_and_print_error : Any
         Function to log and print errors to stderr
     validate_region : Any
-        Function to validate AWS region
+        Function to validate cloud region
     truncate_name : Any
         Function to truncate instance names for display
     """
@@ -35,13 +35,13 @@ class LifecycleManager:
     def __init__(
         self,
         config_loader: Any,
-        ec2_manager_factory: Any,
+        compute_provider_factory: Any,
         log_and_print_error: Any,
         validate_region: Any,
         truncate_name: Any,
     ) -> None:
         self.config_loader = config_loader
-        self.ec2_manager_factory = ec2_manager_factory
+        self.compute_provider_factory = compute_provider_factory
         self.log_and_print_error = log_and_print_error
         self.validate_region = validate_region
         self.truncate_name = truncate_name
@@ -54,9 +54,9 @@ class LifecycleManager:
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID or MachineConfig name
+            Instance ID or MachineConfig name
         region : str | None
-            Optional AWS region to narrow search
+            Optional cloud region to narrow search
         operation_name : str
             Name of operation for error messages
 
@@ -66,7 +66,7 @@ class LifecycleManager:
             Instance details if found and unique, None if not found, exits if multiple matches
         """
         default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
-        search_manager = self.ec2_manager_factory(region=region or default_region)
+        search_manager = self.compute_provider_factory(region=region or default_region)
         matches = search_manager.find_instances_by_name_or_id(
             name_or_id=name_or_id, region_filter=region
         )
@@ -97,21 +97,21 @@ class LifecycleManager:
         return matches[0]
 
     def list(self, region: str | None = None) -> None:
-        """List all campers-managed EC2 instances.
+        """List all campers-managed cloud instances.
 
         Parameters
         ----------
         region : str | None
-            Optional AWS region to filter results
+            Optional cloud region to filter results
 
         Raises
         ------
         NoCredentialsError
-            If AWS credentials are not configured
+            If cloud credentials are not configured
         ClientError
-            If AWS API calls fail
+            If cloud API calls fail
         ValueError
-            If provided region is not a valid AWS region
+            If provided region is not a valid cloud region
         """
         default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
 
@@ -119,8 +119,8 @@ class LifecycleManager:
             self.validate_region(region)
 
         try:
-            ec2_manager = self.ec2_manager_factory(region=region or default_region)
-            instances = ec2_manager.list_instances(region_filter=region)
+            compute_provider = self.compute_provider_factory(region=region or default_region)
+            instances = compute_provider.list_instances(region_filter=region)
 
             if not instances:
                 print("No campers-managed instances found")
@@ -135,7 +135,7 @@ class LifecycleManager:
             costs_available = False
 
             for inst in instances:
-                regional_manager = self.ec2_manager_factory(region=inst["region"])
+                regional_manager = self.compute_provider_factory(region=inst["region"])
                 volume_size = regional_manager.get_volume_size(inst["instance_id"])
 
                 if volume_size is None:
@@ -198,20 +198,20 @@ class LifecycleManager:
             raise
 
     def stop(self, name_or_id: str, region: str | None = None) -> None:
-        """Stop a running campers-managed EC2 instance by MachineConfig or ID.
+        """Stop a running campers-managed cloud instance by MachineConfig or ID.
 
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID or MachineConfig name to stop
+            Instance ID or MachineConfig name to stop
         region : str | None
-            Optional AWS region to narrow search scope
+            Optional cloud region to narrow search scope
 
         Raises
         ------
         SystemExit
             Exits with code 1 if no instance matches, multiple instances match,
-            or AWS errors occur. Returns normally on successful stop.
+            or cloud errors occur. Returns normally on successful stop.
         """
         if region:
             self.validate_region(region)
@@ -258,7 +258,7 @@ class LifecycleManager:
                 target["region"],
             )
 
-            regional_manager = self.ec2_manager_factory(region=target["region"])
+            regional_manager = self.compute_provider_factory(region=target["region"])
             volume_size = regional_manager.get_volume_size(instance_id)
 
             if volume_size is None:
@@ -330,20 +330,20 @@ class LifecycleManager:
             sys.exit(1)
 
     def start(self, name_or_id: str, region: str | None = None) -> None:
-        """Start a stopped campers-managed EC2 instance by MachineConfig or ID.
+        """Start a stopped campers-managed cloud instance by MachineConfig or ID.
 
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID or MachineConfig name to start
+            Instance ID or MachineConfig name to start
         region : str | None
-            Optional AWS region to narrow search scope
+            Optional cloud region to narrow search scope
 
         Raises
         ------
         SystemExit
             Exits with code 1 if no instance matches, multiple instances match,
-            or AWS errors occur. Returns normally on successful start.
+            or cloud errors occur. Returns normally on successful start.
         """
         if region:
             self.validate_region(region)
@@ -393,7 +393,7 @@ class LifecycleManager:
                 target["region"],
             )
 
-            regional_manager = self.ec2_manager_factory(region=target["region"])
+            regional_manager = self.compute_provider_factory(region=target["region"])
             volume_size = regional_manager.get_volume_size(instance_id)
 
             if volume_size is None:
@@ -464,20 +464,20 @@ class LifecycleManager:
             sys.exit(1)
 
     def info(self, name_or_id: str, region: str | None = None) -> None:
-        """Display detailed information about a campers-managed EC2 instance.
+        """Display detailed information about a campers-managed cloud instance.
 
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID or MachineConfig name
+            Instance ID or MachineConfig name
         region : str | None
-            Optional AWS region to narrow search scope
+            Optional cloud region to narrow search scope
 
         Raises
         ------
         SystemExit
             Exits with code 1 if no instance matches, multiple instances match,
-            or AWS errors occur. Returns normally on successful info display.
+            or cloud errors occur. Returns normally on successful info display.
         """
         if region:
             self.validate_region(region)
@@ -487,7 +487,7 @@ class LifecycleManager:
         try:
             target = self._find_and_validate_instance(name_or_id, region, "view")
             instance_id = target["instance_id"]
-            regional_manager = self.ec2_manager_factory(region=target["region"])
+            regional_manager = self.compute_provider_factory(region=target["region"])
 
             unique_id = target.get("unique_id")
             if not unique_id:
@@ -570,20 +570,20 @@ class LifecycleManager:
             sys.exit(1)
 
     def destroy(self, name_or_id: str, region: str | None = None) -> None:
-        """Destroy a campers-managed EC2 instance by MachineConfig or ID.
+        """Destroy a campers-managed cloud instance by MachineConfig or ID.
 
         Parameters
         ----------
         name_or_id : str
-            EC2 instance ID or MachineConfig name to destroy
+            Instance ID or MachineConfig name to destroy
         region : str | None
-            Optional AWS region to narrow search scope
+            Optional cloud region to narrow search scope
 
         Raises
         ------
         SystemExit
             Exits with code 1 if no instance matches, multiple instances match,
-            or AWS errors occur. Returns normally on successful termination.
+            or cloud errors occur. Returns normally on successful termination.
         """
         if region:
             self.validate_region(region)
@@ -599,7 +599,7 @@ class LifecycleManager:
                 target["region"],
             )
 
-            regional_manager = self.ec2_manager_factory(region=target["region"])
+            regional_manager = self.compute_provider_factory(region=target["region"])
             regional_manager.terminate_instance(target["instance_id"])
 
             print(f"Instance {target['instance_id']} has been successfully terminated.")

@@ -30,8 +30,8 @@ class RunExecutor:
     ----------
     config_loader : Any
         Configuration loader instance
-    ec2_manager_factory : Any
-        Factory function to create EC2Manager instances
+    compute_provider_factory : Any
+        Factory function to create compute provider instances
     ssh_manager_factory : Any
         Factory function to create SSHManager instances
     resources : dict[str, Any]
@@ -51,7 +51,7 @@ class RunExecutor:
     def __init__(
         self,
         config_loader: Any,
-        ec2_manager_factory: Any,
+        compute_provider_factory: Any,
         ssh_manager_factory: Any,
         resources: dict[str, Any],
         resources_lock: threading.Lock,
@@ -61,7 +61,7 @@ class RunExecutor:
         portforward_manager_factory: Any | None = None,
     ) -> None:
         self.config_loader = config_loader
-        self.ec2_manager_factory = ec2_manager_factory
+        self.compute_provider_factory = compute_provider_factory
         self.ssh_manager_factory = ssh_manager_factory
         self.resources = resources
         self.resources_lock = resources_lock
@@ -97,11 +97,11 @@ class RunExecutor:
         command : str | None
             Command to execute on remote instance
         instance_type : str | None
-            EC2 instance type override
+            Instance type override
         disk_size : int | None
             Root disk size override
         region : str | None
-            AWS region override
+            Cloud region override
         port : str | list[int] | tuple[int, ...] | None
             Port(s) for forwarding
         include_vcs : str | bool | None
@@ -171,10 +171,10 @@ class RunExecutor:
             if merged_config.get("sync_paths") and not disable_mutagen:
                 mutagen_mgr.check_mutagen_installed()
 
-            ec2_manager = self.ec2_manager_factory(region=merged_config["region"])
+            compute_provider = self.compute_provider_factory(region=merged_config["region"])
 
             with self.resources_lock:
-                self.resources["ec2_manager"] = ec2_manager
+                self.resources["compute_provider"] = compute_provider
 
             instance_name = generate_instance_name()
             instance_details = self._get_or_create_instance(
@@ -527,11 +527,11 @@ class RunExecutor:
         RuntimeError
             If instance is in invalid state or creation fails
         """
-        ec2_manager = self.resources.get("ec2_manager")
-        if not ec2_manager:
-            raise RuntimeError("EC2 manager not initialized")
+        compute_provider = self.resources.get("compute_provider")
+        if not compute_provider:
+            raise RuntimeError("Compute provider not initialized")
 
-        matches = ec2_manager.find_instances_by_name_or_id(
+        matches = compute_provider.find_instances_by_name_or_id(
             name_or_id=instance_name, region_filter=None
         )
 
@@ -572,7 +572,7 @@ class RunExecutor:
                 logging.info("Found stopped instance %s, starting...", instance_id)
                 print("Found stopped instance for this branch, starting...")
 
-                started_details = ec2_manager.start_instance(instance_id)
+                started_details = compute_provider.start_instance(instance_id)
                 new_ip = started_details.get("public_ip")
                 print(f"Instance started. New IP: {new_ip}")
 
@@ -598,7 +598,7 @@ class RunExecutor:
         logging.info("Creating new instance: %s", instance_name)
         print("Creating new instance...")
 
-        instance_details = ec2_manager.launch_instance(
+        instance_details = compute_provider.launch_instance(
             config=config, instance_name=instance_name
         )
         instance_details["reused"] = False

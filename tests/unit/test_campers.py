@@ -1171,7 +1171,7 @@ def test_cleanup_resources_executes_in_correct_order(campers_module) -> None:
         "mutagen_mgr": mock_mutagen,
         "mutagen_session_name": "test-session",
         "ssh_manager": mock_ssh,
-        "ec2_manager": mock_ec2,
+        "compute_provider": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
     }
 
@@ -1200,7 +1200,7 @@ def test_cleanup_resources_continues_on_error(campers_module) -> None:
         "mutagen_mgr": mock_mutagen,
         "mutagen_session_name": "test-session",
         "ssh_manager": mock_ssh,
-        "ec2_manager": mock_ec2,
+        "compute_provider": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
     }
 
@@ -1250,7 +1250,7 @@ def test_cleanup_resources_prevents_duplicate_cleanup(campers_module) -> None:
 
     mock_ec2 = MagicMock()
     campers_instance._resources = {
-        "ec2_manager": mock_ec2,
+        "compute_provider": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
     }
 
@@ -1271,7 +1271,7 @@ def test_cleanup_resources_only_cleans_tracked_resources(campers_module) -> None
     mock_ssh = MagicMock()
 
     campers_instance._resources = {
-        "ec2_manager": mock_ec2,
+        "compute_provider": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
         "ssh_manager": mock_ssh,
     }
@@ -1345,7 +1345,7 @@ def test_run_tracks_resources_incrementally(campers_module) -> None:
 
         campers_instance.run()
 
-        assert "ec2_manager" in captured_resources
+        assert "compute_provider" in captured_resources
         assert "instance_details" in captured_resources
         assert "ssh_manager" in captured_resources
         assert "portforward_mgr" in captured_resources
@@ -1733,7 +1733,7 @@ def test_cleanup_flag_resets_after_cleanup(campers_module) -> None:
 
     mock_ec2 = MagicMock()
     campers_instance._resources = {
-        "ec2_manager": mock_ec2,
+        "compute_provider": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
     }
 
@@ -1835,7 +1835,7 @@ def test_cleanup_flag_resets_even_with_cleanup_errors(campers_module) -> None:
     mock_ec2.terminate_instance.side_effect = RuntimeError("EC2 error")
 
     campers_instance._resources = {
-        "ec2_manager": mock_ec2,
+        "compute_provider": mock_ec2,
         "instance_details": {"instance_id": "i-test123"},
     }
 
@@ -1871,7 +1871,7 @@ def test_get_or_create_stopped_instance_starts_it(campers_module) -> None:
     mock_ec2.find_instances_by_name_or_id.return_value = [stopped_instance]
     mock_ec2.start_instance.return_value = started_instance
 
-    campers_instance._resources = {"ec2_manager": mock_ec2}
+    campers_instance._resources = {"compute_provider": mock_ec2}
 
     with patch("builtins.print"):
         result = campers_instance._get_or_create_instance(
@@ -1899,7 +1899,7 @@ def test_get_or_create_running_instance_raises_error(campers_module) -> None:
 
     mock_ec2.find_instances_by_name_or_id.return_value = [running_instance]
 
-    campers_instance._resources = {"ec2_manager": mock_ec2}
+    campers_instance._resources = {"compute_provider": mock_ec2}
 
     with pytest.raises(RuntimeError, match="already running"):
         campers_instance._get_or_create_instance(
@@ -1921,7 +1921,7 @@ def test_get_or_create_pending_instance_raises_error(campers_module) -> None:
 
     mock_ec2.find_instances_by_name_or_id.return_value = [pending_instance]
 
-    campers_instance._resources = {"ec2_manager": mock_ec2}
+    campers_instance._resources = {"compute_provider": mock_ec2}
 
     with pytest.raises(RuntimeError, match="Please wait for stable state"):
         campers_instance._get_or_create_instance(
@@ -1943,7 +1943,7 @@ def test_get_or_create_stopping_instance_raises_error(campers_module) -> None:
 
     mock_ec2.find_instances_by_name_or_id.return_value = [stopping_instance]
 
-    campers_instance._resources = {"ec2_manager": mock_ec2}
+    campers_instance._resources = {"compute_provider": mock_ec2}
 
     with pytest.raises(RuntimeError, match="Please wait for stable state"):
         campers_instance._get_or_create_instance(
@@ -1973,7 +1973,7 @@ def test_get_or_create_terminated_creates_new(campers_module) -> None:
     mock_ec2.find_instances_by_name_or_id.return_value = [terminated_instance]
     mock_ec2.launch_instance.return_value = new_instance
 
-    campers_instance._resources = {"ec2_manager": mock_ec2}
+    campers_instance._resources = {"compute_provider": mock_ec2}
 
     with patch("builtins.print"):
         result = campers_instance._get_or_create_instance(
@@ -2003,7 +2003,7 @@ def test_get_or_create_no_existing_creates_new(campers_module) -> None:
     mock_ec2.find_instances_by_name_or_id.return_value = []
     mock_ec2.launch_instance.return_value = new_instance
 
-    campers_instance._resources = {"ec2_manager": mock_ec2}
+    campers_instance._resources = {"compute_provider": mock_ec2}
 
     with patch("builtins.print"):
         result = campers_instance._get_or_create_instance(
@@ -2040,7 +2040,7 @@ def test_get_or_create_multiple_matches_uses_first(campers_module) -> None:
     ]
     mock_ec2.start_instance.return_value = started_instance
 
-    campers_instance._resources = {"ec2_manager": mock_ec2}
+    campers_instance._resources = {"compute_provider": mock_ec2}
 
     with patch("builtins.print"):
         with patch("logging.warning") as mock_logging:

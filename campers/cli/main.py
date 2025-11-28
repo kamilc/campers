@@ -36,9 +36,9 @@ class CampersCLI:
 
     Parameters
     ----------
-    ec2_manager_factory : Callable[..., Any] | None
-        Optional factory function for creating EC2Manager instances.
-        If None, uses the default EC2Manager class.
+    compute_provider_factory : Callable[..., Any] | None
+        Optional factory function for creating compute provider instances.
+        If None, uses the default compute provider class.
     ssh_manager_factory : Callable[..., Any] | None
         Optional factory function for creating SSHManager instances.
         If None, uses the default SSHManager class.
@@ -54,7 +54,7 @@ class CampersCLI:
 
     def __new__(
         cls,
-        ec2_manager_factory: Any | None = None,
+        compute_provider_factory: Any | None = None,
         ssh_manager_factory: Any | None = None,
         boto3_client_factory: Any | None = None,
         boto3_resource_factory: Any | None = None,
@@ -63,8 +63,8 @@ class CampersCLI:
 
         Parameters
         ----------
-        ec2_manager_factory : Callable[..., Any] | None
-            Optional factory for EC2Manager (default: None, uses EC2Manager)
+        compute_provider_factory : Callable[..., Any] | None
+            Optional factory for compute provider (default: None, uses default provider)
         ssh_manager_factory : Callable[..., Any] | None
             Optional factory for SSHManager (default: None, uses SSHManager)
         boto3_client_factory : Callable[..., Any] | None
@@ -85,7 +85,7 @@ class CampersCLI:
 
                 def __init__(
                     self,
-                    ec2_manager_factory: Any | None = None,
+                    compute_provider_factory: Any | None = None,
                     ssh_manager_factory: Any | None = None,
                     boto3_client_factory: Any | None = None,
                     boto3_resource_factory: Any | None = None,
@@ -94,8 +94,8 @@ class CampersCLI:
 
                     Parameters
                     ----------
-                    ec2_manager_factory : Callable[..., Any] | None
-                        Optional factory for EC2Manager (default: None, uses EC2Manager)
+                    compute_provider_factory : Callable[..., Any] | None
+                        Optional factory for compute provider (default: None, uses default provider)
                     ssh_manager_factory : Callable[..., Any] | None
                         Optional factory for SSHManager (default: None, uses SSHManager)
                     boto3_client_factory : Callable[..., Any] | None
@@ -104,7 +104,7 @@ class CampersCLI:
                         Optional factory for boto3 resources (default: None, uses boto3.resource)
                     """
                     super().__init__(
-                        ec2_manager_factory=ec2_manager_factory,
+                        compute_provider_factory=compute_provider_factory,
                         ssh_manager_factory=ssh_manager_factory,
                         boto3_client_factory=boto3_client_factory,
                         boto3_resource_factory=boto3_resource_factory,
@@ -133,11 +133,11 @@ class CampersCLI:
                     command : str | None
                         Command to execute on remote instance
                     instance_type : str | None
-                        EC2 instance type override
+                        Instance type override
                     disk_size : int | None
                         Root disk size in GB override
                     region : str | None
-                        AWS region override
+                        Cloud region override
                     port : str | list[int] | tuple[int, ...] | None
                         Port(s) to forward
                     include_vcs : str | bool | None
@@ -187,7 +187,7 @@ class CampersCLI:
             cls._cached_class = CampersCLIImpl
 
         return cls._cached_class(
-            ec2_manager_factory=ec2_manager_factory,
+            compute_provider_factory=compute_provider_factory,
             ssh_manager_factory=ssh_manager_factory,
             boto3_client_factory=boto3_client_factory,
             boto3_resource_factory=boto3_resource_factory,
@@ -282,7 +282,7 @@ def main() -> None:
             )
             print("Contact your AWS administrator to grant:", file=sys.stderr)
             print(
-                "  - EC2 permissions (DescribeInstances, RunInstances, TerminateInstances)",
+                "  - Compute permissions (DescribeInstances, RunInstances, TerminateInstances)",
                 file=sys.stderr,
             )
             print(

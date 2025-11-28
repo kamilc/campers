@@ -72,7 +72,7 @@ class TestCleanupLogging:
 
         campers._resources = {
             "instance_details": {"instance_id": "i-test"},
-            "ec2_manager": mock_ec2,
+            "compute_provider": mock_ec2,
         }
 
         with caplog.at_level(logging.INFO):
@@ -98,7 +98,7 @@ class TestCleanupLogging:
 
         campers._resources = {
             "instance_details": {"instance_id": "i-test"},
-            "ec2_manager": mock_ec2,
+            "compute_provider": mock_ec2,
         }
 
         with caplog.at_level(logging.INFO):
@@ -259,7 +259,7 @@ class TestCleanupOrder:
             "mutagen_session_name": "test-session",
             "ssh_manager": mock_ssh,
             "instance_details": {"instance_id": "i-test"},
-            "ec2_manager": mock_ec2,
+            "compute_provider": mock_ec2,
         }
 
         campers._stop_instance_cleanup()
@@ -302,7 +302,7 @@ class TestCleanupOrder:
             "mutagen_session_name": "test-session",
             "ssh_manager": mock_ssh,
             "instance_details": {"instance_id": "i-test"},
-            "ec2_manager": mock_ec2,
+            "compute_provider": mock_ec2,
         }
 
         campers._terminate_instance_cleanup()
@@ -348,7 +348,7 @@ class TestErrorResilience:
             "mutagen_session_name": "test-session",
             "ssh_manager": mock_ssh,
             "instance_details": {"instance_id": "i-test"},
-            "ec2_manager": mock_ec2,
+            "compute_provider": mock_ec2,
         }
 
         campers._stop_instance_cleanup()
@@ -388,7 +388,7 @@ class TestErrorResilience:
             "mutagen_session_name": "test-session",
             "ssh_manager": mock_ssh,
             "instance_details": {"instance_id": "i-test"},
-            "ec2_manager": mock_ec2,
+            "compute_provider": mock_ec2,
         }
 
         campers._stop_instance_cleanup()
@@ -432,7 +432,7 @@ class TestErrorResilience:
             "mutagen_session_name": "test-session",
             "ssh_manager": mock_ssh,
             "instance_details": {"instance_id": "i-test"},
-            "ec2_manager": mock_ec2,
+            "compute_provider": mock_ec2,
         }
 
         campers._stop_instance_cleanup()
@@ -472,7 +472,7 @@ class TestErrorResilience:
             "mutagen_session_name": "test-session",
             "ssh_manager": mock_ssh,
             "instance_details": {"instance_id": "i-test"},
-            "ec2_manager": mock_ec2,
+            "compute_provider": mock_ec2,
         }
 
         with caplog.at_level(logging.INFO):

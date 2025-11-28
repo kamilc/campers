@@ -10,7 +10,7 @@ import pytest
 def mock_campers():
     """Create mock Campers instance."""
     campers = Mock()
-    campers._ec2_manager_factory = Mock()
+    campers._compute_provider_factory = Mock()
     return campers
 
 
@@ -35,7 +35,7 @@ def initialized_widget(mock_campers, mock_ec2_manager, mock_pricing_service):
     """Create widget with mocked services pre-initialized."""
     from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._compute_provider_factory.return_value = mock_ec2_manager
 
     with patch.object(
         InstanceOverviewWidget, "app", new_callable=lambda: Mock()

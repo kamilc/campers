@@ -210,7 +210,7 @@ class SetupManager:
             for attr in response.get("AccountAttributes", []):
                 if attr["AttributeName"] == "max-instances":
                     max_instances = attr["AttributeValues"][0]["AttributeValue"]
-                    print(f"EC2 instance limit: {max_instances} instances")
+                    print(f"Cloud instance limit: {max_instances} instances")
 
             instances = ec2_client.describe_instances()
             running_count = sum(
@@ -219,7 +219,7 @@ class SetupManager:
                 for inst in r["Instances"]
                 if inst["State"]["Name"] in ["running", "pending"]
             )
-            print(f"Currently running: {running_count} instances")
+            print(f"Currently running cloud instances: {running_count}")
 
         except ClientError as e:
             logging.warning("Could not check service quotas: %s", e)

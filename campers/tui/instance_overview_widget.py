@@ -18,8 +18,8 @@ class InstanceOverviewWidget(Static):
     Parameters
     ----------
     campers_instance : Campers
-        Campers instance providing access to EC2 manager factory for creating
-        EC2 managers
+        Campers instance providing access to compute provider factory for creating
+        compute providers
 
     Attributes
     ----------
@@ -38,7 +38,7 @@ class InstanceOverviewWidget(Static):
     def __init__(self, campers_instance: "Campers") -> None:
         super().__init__("Initializing...", id="instance-overview-widget")
         self._campers_instance = campers_instance
-        self._ec2_manager_factory = campers_instance._ec2_manager_factory
+        self._compute_provider_factory = campers_instance._compute_provider_factory_override or campers_instance._create_compute_provider
         self.ec2_manager = None
         self.pricing_service = None
         self.running_count = 0
@@ -64,7 +64,7 @@ class InstanceOverviewWidget(Static):
 
         try:
             default_region = ConfigLoader.BUILT_IN_DEFAULTS["region"]
-            self.ec2_manager = self._ec2_manager_factory(region=default_region)
+            self.ec2_manager = self._compute_provider_factory(region=default_region)
             self.pricing_service = PricingService()
             self._initialized = True
             self.app.call_from_thread(self._start_refresh_timer)

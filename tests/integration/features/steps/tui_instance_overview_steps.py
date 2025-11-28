@@ -160,7 +160,7 @@ def step_view_tui(context: Context) -> None:
             )
 
         campers = context.campers_module.Campers(
-            ec2_manager_factory=localstack_ec2_factory
+            compute_provider_factory=localstack_ec2_factory
         )
     else:
         campers = context.campers_module.Campers()

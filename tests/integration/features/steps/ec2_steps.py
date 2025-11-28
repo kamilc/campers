@@ -558,7 +558,7 @@ def step_attempt_to_launch_instance(context: Context) -> None:
                 from tests.unit.fakes.fake_ssh_manager import FakeSSHManager
 
                 campers = Campers(
-                    ec2_manager_factory=FakeEC2Manager,
+                    compute_provider_factory=FakeEC2Manager,
                     ssh_manager_factory=FakeSSHManager,
                 )
                 campers.run(camp_name="test", json_output=True, plain=True)

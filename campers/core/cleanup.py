@@ -16,12 +16,12 @@ from campers.tui.app import TUI_STATUS_UPDATE_PROCESSING_DELAY
 
 
 class CleanupManager:
-    """Manages graceful cleanup of EC2 instances and associated resources.
+    """Manages graceful cleanup of cloud instances and associated resources.
 
     Parameters
     ----------
     resources_dict : dict[str, Any]
-        Shared resources dictionary containing ec2_manager, ssh_manager, etc.
+        Shared resources dictionary containing compute_provider, ssh_manager, etc.
     resources_lock : threading.Lock
         Lock for thread-safe access to resources dictionary
     cleanup_lock : threading.Lock
@@ -296,7 +296,7 @@ class CleanupManager:
         1. Port forwarding first (releases network resources)
         2. Mutagen session second (stops file synchronization)
         3. SSH connection third (closes remote connection)
-        4. EC2 instance fourth (stops instance, preserving data)
+        4. Cloud instance fourth (stops instance, preserving data)
 
         Handles partial initialization gracefully by checking resource existence
         before attempting cleanup. Individual component failures do not halt cleanup.
@@ -330,7 +330,7 @@ class CleanupManager:
                 instance_id = instance_details.get(
                     "InstanceId"
                 ) or instance_details.get("instance_id")
-                logging.info("Stopping EC2 instance %s...", instance_id)
+                logging.info("Stopping cloud instance %s...", instance_id)
 
                 if self.update_queue is not None:
                     self.update_queue.put({"type": "status_update", "payload": {"status": "stopping"}})
@@ -339,12 +339,12 @@ class CleanupManager:
                 self._emit_cleanup_event("stop_instance", "in_progress")
 
                 try:
-                    ec2_manager = resources_to_clean.get("ec2_manager")
-                    if ec2_manager:
-                        ec2_manager.stop_instance(instance_id)
-                        logging.info("EC2 instance stopped successfully")
-                        volume_size = ec2_manager.get_volume_size(instance_id)
-                        storage_rate = self._get_storage_rate(ec2_manager.region)
+                    compute_provider = resources_to_clean.get("compute_provider")
+                    if compute_provider:
+                        compute_provider.stop_instance(instance_id)
+                        logging.info("Cloud instance stopped successfully")
+                        volume_size = compute_provider.get_volume_size(instance_id)
+                        storage_rate = self._get_storage_rate(compute_provider.region)
                         storage_cost = (
                             float(volume_size) * storage_rate
                             if volume_size is not None
@@ -386,7 +386,7 @@ class CleanupManager:
         1. Port forwarding first (releases network resources)
         2. Mutagen session second (stops file synchronization)
         3. SSH connection third (closes remote connection)
-        4. EC2 instance fourth (terminates instance, removing all data)
+        4. Cloud instance fourth (terminates instance, removing all data)
 
         Handles partial initialization gracefully by checking resource existence
         before attempting cleanup. Individual component failures do not halt cleanup.
@@ -420,7 +420,7 @@ class CleanupManager:
                 instance_id = instance_details.get(
                     "InstanceId"
                 ) or instance_details.get("instance_id")
-                logging.info("Terminating EC2 instance %s...", instance_id)
+                logging.info("Terminating cloud instance %s...", instance_id)
 
                 if self.update_queue is not None:
                     self.update_queue.put({"type": "status_update", "payload": {"status": "terminating"}})
@@ -429,10 +429,10 @@ class CleanupManager:
                 self._emit_cleanup_event("terminate_instance", "in_progress")
 
                 try:
-                    ec2_manager = resources_to_clean.get("ec2_manager")
-                    if ec2_manager:
-                        ec2_manager.terminate_instance(instance_id)
-                        logging.info("EC2 instance terminated successfully")
+                    compute_provider = resources_to_clean.get("compute_provider")
+                    if compute_provider:
+                        compute_provider.terminate_instance(instance_id)
+                        logging.info("Cloud instance terminated successfully")
 
                     self._emit_cleanup_event("terminate_instance", "completed")
                 except Exception as e:
