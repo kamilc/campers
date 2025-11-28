@@ -25,8 +25,6 @@ class LifecycleManager:
         Factory function to create compute provider instances
     log_and_print_error : Any
         Function to log and print errors to stderr
-    validate_region : Any
-        Function to validate cloud region
     truncate_name : Any
         Function to truncate instance names for display
     """
@@ -36,14 +34,29 @@ class LifecycleManager:
         config_loader: Any,
         compute_provider_factory: Any,
         log_and_print_error: Any,
-        validate_region: Any,
         truncate_name: Any,
     ) -> None:
         self.config_loader = config_loader
         self.compute_provider_factory = compute_provider_factory
         self.log_and_print_error = log_and_print_error
-        self.validate_region = validate_region
         self.truncate_name = truncate_name
+
+    def _validate_region(self, region: str) -> None:
+        """Validate that a region is valid using the compute provider.
+
+        Parameters
+        ----------
+        region : str
+            Region to validate
+
+        Raises
+        ------
+        ValueError
+            If region is not valid
+        """
+        default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
+        compute_provider = self.compute_provider_factory(region=default_region)
+        compute_provider.validate_region(region)
 
     def _find_and_validate_instance(
         self, name_or_id: str, region: str | None, operation_name: str
@@ -113,7 +126,7 @@ class LifecycleManager:
         default_region = self.config_loader.BUILT_IN_DEFAULTS["region"]
 
         if region is not None:
-            self.validate_region(region)
+            self._validate_region(region)
 
         try:
             compute_provider = self.compute_provider_factory(
@@ -217,7 +230,7 @@ class LifecycleManager:
             or cloud errors occur. Returns normally on successful stop.
         """
         if region:
-            self.validate_region(region)
+            self._validate_region(region)
 
         target: dict[str, Any] | None = None
 
@@ -347,7 +360,7 @@ class LifecycleManager:
             or cloud errors occur. Returns normally on successful start.
         """
         if region:
-            self.validate_region(region)
+            self._validate_region(region)
 
         target: dict[str, Any] | None = None
 
@@ -479,7 +492,7 @@ class LifecycleManager:
             or cloud errors occur. Returns normally on successful info display.
         """
         if region:
-            self.validate_region(region)
+            self._validate_region(region)
 
         target: dict[str, Any] | None = None
 
@@ -583,7 +596,7 @@ class LifecycleManager:
             or cloud errors occur. Returns normally on successful termination.
         """
         if region:
-            self.validate_region(region)
+            self._validate_region(region)
 
         target: dict[str, Any] | None = None
 

@@ -16,6 +16,7 @@ from botocore.exceptions import (
 )
 
 from campers.providers.exceptions import (
+    ProviderAPIError,
     ProviderCredentialsError,
 )
 
@@ -102,6 +103,42 @@ class EC2Manager:
         self.boto3_resource_factory = boto3_resource_factory or boto3.resource
         self.ec2_client = self.boto3_client_factory("ec2", region_name=region)
         self.ec2_resource = self.boto3_resource_factory("ec2", region_name=region)
+
+    def validate_region(self, region: str) -> None:
+        """Validate that a region string is a valid AWS region.
+
+        Parameters
+        ----------
+        region : str
+            AWS region string to validate
+
+        Raises
+        ------
+        ValueError
+            If region is not a valid AWS region
+        """
+        try:
+            ec2_client = self.boto3_client_factory("ec2", region_name="us-east-1")
+            regions_response = ec2_client.describe_regions()
+            valid_regions = {r["RegionName"] for r in regions_response["Regions"]}
+
+            if region not in valid_regions:
+                raise ValueError(
+                    f"Invalid region: '{region}'. "
+                    f"Valid regions: {', '.join(sorted(valid_regions))}"
+                )
+        except NoCredentialsError as e:
+            logger.warning(
+                "Unable to validate region '%s' (%s). Proceeding without validation.",
+                region,
+                e.__class__.__name__,
+            )
+        except ClientError as e:
+            logger.warning(
+                "Unable to validate region '%s' (%s). Proceeding without validation.",
+                region,
+                e.__class__.__name__,
+            )
 
     def _is_localstack_endpoint(self) -> bool:
         """Detect if EC2 client is configured for LocalStack.

@@ -33,7 +33,7 @@ from campers.services.portforward import PortForwardManager  # noqa: E402
 from campers.templates import CONFIG_TEMPLATE  # noqa: E402
 from campers.tui import CampersTUI  # noqa: E402
 from campers.cli.main import main  # noqa: E402
-from campers.utils import log_and_print_error, truncate_name, validate_region  # noqa: E402
+from campers.utils import log_and_print_error, truncate_name  # noqa: E402
 
 
 class Campers:
@@ -121,7 +121,8 @@ class Campers:
         return self._run_executor
 
     def _validate_region_wrapper(self, region: str) -> None:
-        validate_region(region, self._boto3_client_factory)
+        compute_provider = self._create_compute_provider(region)
+        compute_provider.validate_region(region)
 
     @property
     def lifecycle_manager(self) -> LifecycleManager:
@@ -131,7 +132,6 @@ class Campers:
                 config_loader=self._config_loader,
                 compute_provider_factory=self.compute_provider_factory,
                 log_and_print_error=log_and_print_error,
-                validate_region=self._validate_region_wrapper,
                 truncate_name=truncate_name,
             )
         return self._lifecycle_manager
@@ -266,7 +266,8 @@ class Campers:
         return truncate_name(name)
 
     def _validate_region(self, region: str) -> None:
-        validate_region(region, self._boto3_client_factory)
+        compute_provider = self._create_compute_provider(region)
+        compute_provider.validate_region(region)
 
     def list(self, region: str | None = None) -> None:
         """List all managed instances."""

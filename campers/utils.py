@@ -206,36 +206,3 @@ def truncate_name(name: str, max_width: int = 19) -> str:
     return name
 
 
-def validate_region(region: str, boto3_client_factory: Any) -> None:
-    """Validate that a region string is a valid cloud provider region.
-
-    Parameters
-    ----------
-    region : str
-        Cloud provider region string to validate
-    boto3_client_factory : Any
-        Factory function for creating cloud provider clients
-
-    Raises
-    ------
-    ValueError
-        If region is not a valid cloud provider region
-    """
-    from botocore.exceptions import ClientError, NoCredentialsError
-
-    try:
-        ec2_client = boto3_client_factory("ec2", region_name="us-east-1")
-        regions_response = ec2_client.describe_regions()
-        valid_regions = {r["RegionName"] for r in regions_response["Regions"]}
-
-        if region not in valid_regions:
-            raise ValueError(
-                f"Invalid region: '{region}'. "
-                f"Valid regions: {', '.join(sorted(valid_regions))}"
-            )
-    except (NoCredentialsError, ClientError) as e:
-        logging.warning(
-            "Unable to validate region '%s' (%s). Proceeding without validation.",
-            region,
-            e.__class__.__name__,
-        )
