@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, call, patch
 import paramiko
 import pytest
 
-from campers.ssh import MAX_COMMAND_LENGTH, SSHManager
+from campers.services.ssh import MAX_COMMAND_LENGTH, SSHManager
 
 
 @pytest.fixture
@@ -39,8 +39,8 @@ def test_ssh_manager_default_username() -> None:
     assert manager.username == "ubuntu"
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_connect_success_first_attempt(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -67,9 +67,9 @@ def test_connect_success_first_attempt(
     assert ssh_manager.client == mock_client
 
 
-@patch("campers.ssh.time.sleep")
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.time.sleep")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_connect_retry_with_exponential_backoff(
     mock_rsa_key: MagicMock,
     mock_ssh_client: MagicMock,
@@ -97,9 +97,9 @@ def test_connect_retry_with_exponential_backoff(
     assert mock_sleep.call_args_list == expected_sleep_calls
 
 
-@patch("campers.ssh.time.sleep")
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.time.sleep")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_connect_fails_after_max_retries(
     mock_rsa_key: MagicMock,
     mock_ssh_client: MagicMock,
@@ -121,9 +121,9 @@ def test_connect_fails_after_max_retries(
     assert mock_client.connect.call_count == 10
 
 
-@patch("campers.ssh.time.sleep")
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.time.sleep")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_connect_handles_various_exceptions(
     mock_rsa_key: MagicMock,
     mock_ssh_client: MagicMock,
@@ -153,8 +153,8 @@ def test_connect_handles_various_exceptions(
     assert mock_client.connect.call_count == 5
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_without_connection(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -196,8 +196,8 @@ def test_execute_command_exceeds_max_length(ssh_manager: SSHManager) -> None:
     assert "exceeds maximum of 10000 characters" in str(exc_info.value)
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_success(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -227,8 +227,8 @@ def test_execute_command_success(
     )
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_with_stderr(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -255,8 +255,8 @@ def test_execute_command_with_stderr(
     assert exit_code == 1
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_with_keyboard_interrupt(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -279,8 +279,8 @@ def test_execute_command_with_keyboard_interrupt(
     assert ssh_manager.client is None
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_shell_features(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -309,8 +309,8 @@ def test_execute_command_shell_features(
     )
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_close_connection(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -332,8 +332,8 @@ def test_close_without_connection(ssh_manager: SSHManager) -> None:
     assert ssh_manager.client is None
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_with_multiline_output(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -360,8 +360,8 @@ def test_execute_command_with_multiline_output(
     assert exit_code == 0
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_remaining_output(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -390,8 +390,8 @@ def test_execute_command_remaining_output(
     assert mock_stderr.readlines.call_count == 1
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_raw_without_connection(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -402,8 +402,8 @@ def test_execute_command_raw_without_connection(
     assert "SSH connection not established" in str(exc_info.value)
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_raw_success(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -431,8 +431,8 @@ def test_execute_command_raw_success(
     mock_client.exec_command.assert_called_once_with("cd /tmp && ls -la", get_pty=True)
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_raw_with_keyboard_interrupt(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -637,8 +637,8 @@ def test_build_command_with_env_exceeds_max_length(ssh_manager: SSHManager) -> N
         ssh_manager.build_command_with_env(command, env_vars)
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_with_env_success(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
@@ -669,8 +669,8 @@ def test_execute_command_with_env_success(
     )
 
 
-@patch("campers.ssh.paramiko.SSHClient")
-@patch("campers.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.SSHClient")
+@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
 def test_execute_command_with_env_no_vars(
     mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:

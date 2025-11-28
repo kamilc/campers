@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 import boto3
 
-from campers.pricing_parsers import parse_ebs_pricing, parse_ec2_pricing
+from campers.providers.aws.pricing_parsers import parse_ebs_pricing, parse_ec2_pricing
 
 logger = logging.getLogger(__name__)
 
@@ -313,6 +313,43 @@ class PricingService:
             return None
 
         return parse_ebs_pricing(response["PriceList"][0])
+
+    def get_instance_price(self, instance_type: str, region: str) -> Optional[float]:
+        """Get hourly price for an instance type in a region.
+
+        This method implements the PricingProvider protocol interface.
+
+        Parameters
+        ----------
+        instance_type : str
+            Instance type identifier (e.g., 't3.micro')
+        region : str
+            Region identifier
+
+        Returns
+        -------
+        float or None
+            Hourly price in USD, or None if not available
+        """
+        return self.get_ec2_hourly_rate(instance_type, region)
+
+    def get_storage_price(self, region: str) -> float:
+        """Get monthly price per GB for storage in a region.
+
+        This method implements the PricingProvider protocol interface.
+
+        Parameters
+        ----------
+        region : str
+            Region identifier
+
+        Returns
+        -------
+        float
+            Monthly price per GB in USD
+        """
+        rate = self.get_ebs_storage_rate(region)
+        return rate if rate is not None else 0.0
 
 
 def calculate_monthly_cost(

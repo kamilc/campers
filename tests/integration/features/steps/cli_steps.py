@@ -14,8 +14,8 @@ from behave import given, then, when
 from behave.runner import Context
 
 from tests.integration.features.steps.common_steps import execute_command_direct
-from campers.__main__ import CampersCLI
-from campers.portforward import PortForwardManager
+from campers.cli.main import CampersCLI
+from campers.services.portforward import PortForwardManager
 
 JSON_OUTPUT_TRUNCATE_LENGTH = 200
 

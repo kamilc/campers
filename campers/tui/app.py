@@ -15,7 +15,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import Log, Static
 
-from campers.instance_overview_widget import InstanceOverviewWidget
+from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.logging import StreamFormatter, TuiLogHandler, TuiLogMessage
 from campers.tui.styling import TUI_CSS
 from campers.tui.terminal import detect_terminal_background

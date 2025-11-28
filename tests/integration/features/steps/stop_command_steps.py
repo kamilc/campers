@@ -10,7 +10,7 @@ from behave import given, then, when
 from behave.runner import Context
 from botocore.exceptions import ClientError
 
-from campers.ec2 import ACTIVE_INSTANCE_STATES
+from campers.providers.aws.compute import ACTIVE_INSTANCE_STATES
 
 
 @given('running instance "{instance_id}" with CampConfig "{camp_config}"')
@@ -146,14 +146,14 @@ def step_run_stop_command_impl(
             "instance_type": instance.get("instance_type", "t3.medium"),
         }
 
-    with patch("campers.ec2.EC2Manager.list_instances") as mock_list:
+    with patch("campers.providers.aws.compute.EC2Manager.list_instances") as mock_list:
         if context.aws_permission_error is not None:
             mock_list.side_effect = context.aws_permission_error
         else:
             mock_list.return_value = filtered_instances
 
-        with patch("campers.ec2.EC2Manager.stop_instance") as mock_stop:
-            with patch("campers.ec2.EC2Manager.get_volume_size") as mock_get_volume:
+        with patch("campers.providers.aws.compute.EC2Manager.stop_instance") as mock_stop:
+            with patch("campers.providers.aws.compute.EC2Manager.get_volume_size") as mock_get_volume:
                 if context.terminate_runtime_error is not None:
                     mock_stop.side_effect = context.terminate_runtime_error
                 elif context.terminate_client_error is not None:

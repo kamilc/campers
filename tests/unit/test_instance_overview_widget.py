@@ -33,7 +33,7 @@ def mock_pricing_service():
 @pytest.fixture
 def initialized_widget(mock_campers, mock_ec2_manager, mock_pricing_service):
     """Create widget with mocked services pre-initialized."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
     mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
@@ -50,7 +50,7 @@ def initialized_widget(mock_campers, mock_ec2_manager, mock_pricing_service):
 
 def test_widget_initialization(mock_campers):
     """Test widget initializes with correct default attributes."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
     widget = InstanceOverviewWidget(mock_campers)
 
@@ -143,7 +143,7 @@ def test_refresh_stats_calculates_daily_cost_when_pricing_available(
 
     initialized_widget.pricing_service.pricing_available = True
 
-    with patch("campers.pricing.calculate_monthly_cost") as mock_calc:
+    with patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_calc:
         mock_calc.side_effect = [899.0, 899.0]
 
         initialized_widget._refresh_stats_sync()
@@ -191,7 +191,7 @@ def test_refresh_stats_handles_ec2_api_errors_gracefully(
 
 def test_render_stats_formats_with_cost(mock_campers):
     """Test render_stats formats display with cost."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
     widget = InstanceOverviewWidget(mock_campers)
     widget.running_count = 2
@@ -205,7 +205,7 @@ def test_render_stats_formats_with_cost(mock_campers):
 
 def test_render_stats_formats_without_cost(mock_campers):
     """Test render_stats formats display without cost (N/A)."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
     widget = InstanceOverviewWidget(mock_campers)
     widget.running_count = 1
@@ -242,7 +242,7 @@ def test_refresh_stats_shows_na_when_all_prices_none(
 
     initialized_widget.pricing_service.pricing_available = True
 
-    with patch("campers.pricing.calculate_monthly_cost") as mock_calc:
+    with patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_calc:
         mock_calc.return_value = None
 
         initialized_widget._refresh_stats_sync()
@@ -253,7 +253,7 @@ def test_refresh_stats_shows_na_when_all_prices_none(
 
 def test_refresh_stats_skips_when_not_initialized(mock_campers, mock_ec2_manager):
     """Test _refresh_stats_sync returns early when not initialized."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
     widget = InstanceOverviewWidget(mock_campers)
     widget.ec2_manager = mock_ec2_manager

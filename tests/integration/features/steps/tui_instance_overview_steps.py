@@ -141,7 +141,7 @@ def step_create_running_instances_of_type(
 def step_view_tui(context: Context) -> None:
     """Launch TUI and verify widget is visible."""
     import boto3
-    from campers.ec2 import EC2Manager
+    from campers.providers.aws.compute import EC2Manager
 
     is_localstack = (
         hasattr(context, "scenario") and "localstack" in context.scenario.tags

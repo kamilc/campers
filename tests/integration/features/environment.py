@@ -570,7 +570,7 @@ def _port_is_free(port: int) -> bool:
 def _stop_portforward_managers_via_gc() -> None:
     """Best-effort stop of any PortForwardManager instances reachable via GC."""
     try:
-        from campers.portforward import PortForwardManager
+        from campers.services.portforward import PortForwardManager
     except Exception:  # pragma: no cover - defensive import
         return
 

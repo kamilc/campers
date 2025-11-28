@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from campers.ansible import AnsibleManager
+from campers.services.ansible import AnsibleManager
 
 
 class TestAnsibleManagerInstallationCheck:

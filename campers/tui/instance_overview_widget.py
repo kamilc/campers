@@ -59,8 +59,8 @@ class InstanceOverviewWidget(Static):
 
     def _initialize_services(self) -> None:
         """Initialize AWS services in background thread."""
-        from campers.config import ConfigLoader
-        from campers.pricing import PricingService
+        from campers.core.config import ConfigLoader
+        from campers.providers.aws.pricing import PricingService
 
         try:
             default_region = ConfigLoader.BUILT_IN_DEFAULTS["region"]
@@ -96,7 +96,7 @@ class InstanceOverviewWidget(Static):
             self.stopped_count = len(stopped)
 
             if self.pricing_service and self.pricing_service.pricing_available:
-                from campers.pricing import calculate_monthly_cost
+                from campers.providers.aws.pricing import calculate_monthly_cost
 
                 monthly_costs = [
                     calculate_monthly_cost(

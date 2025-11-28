@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 from behave import given, then, when
 from behave.runner import Context
 
-from campers.ssh import SSHManager
+from campers.services.ssh import SSHManager
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +95,9 @@ def step_ssh_connection_attempted(context: Context) -> None:
     context.retry_delays = []
 
     with (
-        patch("campers.ssh.paramiko.SSHClient") as mock_ssh_client,
-        patch("campers.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
-        patch("campers.ssh.time.sleep") as mock_sleep,
+        patch("campers.services.ssh.paramiko.SSHClient") as mock_ssh_client,
+        patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch("campers.services.ssh.time.sleep") as mock_sleep,
     ):
         mock_client = MagicMock()
         mock_ssh_client.return_value = mock_client
@@ -139,9 +139,9 @@ def step_ssh_connection_attempted_with_retries(context: Context, retries: int) -
     context.ssh_manager = ssh_manager
 
     with (
-        patch("campers.ssh.paramiko.SSHClient") as mock_ssh_client,
-        patch("campers.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
-        patch("campers.ssh.time.sleep"),
+        patch("campers.services.ssh.paramiko.SSHClient") as mock_ssh_client,
+        patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch("campers.services.ssh.time.sleep"),
     ):
         mock_client = MagicMock()
         mock_ssh_client.return_value = mock_client

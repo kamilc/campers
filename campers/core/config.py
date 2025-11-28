@@ -6,11 +6,14 @@ from typing import Any
 
 from omegaconf import OmegaConf
 
+from campers.providers import list_providers
+
 
 class ConfigLoader:
     """Load and merge YAML configuration with defaults."""
 
     BUILT_IN_DEFAULTS = {
+        "provider": "aws",
         "region": "us-east-1",
         "instance_type": "t3.medium",
         "disk_size": 50,
@@ -125,6 +128,14 @@ class ConfigLoader:
         ValueError
             If configuration is invalid
         """
+        provider = config.get("provider", "aws")
+        available_providers = list_providers()
+        if provider not in available_providers:
+            raise ValueError(
+                f"Unknown provider: {provider}. "
+                f"Available providers: {available_providers}"
+            )
+
         required_validations = {
             "region": (str, "region is required", "region must be a string"),
             "instance_type": (

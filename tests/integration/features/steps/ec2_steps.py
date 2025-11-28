@@ -11,7 +11,7 @@ from behave.runner import Context
 from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
 from moto import mock_aws
 
-from campers.ec2 import EC2Manager
+from campers.providers.aws.compute import EC2Manager
 
 
 def setup_moto_environment(context: Context) -> None:

@@ -9,7 +9,7 @@ from behave import given, then, when
 from behave.runner import Context
 from moto import mock_aws
 
-from campers.ec2 import EC2Manager
+from campers.providers.aws.compute import EC2Manager
 from campers.utils import (
     generate_instance_name,
     sanitize_instance_name,
@@ -775,7 +775,7 @@ def step_create_file_on_instance(context: Context, file_path: str) -> None:
         f"SSH details not available for instance {instance_id}"
     )
 
-    from campers.ssh import SSHManager
+    from campers.services.ssh import SSHManager
 
     ssh_manager = SSHManager(host=host, key_file=str(key_file), port=port)
 
@@ -845,7 +845,7 @@ def step_check_file_exists_on_instance(context: Context, file_path: str) -> None
         f"SSH details not available for instance {instance_id}"
     )
 
-    from campers.ssh import SSHManager
+    from campers.services.ssh import SSHManager
 
     ssh_manager = SSHManager(host=host, key_file=str(key_file), port=port)
 

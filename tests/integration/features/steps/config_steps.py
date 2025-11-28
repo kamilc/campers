@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 from behave import given, then, when
 
-from campers.config import ConfigLoader
+from campers.core.config import ConfigLoader
 
 
 @given('config file "{path}" with defaults section')

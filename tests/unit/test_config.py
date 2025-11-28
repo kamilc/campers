@@ -4,7 +4,7 @@ import pytest
 import yaml
 from omegaconf.errors import InterpolationResolutionError
 
-from campers.config import ConfigLoader
+from campers.core.config import ConfigLoader
 
 
 class TestConfigLoader:

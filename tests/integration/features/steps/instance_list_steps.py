@@ -155,8 +155,8 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
 
     try:
         if context.mock_time_instances is not None and context.mock_time_instances:
-            with patch("campers.ec2.EC2Manager.list_instances") as mock_list, \
-                 patch("campers.ec2.EC2Manager.get_volume_size") as mock_volume:
+            with patch("campers.providers.aws.compute.EC2Manager.list_instances") as mock_list, \
+                 patch("campers.providers.aws.compute.EC2Manager.get_volume_size") as mock_volume:
                 mock_list.return_value = context.instances
                 mock_volume.return_value = 0
                 campers.list(region=region)

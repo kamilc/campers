@@ -8,7 +8,7 @@ import pytest
 from botocore.exceptions import ClientError
 from moto import mock_aws
 
-from campers.ec2 import EC2Manager
+from campers.providers.aws.compute import EC2Manager
 
 
 @pytest.fixture(scope="function")

@@ -39,7 +39,7 @@ from tests.harness.services.timeout_manager import TimeoutManager
 from tests.harness.utils.port_allocator import PortAllocator
 
 from tests.integration.features.steps.docker_manager import EC2ContainerManager
-from campers.sync import MutagenManager
+from campers.services.sync import MutagenManager
 
 logger = logging.getLogger(__name__)
 

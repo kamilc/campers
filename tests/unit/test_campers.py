@@ -859,7 +859,7 @@ def test_run_validates_env_filter_regex_patterns(
     campers_module, env_filter, expected_error
 ) -> None:
     """Test that invalid regex patterns in env_filter are caught during validation."""
-    from campers.config import ConfigLoader
+    from campers.core.config import ConfigLoader
 
     campers_instance = campers_module()
     campers_instance._config_loader = ConfigLoader()
@@ -2076,7 +2076,7 @@ def test_stop_command_success(campers_module) -> None:
     }
     mock_ec2.get_volume_size.return_value = 50
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with patch("builtins.print"):
         campers_instance.stop("i-test123")
@@ -2103,7 +2103,7 @@ def test_stop_command_already_stopped_idempotent(campers_module) -> None:
         }
     ]
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with patch("builtins.print"):
         campers_instance.stop("i-test123")
@@ -2122,7 +2122,7 @@ def test_stop_command_no_matches_error(campers_module) -> None:
     mock_ec2 = MagicMock()
     mock_ec2.find_instances_by_name_or_id.return_value = []
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with pytest.raises(SystemExit) as exc_info:
         campers_instance.stop("nonexistent")
@@ -2144,7 +2144,7 @@ def test_stop_command_multiple_matches_requires_id(campers_module) -> None:
         {"instance_id": "i-test2", "state": "running", "region": "us-east-1"},
     ]
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with pytest.raises(SystemExit) as exc_info:
         campers_instance.stop("ambiguous-name")
@@ -2176,10 +2176,10 @@ def test_stop_command_displays_storage_cost(campers_module) -> None:
     }
     mock_ec2.get_volume_size.return_value = 100
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with patch("builtins.print") as mock_print, \
-         patch("campers.pricing.calculate_monthly_cost") as mock_cost:
+         patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_cost:
         mock_cost.side_effect = [100.0, 50.0]
         campers_instance.stop("i-test123")
 
@@ -2211,7 +2211,7 @@ def test_start_command_success(campers_module) -> None:
         "public_ip": "203.0.113.1",
     }
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with patch("builtins.print"):
         campers_instance.start("i-test123")
@@ -2238,7 +2238,7 @@ def test_start_command_already_running_idempotent(campers_module) -> None:
         }
     ]
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with patch("builtins.print"):
         campers_instance.start("i-test123")
@@ -2257,7 +2257,7 @@ def test_start_command_no_matches_error(campers_module) -> None:
     mock_ec2 = MagicMock()
     mock_ec2.find_instances_by_name_or_id.return_value = []
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with pytest.raises(SystemExit) as exc_info:
         campers_instance.start("nonexistent")
@@ -2279,7 +2279,7 @@ def test_start_command_multiple_matches_requires_id(campers_module) -> None:
         {"instance_id": "i-test2", "state": "stopped", "region": "us-east-1"},
     ]
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with pytest.raises(SystemExit) as exc_info:
         campers_instance.start("ambiguous-name")
@@ -2311,7 +2311,7 @@ def test_start_command_displays_new_ip(campers_module) -> None:
         "public_ip": "203.0.113.1",
     }
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with patch("builtins.print") as mock_print:
         campers_instance.start("i-test123")
@@ -2338,7 +2338,7 @@ def test_destroy_command_success(campers_module) -> None:
         }
     ]
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with patch("builtins.print"):
         campers_instance.destroy("i-test123")
@@ -2357,7 +2357,7 @@ def test_destroy_command_no_matches_error(campers_module) -> None:
     mock_ec2 = MagicMock()
     mock_ec2.find_instances_by_name_or_id.return_value = []
 
-    campers_instance._create_ec2_manager = MagicMock(return_value=mock_ec2)
+    campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
     with pytest.raises(SystemExit) as exc_info:
         campers_instance.destroy("nonexistent")

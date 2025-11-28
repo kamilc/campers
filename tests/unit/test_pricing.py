@@ -6,13 +6,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from campers.pricing import (
+from campers.providers.aws.pricing import (
     PricingCache,
     PricingService,
     calculate_monthly_cost,
     format_cost,
 )
-from campers.pricing_parsers import parse_ebs_pricing, parse_ec2_pricing
+from campers.providers.aws.pricing_parsers import parse_ebs_pricing, parse_ec2_pricing
 
 
 class TestPricingParsers:
@@ -328,7 +328,7 @@ class TestPricingService:
 class TestCalculateMonthlyCost:
     """Tests for calculate_monthly_cost helper function."""
 
-    @patch("campers.pricing.PricingService")
+    @patch("campers.providers.aws.pricing.PricingService")
     def test_running_instance_cost(self, mock_service_class: Mock) -> None:
         """Test monthly cost calculation for running instance."""
         mock_service = Mock()
@@ -344,7 +344,7 @@ class TestCalculateMonthlyCost:
 
         assert cost == pytest.approx(0.0416 * 24 * 30)
 
-    @patch("campers.pricing.PricingService")
+    @patch("campers.providers.aws.pricing.PricingService")
     def test_stopped_instance_cost(self, mock_service_class: Mock) -> None:
         """Test monthly cost calculation for stopped instance."""
         mock_service = Mock()
@@ -360,7 +360,7 @@ class TestCalculateMonthlyCost:
 
         assert cost == pytest.approx(50 * 0.08)
 
-    @patch("campers.pricing.PricingService")
+    @patch("campers.providers.aws.pricing.PricingService")
     def test_returns_none_when_ec2_pricing_unavailable(
         self, mock_service_class: Mock
     ) -> None:
@@ -378,7 +378,7 @@ class TestCalculateMonthlyCost:
 
         assert cost is None
 
-    @patch("campers.pricing.PricingService")
+    @patch("campers.providers.aws.pricing.PricingService")
     def test_returns_none_when_ebs_pricing_unavailable(
         self, mock_service_class: Mock
     ) -> None:
@@ -396,7 +396,7 @@ class TestCalculateMonthlyCost:
 
         assert cost is None
 
-    @patch("campers.pricing.PricingService")
+    @patch("campers.providers.aws.pricing.PricingService")
     def test_returns_none_for_unknown_state(self, mock_service_class: Mock) -> None:
         """Test returns None for unknown instance state."""
         mock_service = Mock()

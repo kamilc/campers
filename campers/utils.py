@@ -4,8 +4,10 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import time
 from datetime import datetime
+from typing import Any
 
 
 def get_git_project_name() -> str | None:
@@ -166,3 +168,74 @@ def format_time_ago(dt: datetime) -> str:
     else:
         days = int(delta.total_seconds() / 86400)
         return f"{days}d ago"
+
+
+def log_and_print_error(message: str, *args: Any) -> None:
+    """Log error message and print to stderr.
+
+    Parameters
+    ----------
+    message : str
+        Error message with optional format placeholders
+    *args : Any
+        Format arguments for message
+    """
+    logging.error(message, *args)
+    formatted_msg = message % args if args else message
+    print(f"Error: {formatted_msg}", file=sys.stderr)
+
+
+def truncate_name(name: str, max_width: int = 19) -> str:
+    """Truncate name to fit in column width.
+
+    Parameters
+    ----------
+    name : str
+        Name to truncate
+    max_width : int
+        Maximum width for name (default: 19)
+
+    Returns
+    -------
+    str
+        Truncated name with ellipsis if exceeds max_width, otherwise original name
+    """
+    if len(name) > max_width:
+        return name[: max_width - 3] + "..."
+
+    return name
+
+
+def validate_region(region: str, boto3_client_factory: Any) -> None:
+    """Validate that a region string is a valid AWS region.
+
+    Parameters
+    ----------
+    region : str
+        AWS region string to validate
+    boto3_client_factory : Any
+        Factory function for creating boto3 clients
+
+    Raises
+    ------
+    ValueError
+        If region is not a valid AWS region
+    """
+    from botocore.exceptions import ClientError, NoCredentialsError
+
+    try:
+        ec2_client = boto3_client_factory("ec2", region_name="us-east-1")
+        regions_response = ec2_client.describe_regions()
+        valid_regions = {r["RegionName"] for r in regions_response["Regions"]}
+
+        if region not in valid_regions:
+            raise ValueError(
+                f"Invalid AWS region: '{region}'. "
+                f"Valid regions: {', '.join(sorted(valid_regions))}"
+            )
+    except (NoCredentialsError, ClientError) as e:
+        logging.warning(
+            "Unable to validate region '%s' (%s). Proceeding without validation.",
+            region,
+            e.__class__.__name__,
+        )

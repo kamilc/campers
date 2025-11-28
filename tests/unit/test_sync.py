@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from campers.sync import MutagenManager
+from campers.services.sync import MutagenManager
 
 
 @pytest.fixture
@@ -64,7 +64,7 @@ def test_check_mutagen_installed_success(mutagen_manager) -> None:
 
 def test_check_mutagen_not_installed(mutagen_manager) -> None:
     """Test error when mutagen is not installed."""
-    with patch("campers.sync.subprocess.run", side_effect=FileNotFoundError):
+    with patch("campers.services.sync.subprocess.run", side_effect=FileNotFoundError):
         with pytest.raises(
             RuntimeError,
             match="Mutagen is not installed locally",

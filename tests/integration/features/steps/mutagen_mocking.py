@@ -10,7 +10,7 @@ from unittest.mock import patch
 from behave.runner import Context
 
 from tests.integration.features.steps.docker_helpers import create_synced_directories
-from campers.portforward import PortForwardManager
+from campers.services.portforward import PortForwardManager
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def apply_timeout_mock_if_needed(context: Context) -> list:
             raise RuntimeError("Mutagen sync timed out after 1 seconds")
 
         try:
-            from campers.sync import MutagenManager
+            from campers.services.sync import MutagenManager
 
             def mock_create(  # type: ignore[override]
                 self,
@@ -161,7 +161,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
 
         if not timeout_patchers:
             try:
-                from campers.sync import MutagenManager
+                from campers.services.sync import MutagenManager
 
                 original_create = MutagenManager.create_sync_session
                 original_wait = MutagenManager.wait_for_initial_sync
@@ -350,7 +350,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
             return True
 
         try:
-            from campers.sync import MutagenManager
+            from campers.services.sync import MutagenManager
 
             def mock_validate_key_file(self, key_file: str) -> None:
                 logger.debug("Mocked: validate_key_file skipped for %s", key_file)

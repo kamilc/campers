@@ -187,7 +187,7 @@ def step_filter_environment_variables(context):
     context : behave.runner.Context
         Behave context object
     """
-    from campers.ssh import SSHManager
+    from campers.services.ssh import SSHManager
 
     ssh_manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem")
 
@@ -209,7 +209,7 @@ def step_config_validation_runs(context):
     context : behave.runner.Context
         Behave context object
     """
-    from campers.config import ConfigLoader
+    from campers.core.config import ConfigLoader
 
     config_loader = ConfigLoader()
 

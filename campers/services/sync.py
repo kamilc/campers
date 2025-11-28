@@ -201,8 +201,10 @@ class MutagenManager:
         campers_ssh_dir.mkdir(parents=True, exist_ok=True)
 
         temp_key_path = campers_ssh_dir / f"campers-key-{session_name}.pem"
+
         with open(temp_key_path, "w") as f:
             f.write(key_content)
+
         os.chmod(temp_key_path, 0o600)
 
         campers_config_path = (campers_ssh_dir / "campers-ssh-config").resolve()
@@ -223,6 +225,7 @@ Host {host}
         if campers_config_path.exists():
             with open(campers_config_path, "r") as f:
                 existing_config = f.read()
+
             if f"Host {host}" not in existing_config:
                 with open(campers_config_path, "a") as f:
                     f.write(host_config)
@@ -232,6 +235,7 @@ Host {host}
         else:
             with open(campers_config_path, "w") as f:
                 f.write(host_config)
+
             logger.debug("Created SSH config at %s", campers_config_path)
 
         user_ssh_config = Path.home() / ".ssh" / "config"
