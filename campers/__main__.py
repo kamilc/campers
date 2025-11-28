@@ -46,8 +46,6 @@ Timeout prevents indefinite hangs if sync stalls due to network or filesystem is
 class Campers:
     """Main CLI interface for campers."""
 
-    EBS_STORAGE_COST_PER_GB_MONTH = 0.08
-
     def __init__(
         self,
         ec2_manager_factory: Any | None = None,

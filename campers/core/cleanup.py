@@ -11,6 +11,7 @@ import types
 from pathlib import Path
 from typing import Any
 
+from campers.providers.aws.pricing import PricingService
 from campers.tui.app import TUI_STATUS_UPDATE_PROCESSING_DELAY
 
 
@@ -31,7 +32,7 @@ class CleanupManager:
         Configuration dictionary containing on_exit setting (optional)
     """
 
-    EBS_STORAGE_COST_PER_GB_MONTH = 0.08
+    DEFAULT_EBS_STORAGE_COST_PER_GB_MONTH = 0.08
 
     def __init__(
         self,
@@ -63,6 +64,30 @@ class CleanupManager:
                 "type": "cleanup_event",
                 "payload": {"step": step, "status": status},
             })
+
+    def _get_storage_rate(self, region: str) -> float:
+        """Get EBS storage rate for a region, using API or fallback to default.
+
+        Parameters
+        ----------
+        region : str
+            AWS region code
+
+        Returns
+        -------
+        float
+            Storage rate in USD per GB-month
+        """
+        try:
+            pricing_service = PricingService()
+            rate = pricing_service.get_storage_price(region)
+
+            if rate > 0:
+                return rate
+        except Exception as e:
+            logging.debug("Failed to fetch storage pricing: %s", e)
+
+        return self.DEFAULT_EBS_STORAGE_COST_PER_GB_MONTH
 
     def cleanup_resources(
         self, signum: int | None = None, frame: types.FrameType | None = None
@@ -319,8 +344,9 @@ class CleanupManager:
                         ec2_manager.stop_instance(instance_id)
                         logging.info("EC2 instance stopped successfully")
                         volume_size = ec2_manager.get_volume_size(instance_id)
+                        storage_rate = self._get_storage_rate(ec2_manager.region)
                         storage_cost = (
-                            float(volume_size) * self.EBS_STORAGE_COST_PER_GB_MONTH
+                            float(volume_size) * storage_rate
                             if volume_size is not None
                             else 0.0
                         )
