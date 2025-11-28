@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -23,13 +24,51 @@ from campers.constants import (
     SSH_IP_RETRY_MAX,
 )
 from campers.providers.exceptions import (
+    ProviderAPIError,
+    ProviderConnectionError,
     ProviderCredentialsError,
 )
-from campers.utils import extract_instance_from_response, is_localstack_endpoint
+from campers.providers.aws.utils import extract_instance_from_response
 
 logger = logging.getLogger(__name__)
 
 ACTIVE_INSTANCE_STATES = ["pending", "running", "stopping", "stopped"]
+
+
+@contextmanager
+def handle_aws_errors():
+    """Context manager to translate AWS exceptions to ProviderError hierarchy.
+
+    Yields
+    ------
+    None
+
+    Raises
+    ------
+    ProviderCredentialsError
+        When AWS credentials are not configured or invalid
+    ProviderAPIError
+        When AWS API call fails
+    ProviderConnectionError
+        When unable to connect to AWS API
+    """
+    try:
+        yield
+    except NoCredentialsError as e:
+        raise ProviderCredentialsError(
+            "Cloud provider credentials not configured"
+        ) from e
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        message = e.response.get("Error", {}).get("Message", str(e))
+        raise ProviderAPIError(
+            message=message, error_code=error_code, original_exception=e
+        ) from e
+    except EndpointConnectionError as e:
+        raise ProviderConnectionError(
+            f"Unable to connect to cloud provider API: {e}"
+        ) from e
+
 
 VALID_INSTANCE_TYPES = frozenset(
     (
@@ -149,26 +188,6 @@ class EC2Manager:
                 e.__class__.__name__,
             )
 
-    def _is_localstack_endpoint(self) -> bool:
-        """Detect if EC2 client is configured for LocalStack.
-
-        This method enables high-fidelity BDD testing against LocalStack while
-        maintaining clean production code. Production AWS users never trigger this
-        code path because real AWS endpoints never contain "localstack" or ":4566".
-
-        The LocalStack detection is defensive: it checks the actual boto3 endpoint
-        URL configuration rather than environment variables or test mode flags.
-        This approach isolates test-specific behavior to clearly documented
-        locations while preserving standard AWS behavior for production users.
-
-        Returns
-        -------
-        bool
-            True if endpoint URL contains 'localstack' or ':4566' (default
-            LocalStack port), False otherwise
-        """
-        return is_localstack_endpoint(self.ec2_client)
-
     def resolve_ami(self, config: dict[str, Any]) -> str:
         """Resolve AMI ID from configuration.
 
@@ -220,13 +239,6 @@ class EC2Manager:
                 architecture=query.get("architecture"),
             )
 
-        if self._is_localstack_endpoint():
-            return self.find_ami_by_query(
-                name_pattern="*Ubuntu 24*",
-                owner=None,
-                architecture="x86_64",
-            )
-
         return self.find_ami_by_query(
             name_pattern="*Ubuntu 24*",
             owner="amazon",
@@ -270,13 +282,11 @@ class EC2Manager:
                 raise ValueError(
                     f"Invalid architecture: '{architecture}'. Must be 'x86_64' or 'arm64'"
                 )
-            if not self._is_localstack_endpoint():
-                filters.append({"Name": "architecture", "Values": [architecture]})
+            filters.append({"Name": "architecture", "Values": [architecture]})
 
         kwargs: dict[str, Any] = {"Filters": filters}
         if owner:
-            if not self._is_localstack_endpoint():
-                kwargs["Owners"] = [owner]
+            kwargs["Owners"] = [owner]
 
         response = self.ec2_client.describe_images(**kwargs)
 
@@ -591,13 +601,9 @@ class EC2Manager:
         )
         instance.reload()
 
-        public_ip = instance.public_ip_address
-        if self._is_localstack_endpoint():
-            public_ip = None
-
         return {
             "instance_id": instance_id,
-            "public_ip": public_ip,
+            "public_ip": instance.public_ip_address,
             "state": instance.state["Name"],
             "key_file": str(resources["key_file"]),
             "security_group_id": resources["sg_id"],
@@ -678,14 +684,15 @@ class EC2Manager:
             regions = [region_filter]
         else:
             try:
-                ec2_client = self.boto3_client_factory("ec2", region_name=self.region)
-                regions_response = ec2_client.describe_regions()
-                regions = [r["RegionName"] for r in regions_response["Regions"]]
-            except NoCredentialsError as e:
-                raise ProviderCredentialsError(
-                    "Cloud provider credentials not configured"
-                ) from e
-            except (ClientError, EndpointConnectionError) as e:
+                with handle_aws_errors():
+                    ec2_client = self.boto3_client_factory(
+                        "ec2", region_name=self.region
+                    )
+                    regions_response = ec2_client.describe_regions()
+                    regions = [r["RegionName"] for r in regions_response["Regions"]]
+            except ProviderCredentialsError:
+                raise
+            except (ProviderAPIError, ProviderConnectionError) as e:
                 logger.warning(
                     f"Unable to query all AWS regions ({e.__class__.__name__}), "
                     f"falling back to default region '{self.region}' only. "
@@ -697,44 +704,47 @@ class EC2Manager:
 
         for region in regions:
             try:
-                regional_ec2 = self.boto3_client_factory("ec2", region_name=region)
+                with handle_aws_errors():
+                    regional_ec2 = self.boto3_client_factory("ec2", region_name=region)
 
-                paginator = regional_ec2.get_paginator("describe_instances")
-                page_iterator = paginator.paginate(
-                    Filters=[
-                        {"Name": "tag:ManagedBy", "Values": ["campers"]},
-                        {
-                            "Name": "instance-state-name",
-                            "Values": ACTIVE_INSTANCE_STATES,
-                        },
-                    ]
-                )
+                    paginator = regional_ec2.get_paginator("describe_instances")
+                    page_iterator = paginator.paginate(
+                        Filters=[
+                            {"Name": "tag:ManagedBy", "Values": ["campers"]},
+                            {
+                                "Name": "instance-state-name",
+                                "Values": ACTIVE_INSTANCE_STATES,
+                            },
+                        ]
+                    )
 
-                for page in page_iterator:
-                    for reservation in page["Reservations"]:
-                        for instance in reservation["Instances"]:
-                            tags = {
-                                tag["Key"]: tag["Value"]
-                                for tag in instance.get("Tags", [])
-                            }
-
-                            instances.append(
-                                {
-                                    "instance_id": instance["InstanceId"],
-                                    "name": tags.get("Name", "N/A"),
-                                    "state": instance["State"]["Name"],
-                                    "region": region,
-                                    "instance_type": instance["InstanceType"],
-                                    "launch_time": instance["LaunchTime"],
-                                    "camp_config": tags.get("MachineConfig", "ad-hoc"),
+                    for page in page_iterator:
+                        for reservation in page["Reservations"]:
+                            for instance in reservation["Instances"]:
+                                tags = {
+                                    tag["Key"]: tag["Value"]
+                                    for tag in instance.get("Tags", [])
                                 }
-                            )
 
-            except NoCredentialsError as e:
-                raise ProviderCredentialsError(
-                    "Cloud provider credentials not configured"
-                ) from e
-            except ClientError as e:
+                                instances.append(
+                                    {
+                                        "instance_id": instance["InstanceId"],
+                                        "name": tags.get("Name", "N/A"),
+                                        "state": instance["State"]["Name"],
+                                        "region": region,
+                                        "instance_type": instance["InstanceType"],
+                                        "launch_time": instance["LaunchTime"],
+                                        "camp_config": tags.get(
+                                            "MachineConfig", "ad-hoc"
+                                        ),
+                                    }
+                                )
+            except ProviderCredentialsError:
+                raise
+            except ProviderAPIError as e:
+                logger.warning(f"Failed to query region {region}: {e}")
+                continue
+            except ProviderConnectionError as e:
                 logger.warning(f"Failed to query region {region}: {e}")
                 continue
 

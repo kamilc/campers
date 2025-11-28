@@ -9,13 +9,14 @@ import pytest
 
 from campers.utils import (
     atomic_file_write,
-    extract_instance_from_response,
     generate_instance_name,
     get_git_branch,
     get_git_project_name,
-    is_localstack_endpoint,
-    sanitize_instance_name,
     validate_port,
+)
+from campers.providers.aws.utils import (
+    extract_instance_from_response,
+    sanitize_instance_name,
 )
 
 
@@ -269,40 +270,6 @@ class TestExtractInstanceFromResponse:
         response = {"Reservations": [{}]}
         with pytest.raises(ValueError, match="No instances"):
             extract_instance_from_response(response)
-
-
-class TestIsLocalstackEndpoint:
-    """Tests for LocalStack endpoint detection."""
-
-    def test_returns_true_for_localstack_url(self) -> None:
-        """Test returns True with localstack in URL."""
-        mock_client = MagicMock()
-        mock_client.meta.endpoint_url = "http://localhost:4566"
-        assert is_localstack_endpoint(mock_client)
-
-    def test_returns_true_for_localstack_uppercase(self) -> None:
-        """Test returns True with LOCALSTACK in URL."""
-        mock_client = MagicMock()
-        mock_client.meta.endpoint_url = "http://LocalStack:4566"
-        assert is_localstack_endpoint(mock_client)
-
-    def test_returns_true_for_port_4566(self) -> None:
-        """Test returns True with port 4566."""
-        mock_client = MagicMock()
-        mock_client.meta.endpoint_url = "http://my-localstack:4566"
-        assert is_localstack_endpoint(mock_client)
-
-    def test_returns_false_for_aws_endpoint(self) -> None:
-        """Test returns False for real AWS endpoint."""
-        mock_client = MagicMock()
-        mock_client.meta.endpoint_url = "https://ec2.us-east-1.amazonaws.com"
-        assert not is_localstack_endpoint(mock_client)
-
-    def test_returns_false_for_no_endpoint(self) -> None:
-        """Test returns False when no endpoint_url."""
-        mock_client = MagicMock()
-        mock_client.meta.endpoint_url = None
-        assert not is_localstack_endpoint(mock_client)
 
 
 class TestValidatePort:

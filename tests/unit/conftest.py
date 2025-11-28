@@ -176,7 +176,11 @@ def mock_ec2_manager(campers_module):
         mock_manager.find_instances_by_name_or_id.return_value = []
         mock_manager.launch_instance.return_value = mock_instance_details
         MockEC2Manager.return_value = mock_manager
-        yield mock_manager
+
+        with patch.object(
+            campers_module, "get_provider", return_value={"compute": MockEC2Manager}
+        ):
+            yield mock_manager
 
 
 @pytest.fixture

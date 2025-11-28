@@ -3,7 +3,6 @@
 import fcntl
 import logging
 import os
-import re
 import subprocess
 import sys
 import time
@@ -89,35 +88,6 @@ def get_git_branch() -> str | None:
     return None
 
 
-def sanitize_instance_name(name: str) -> str:
-    """Sanitize instance name for AWS tag compliance.
-
-    Applies AWS tag value rules:
-    - Convert to lowercase
-    - Replace forward slashes with dashes
-    - Remove invalid characters (keep only a-z, 0-9, dash)
-    - Remove consecutive dashes
-    - Trim leading/trailing dashes
-    - Limit to 256 characters (AWS tag value limit)
-
-    Parameters
-    ----------
-    name : str
-        Instance name to sanitize
-
-    Returns
-    -------
-    str
-        Sanitized instance name
-    """
-    name = name.lower()
-    name = name.replace("/", "-")
-    name = re.sub(r"[^a-z0-9\-]", "-", name)
-    name = re.sub(r"-+", "-", name)
-    name = name.strip("-")
-    return name[:256]
-
-
 def generate_instance_name() -> str:
     """Generate deterministic instance name based on git context.
 
@@ -127,8 +97,10 @@ def generate_instance_name() -> str:
     Returns
     -------
     str
-        Instance name (sanitized for AWS tag compliance)
+        Instance name (sanitized for cloud provider tag compliance)
     """
+    from campers.providers.aws.utils import sanitize_instance_name
+
     project = get_git_project_name()
     branch = get_git_branch()
 
@@ -213,50 +185,6 @@ def truncate_name(name: str, max_width: int = DEFAULT_NAME_COLUMN_WIDTH) -> str:
         return name[: max_width - 3] + "..."
 
     return name
-
-
-def extract_instance_from_response(response: dict[str, Any]) -> dict[str, Any]:
-    """Extract first instance from AWS describe_instances response.
-
-    Parameters
-    ----------
-    response : dict[str, Any]
-        Response from boto3 describe_instances call
-
-    Returns
-    -------
-    dict[str, Any]
-        The first instance dictionary
-
-    Raises
-    ------
-    ValueError
-        If response has no reservations or instances
-    """
-    if not response.get("Reservations"):
-        raise ValueError("No reservations in response")
-    if not response["Reservations"][0].get("Instances"):
-        raise ValueError("No instances in reservation")
-    return response["Reservations"][0]["Instances"][0]
-
-
-def is_localstack_endpoint(client: Any) -> bool:
-    """Check if boto3 client is configured for LocalStack.
-
-    Parameters
-    ----------
-    client : Any
-        Boto3 client instance
-
-    Returns
-    -------
-    bool
-        True if client endpoint URL contains 'localstack' or ':4566'
-    """
-    endpoint = getattr(client.meta, "endpoint_url", None)
-    if not endpoint:
-        return False
-    return "localstack" in endpoint.lower() or ":4566" in endpoint
 
 
 def validate_port(port: int) -> None:

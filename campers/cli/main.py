@@ -10,9 +10,9 @@ from typing import Any
 
 import fire
 import paramiko
-from botocore.exceptions import ClientError, NoCredentialsError
 
 from campers.logging import StreamFormatter, StreamRoutingFilter
+from campers.providers import ProviderAPIError, ProviderCredentialsError
 
 
 def get_campers_base_class() -> type:
@@ -223,11 +223,11 @@ def main() -> None:
 
     try:
         fire.Fire(CampersCLI())
-    except NoCredentialsError:
+    except ProviderCredentialsError:
         if debug_mode:
             raise
 
-        print("AWS credentials not found\n", file=sys.stderr)
+        print("Cloud credentials not found\n", file=sys.stderr)
         print("Configure your credentials:", file=sys.stderr)
         print("  aws configure\n", file=sys.stderr)
         print("Or set environment variables:", file=sys.stderr)
@@ -267,20 +267,20 @@ def main() -> None:
         else:
             print(f"Configuration error: {error_msg}", file=sys.stderr)
             sys.exit(2)
-    except ClientError as e:
+    except ProviderAPIError as e:
         if debug_mode:
             raise
 
-        error_code = e.response.get("Error", {}).get("Code", "")
-        error_msg = e.response.get("Error", {}).get("Message", str(e))
+        error_code = e.error_code
+        error_msg = str(e)
 
         if error_code == "UnauthorizedOperation":
             print("Insufficient IAM permissions\n", file=sys.stderr)
             print(
-                "Your AWS credentials don't have the required permissions.",
+                "Your cloud credentials don't have the required permissions.",
                 file=sys.stderr,
             )
-            print("Contact your AWS administrator to grant:", file=sys.stderr)
+            print("Contact your cloud administrator to grant:", file=sys.stderr)
             print(
                 "  - Compute permissions (DescribeInstances, RunInstances, TerminateInstances)",
                 file=sys.stderr,
@@ -305,7 +305,7 @@ def main() -> None:
             print("  campers doctor", file=sys.stderr)
             print("  campers run --instance-type t3.medium", file=sys.stderr)
         elif error_code in ["InstanceLimitExceeded", "RequestLimitExceeded"]:
-            print("AWS quota exceeded\n", file=sys.stderr)
+            print("Cloud quota exceeded\n", file=sys.stderr)
             print("This usually means:", file=sys.stderr)
             print("  - Too many instances running", file=sys.stderr)
             print("  - Need to request quota increase\n", file=sys.stderr)
@@ -313,7 +313,7 @@ def main() -> None:
             print("  https://console.aws.amazon.com/servicequotas/", file=sys.stderr)
             print("  campers list", file=sys.stderr)
         elif error_code in ["ExpiredToken", "RequestExpired", "ExpiredTokenException"]:
-            print("AWS credentials have expired\n", file=sys.stderr)
+            print("Cloud credentials have expired\n", file=sys.stderr)
             print("This usually means:", file=sys.stderr)
             print("  - Your temporary credentials (STS) have expired", file=sys.stderr)
             print("  - Your session token needs to be refreshed\n", file=sys.stderr)
@@ -324,7 +324,7 @@ def main() -> None:
             )
             print("  # Or refresh your temporary credentials", file=sys.stderr)
         else:
-            print(f"AWS API error: {error_msg}", file=sys.stderr)
+            print(f"Cloud API error: {error_msg}", file=sys.stderr)
 
         sys.exit(1)
     except (paramiko.SSHException, paramiko.AuthenticationException, socket.error):

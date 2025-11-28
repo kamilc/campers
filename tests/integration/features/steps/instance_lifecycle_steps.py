@@ -12,6 +12,8 @@ from moto import mock_aws
 from campers.providers.aws.compute import EC2Manager
 from campers.utils import (
     generate_instance_name,
+)
+from campers.providers.aws.utils import (
     sanitize_instance_name,
 )
 

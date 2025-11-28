@@ -27,6 +27,7 @@ for _boto_module in ["botocore", "boto3", "urllib3"]:
     logging.getLogger(_boto_module).setLevel(logging.WARNING)
 
 from campers.core.config import ConfigLoader  # noqa: E402
+from campers.providers import get_provider  # noqa: E402
 from campers.providers.aws.compute import EC2Manager  # noqa: E402, F401
 from campers.services.ssh import SSHManager  # noqa: E402
 from campers.services.sync import MutagenManager  # noqa: E402, F401
@@ -93,7 +94,9 @@ class Campers:
 
     def _create_compute_provider(self, region: str) -> ComputeProvider:
         """Create a compute provider instance based on configured provider."""
-        return EC2Manager(
+        provider = get_provider("aws")
+        compute_class = provider["compute"]
+        return compute_class(
             region=region,
             boto3_client_factory=self._boto3_client_factory,
             boto3_resource_factory=self._boto3_resource_factory,
