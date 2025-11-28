@@ -35,13 +35,6 @@ from campers.tui import CampersTUI  # noqa: E402
 from campers.cli.main import main  # noqa: E402
 from campers.utils import log_and_print_error, truncate_name, validate_region  # noqa: E402
 
-SYNC_TIMEOUT = 300
-"""Mutagen initial sync timeout in seconds.
-
-Five minutes allows time for large codebases to complete initial sync over SSH.
-Timeout prevents indefinite hangs if sync stalls due to network or filesystem issues.
-"""
-
 
 class Campers:
     """Main CLI interface for campers."""

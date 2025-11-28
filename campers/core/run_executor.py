@@ -171,7 +171,9 @@ class RunExecutor:
             if merged_config.get("sync_paths") and not disable_mutagen:
                 mutagen_mgr.check_mutagen_installed()
 
-            compute_provider = self.compute_provider_factory(region=merged_config["region"])
+            compute_provider = self.compute_provider_factory(
+                region=merged_config["region"]
+            )
 
             with self.resources_lock:
                 self.resources["compute_provider"] = compute_provider

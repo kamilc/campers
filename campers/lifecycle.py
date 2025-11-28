@@ -5,8 +5,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-from botocore.exceptions import ClientError, NoCredentialsError
-
+from campers.providers.exceptions import ProviderAPIError, ProviderCredentialsError
 from campers.providers.aws.pricing import (
     PricingService,
     calculate_monthly_cost,
@@ -88,9 +87,7 @@ class LifecycleManager:
             )
 
             for match in matches:
-                print(
-                    f"  {match['instance_id']} ({match['region']})", file=sys.stderr
-                )
+                print(f"  {match['instance_id']} ({match['region']})", file=sys.stderr)
 
             sys.exit(1)
 
@@ -106,10 +103,10 @@ class LifecycleManager:
 
         Raises
         ------
-        NoCredentialsError
-            If cloud credentials are not configured
-        ClientError
-            If cloud API calls fail
+        ProviderCredentialsError
+            If cloud provider credentials are not configured
+        ProviderAPIError
+            If cloud provider API calls fail
         ValueError
             If provided region is not a valid cloud region
         """
@@ -119,7 +116,9 @@ class LifecycleManager:
             self.validate_region(region)
 
         try:
-            compute_provider = self.compute_provider_factory(region=region or default_region)
+            compute_provider = self.compute_provider_factory(
+                region=region or default_region
+            )
             instances = compute_provider.list_instances(region_filter=region)
 
             if not instances:
@@ -187,12 +186,16 @@ class LifecycleManager:
             if costs_available:
                 print(f"\nTotal estimated cost: {format_cost(total_monthly_cost)}")
 
-        except NoCredentialsError:
-            print("Error: AWS credentials not found. Please configure AWS credentials.")
+        except ProviderCredentialsError:
+            print(
+                "Error: Cloud provider credentials not found. Please configure credentials."
+            )
             raise
-        except ClientError as e:
-            if "UnauthorizedOperation" in str(e):
-                print("Error: Insufficient AWS permissions to list instances.")
+        except ProviderAPIError as e:
+            if e.error_code == "UnauthorizedOperation":
+                print(
+                    "Error: Insufficient cloud provider permissions to list instances."
+                )
                 raise
 
             raise
@@ -312,21 +315,19 @@ class LifecycleManager:
                 self.log_and_print_error("Failed to stop instance: %s", str(e))
 
             sys.exit(1)
-        except NoCredentialsError:
+        except ProviderCredentialsError:
             self.log_and_print_error(
-                "AWS credentials not configured. Please set up AWS credentials."
+                "Cloud provider credentials not configured. Please set up credentials."
             )
             sys.exit(1)
-        except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code", "")
-
-            if error_code == "UnauthorizedOperation":
+        except ProviderAPIError as e:
+            if e.error_code == "UnauthorizedOperation":
                 self.log_and_print_error(
-                    "Insufficient AWS permissions to perform this operation."
+                    "Insufficient cloud provider permissions to perform this operation."
                 )
                 sys.exit(1)
 
-            self.log_and_print_error("AWS API error: %s", e)
+            self.log_and_print_error("Cloud provider API error: %s", e)
             sys.exit(1)
 
     def start(self, name_or_id: str, region: str | None = None) -> None:
@@ -446,21 +447,19 @@ class LifecycleManager:
                 self.log_and_print_error("Failed to start instance: %s", str(e))
 
             sys.exit(1)
-        except NoCredentialsError:
+        except ProviderCredentialsError:
             self.log_and_print_error(
-                "AWS credentials not configured. Please set up AWS credentials."
+                "Cloud provider credentials not configured. Please set up credentials."
             )
             sys.exit(1)
-        except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code", "")
-
-            if error_code == "UnauthorizedOperation":
+        except ProviderAPIError as e:
+            if e.error_code == "UnauthorizedOperation":
                 self.log_and_print_error(
-                    "Insufficient AWS permissions to perform this operation."
+                    "Insufficient cloud provider permissions to perform this operation."
                 )
                 sys.exit(1)
 
-            self.log_and_print_error("AWS API error: %s", e)
+            self.log_and_print_error("Cloud provider API error: %s", e)
             sys.exit(1)
 
     def info(self, name_or_id: str, region: str | None = None) -> None:
@@ -552,21 +551,19 @@ class LifecycleManager:
             print(f"  Key File: {key_file if key_file else 'N/A'}")
             print(f"  Uptime: {uptime_str}")
 
-        except NoCredentialsError:
+        except ProviderCredentialsError:
             self.log_and_print_error(
-                "AWS credentials not configured. Please set up AWS credentials."
+                "Cloud provider credentials not configured. Please set up credentials."
             )
             sys.exit(1)
-        except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code", "")
-
-            if error_code == "UnauthorizedOperation":
+        except ProviderAPIError as e:
+            if e.error_code == "UnauthorizedOperation":
                 self.log_and_print_error(
-                    "Insufficient AWS permissions to perform this operation."
+                    "Insufficient cloud provider permissions to perform this operation."
                 )
                 sys.exit(1)
 
-            self.log_and_print_error("AWS API error: %s", e)
+            self.log_and_print_error("Cloud provider API error: %s", e)
             sys.exit(1)
 
     def destroy(self, name_or_id: str, region: str | None = None) -> None:
@@ -614,19 +611,17 @@ class LifecycleManager:
                 self.log_and_print_error("Failed to terminate instance: %s", str(e))
 
             sys.exit(1)
-        except NoCredentialsError:
+        except ProviderCredentialsError:
             self.log_and_print_error(
-                "AWS credentials not configured. Please set up AWS credentials."
+                "Cloud provider credentials not configured. Please set up credentials."
             )
             sys.exit(1)
-        except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code", "")
-
-            if error_code == "UnauthorizedOperation":
+        except ProviderAPIError as e:
+            if e.error_code == "UnauthorizedOperation":
                 self.log_and_print_error(
-                    "Insufficient AWS permissions to perform this operation."
+                    "Insufficient cloud provider permissions to perform this operation."
                 )
                 sys.exit(1)
 
-            self.log_and_print_error("AWS API error: %s", e)
+            self.log_and_print_error("Cloud provider API error: %s", e)
             sys.exit(1)

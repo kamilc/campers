@@ -9,6 +9,12 @@ from __future__ import annotations
 from typing import Any
 
 from campers.providers.aws import EC2Manager, PricingService
+from campers.providers.exceptions import (
+    ProviderAPIError,
+    ProviderConnectionError,
+    ProviderCredentialsError,
+    ProviderError,
+)
 
 _PROVIDERS: dict[str, dict[str, Any]] = {}
 
@@ -62,6 +68,14 @@ def list_providers() -> list[str]:
     return list(_PROVIDERS.keys())
 
 
-__all__ = ["register_provider", "get_provider", "list_providers"]
+__all__ = [
+    "register_provider",
+    "get_provider",
+    "list_providers",
+    "ProviderError",
+    "ProviderCredentialsError",
+    "ProviderAPIError",
+    "ProviderConnectionError",
+]
 
 register_provider("aws", EC2Manager, PricingService)

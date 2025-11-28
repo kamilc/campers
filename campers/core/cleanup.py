@@ -60,10 +60,12 @@ class CleanupManager:
             Status of the step (in_progress, completed, or failed)
         """
         if self.update_queue is not None:
-            self.update_queue.put({
-                "type": "cleanup_event",
-                "payload": {"step": step, "status": status},
-            })
+            self.update_queue.put(
+                {
+                    "type": "cleanup_event",
+                    "payload": {"step": step, "status": status},
+                }
+            )
 
     def _get_storage_rate(self, region: str) -> float:
         """Get EBS storage rate for a region, using API or fallback to default.
@@ -333,7 +335,9 @@ class CleanupManager:
                 logging.info("Stopping cloud instance %s...", instance_id)
 
                 if self.update_queue is not None:
-                    self.update_queue.put({"type": "status_update", "payload": {"status": "stopping"}})
+                    self.update_queue.put(
+                        {"type": "status_update", "payload": {"status": "stopping"}}
+                    )
                     time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
 
                 self._emit_cleanup_event("stop_instance", "in_progress")
@@ -423,7 +427,9 @@ class CleanupManager:
                 logging.info("Terminating cloud instance %s...", instance_id)
 
                 if self.update_queue is not None:
-                    self.update_queue.put({"type": "status_update", "payload": {"status": "terminating"}})
+                    self.update_queue.put(
+                        {"type": "status_update", "payload": {"status": "terminating"}}
+                    )
                     time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
 
                 self._emit_cleanup_event("terminate_instance", "in_progress")

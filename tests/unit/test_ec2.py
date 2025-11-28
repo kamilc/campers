@@ -461,10 +461,11 @@ def test_list_instances_handles_missing_tags(ec2_manager, registered_ami) -> Non
 
 
 def test_list_instances_no_credentials_error(ec2_manager) -> None:
-    """Test that NoCredentialsError is raised when credentials missing."""
+    """Test that ProviderCredentialsError is raised when credentials missing."""
     from unittest.mock import MagicMock
 
     from botocore.exceptions import NoCredentialsError
+    from campers.providers.exceptions import ProviderCredentialsError
 
     def mock_boto3_client(*args, **kwargs):
         mock_client = MagicMock()
@@ -475,7 +476,7 @@ def test_list_instances_no_credentials_error(ec2_manager) -> None:
 
     ec2_manager.boto3_client_factory = mock_boto3_client
 
-    with pytest.raises(NoCredentialsError):
+    with pytest.raises(ProviderCredentialsError):
         ec2_manager.list_instances(region_filter="us-east-1")
 
 

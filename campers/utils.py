@@ -207,19 +207,19 @@ def truncate_name(name: str, max_width: int = 19) -> str:
 
 
 def validate_region(region: str, boto3_client_factory: Any) -> None:
-    """Validate that a region string is a valid AWS region.
+    """Validate that a region string is a valid cloud provider region.
 
     Parameters
     ----------
     region : str
-        AWS region string to validate
+        Cloud provider region string to validate
     boto3_client_factory : Any
-        Factory function for creating boto3 clients
+        Factory function for creating cloud provider clients
 
     Raises
     ------
     ValueError
-        If region is not a valid AWS region
+        If region is not a valid cloud provider region
     """
     from botocore.exceptions import ClientError, NoCredentialsError
 
@@ -230,7 +230,7 @@ def validate_region(region: str, boto3_client_factory: Any) -> None:
 
         if region not in valid_regions:
             raise ValueError(
-                f"Invalid AWS region: '{region}'. "
+                f"Invalid region: '{region}'. "
                 f"Valid regions: {', '.join(sorted(valid_regions))}"
             )
     except (NoCredentialsError, ClientError) as e:

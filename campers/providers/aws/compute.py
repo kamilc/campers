@@ -15,6 +15,10 @@ from botocore.exceptions import (
     WaiterError,
 )
 
+from campers.providers.exceptions import (
+    ProviderCredentialsError,
+)
+
 logger = logging.getLogger(__name__)
 
 ACTIVE_INSTANCE_STATES = ["pending", "running", "stopping", "stopped"]
@@ -554,8 +558,10 @@ class EC2Manager:
                 ec2_client = self.boto3_client_factory("ec2", region_name=self.region)
                 regions_response = ec2_client.describe_regions()
                 regions = [r["RegionName"] for r in regions_response["Regions"]]
-            except NoCredentialsError:
-                raise
+            except NoCredentialsError as e:
+                raise ProviderCredentialsError(
+                    "Cloud provider credentials not configured"
+                ) from e
             except (ClientError, EndpointConnectionError) as e:
                 logger.warning(
                     f"Unable to query all AWS regions ({e.__class__.__name__}), "
@@ -601,8 +607,10 @@ class EC2Manager:
                                 }
                             )
 
-            except NoCredentialsError:
-                raise
+            except NoCredentialsError as e:
+                raise ProviderCredentialsError(
+                    "Cloud provider credentials not configured"
+                ) from e
             except ClientError as e:
                 logger.warning(f"Failed to query region {region}: {e}")
                 continue

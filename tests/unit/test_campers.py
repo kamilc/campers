@@ -1568,26 +1568,28 @@ def test_list_command_no_instances(campers_module, aws_credentials) -> None:
 
 
 def test_list_command_no_credentials(campers_module) -> None:
-    """Test list command handles missing AWS credentials."""
+    """Test list command handles missing cloud provider credentials."""
     from io import StringIO
     from unittest.mock import MagicMock, patch
 
-    from botocore.exceptions import NoCredentialsError
+    from campers.providers.exceptions import ProviderCredentialsError
 
     campers_instance = campers_module()
 
     mock_ec2_manager = MagicMock()
-    mock_ec2_manager.list_instances.side_effect = NoCredentialsError()
+    mock_ec2_manager.list_instances.side_effect = ProviderCredentialsError(
+        "Cloud provider credentials not configured"
+    )
 
     captured_output = StringIO()
 
     with patch("sys.stdout", captured_output):
         with patch("campers_cli.EC2Manager", return_value=mock_ec2_manager):
-            with pytest.raises(NoCredentialsError):
+            with pytest.raises(ProviderCredentialsError):
                 campers_instance.list()
 
     output = captured_output.getvalue()
-    assert "Error: AWS credentials not found" in output
+    assert "Error: Cloud provider credentials not found" in output
 
 
 def test_list_command_permission_error(campers_module, aws_credentials) -> None:
@@ -1595,25 +1597,25 @@ def test_list_command_permission_error(campers_module, aws_credentials) -> None:
     from io import StringIO
     from unittest.mock import MagicMock, patch
 
-    from botocore.exceptions import ClientError
+    from campers.providers.exceptions import ProviderAPIError
 
     campers_instance = campers_module()
 
     mock_ec2_manager = MagicMock()
-    mock_ec2_manager.list_instances.side_effect = ClientError(
-        {"Error": {"Code": "UnauthorizedOperation", "Message": "Not authorized"}},
-        "DescribeInstances",
+    mock_ec2_manager.list_instances.side_effect = ProviderAPIError(
+        "Insufficient permissions",
+        error_code="UnauthorizedOperation",
     )
 
     captured_output = StringIO()
 
     with patch("sys.stdout", captured_output):
         with patch("campers_cli.EC2Manager", return_value=mock_ec2_manager):
-            with pytest.raises(ClientError):
+            with pytest.raises(ProviderAPIError):
                 campers_instance.list()
 
     output = captured_output.getvalue()
-    assert "Error: Insufficient AWS permissions" in output
+    assert "Error: Insufficient cloud provider permissions" in output
 
 
 def test_list_command_invalid_region(campers_module, aws_credentials) -> None:
@@ -1632,7 +1634,7 @@ def test_list_command_invalid_region(campers_module, aws_credentials) -> None:
     }
 
     campers_instance._boto3_client_factory = MagicMock(return_value=mock_ec2_client)
-    with pytest.raises(ValueError, match="Invalid AWS region: 'invalid-region-xyz'"):
+    with pytest.raises(ValueError, match="Invalid region: 'invalid-region-xyz'"):
         campers_instance.list(region="invalid-region-xyz")
 
 
@@ -1701,7 +1703,7 @@ def test_validate_region_invalid(campers_module) -> None:
     }
 
     campers_instance._boto3_client_factory = MagicMock(return_value=mock_ec2_client)
-    with pytest.raises(ValueError, match="Invalid AWS region"):
+    with pytest.raises(ValueError, match="Invalid region"):
         campers_instance._validate_region("invalid-region")
 
 
@@ -1782,9 +1784,7 @@ def test_multiple_run_calls_work_correctly(campers_module) -> None:
 
     with (
         patch.dict(os.environ, {"CAMPERS_TEST_MODE": "0"}),
-        patch.object(
-            campers_instance, "_cleanup_resources", side_effect=track_cleanup
-        ),
+        patch.object(campers_instance, "_cleanup_resources", side_effect=track_cleanup),
     ):
         campers_instance._config_loader = MagicMock()
         campers_instance._config_loader.load_config.return_value = {"defaults": {}}
@@ -1902,9 +1902,7 @@ def test_get_or_create_running_instance_raises_error(campers_module) -> None:
     campers_instance._resources = {"compute_provider": mock_ec2}
 
     with pytest.raises(RuntimeError, match="already running"):
-        campers_instance._get_or_create_instance(
-            "test-branch", {"region": "us-east-1"}
-        )
+        campers_instance._get_or_create_instance("test-branch", {"region": "us-east-1"})
 
 
 def test_get_or_create_pending_instance_raises_error(campers_module) -> None:
@@ -1924,9 +1922,7 @@ def test_get_or_create_pending_instance_raises_error(campers_module) -> None:
     campers_instance._resources = {"compute_provider": mock_ec2}
 
     with pytest.raises(RuntimeError, match="Please wait for stable state"):
-        campers_instance._get_or_create_instance(
-            "test-branch", {"region": "us-east-1"}
-        )
+        campers_instance._get_or_create_instance("test-branch", {"region": "us-east-1"})
 
 
 def test_get_or_create_stopping_instance_raises_error(campers_module) -> None:
@@ -1946,9 +1942,7 @@ def test_get_or_create_stopping_instance_raises_error(campers_module) -> None:
     campers_instance._resources = {"compute_provider": mock_ec2}
 
     with pytest.raises(RuntimeError, match="Please wait for stable state"):
-        campers_instance._get_or_create_instance(
-            "test-branch", {"region": "us-east-1"}
-        )
+        campers_instance._get_or_create_instance("test-branch", {"region": "us-east-1"})
 
 
 def test_get_or_create_terminated_creates_new(campers_module) -> None:
@@ -2178,8 +2172,10 @@ def test_stop_command_displays_storage_cost(campers_module) -> None:
 
     campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
-    with patch("builtins.print") as mock_print, \
-         patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_cost:
+    with (
+        patch("builtins.print") as mock_print,
+        patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_cost,
+    ):
         mock_cost.side_effect = [100.0, 50.0]
         campers_instance.stop("i-test123")
 

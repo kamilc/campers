@@ -38,7 +38,10 @@ class InstanceOverviewWidget(Static):
     def __init__(self, campers_instance: "Campers") -> None:
         super().__init__("Initializing...", id="instance-overview-widget")
         self._campers_instance = campers_instance
-        self._compute_provider_factory = campers_instance._compute_provider_factory_override or campers_instance._create_compute_provider
+        self._compute_provider_factory = (
+            campers_instance._compute_provider_factory_override
+            or campers_instance._create_compute_provider
+        )
         self.ec2_manager = None
         self.pricing_service = None
         self.running_count = 0
