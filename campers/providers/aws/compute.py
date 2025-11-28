@@ -25,63 +25,66 @@ from campers.constants import (
 from campers.providers.exceptions import (
     ProviderCredentialsError,
 )
+from campers.utils import extract_instance_from_response, is_localstack_endpoint
 
 logger = logging.getLogger(__name__)
 
 ACTIVE_INSTANCE_STATES = ["pending", "running", "stopping", "stopped"]
 
-VALID_INSTANCE_TYPES = frozenset((
-    "t2.micro",
-    "t2.small",
-    "t2.medium",
-    "t2.large",
-    "t2.xlarge",
-    "t2.2xlarge",
-    "t3.micro",
-    "t3.small",
-    "t3.medium",
-    "t3.large",
-    "t3.xlarge",
-    "t3.2xlarge",
-    "t3a.micro",
-    "t3a.small",
-    "t3a.medium",
-    "t3a.large",
-    "t3a.xlarge",
-    "t3a.2xlarge",
-    "m5.large",
-    "m5.xlarge",
-    "m5.2xlarge",
-    "m5.4xlarge",
-    "m5.8xlarge",
-    "m5.12xlarge",
-    "m5.16xlarge",
-    "m5.24xlarge",
-    "m5a.large",
-    "m5a.xlarge",
-    "m5a.2xlarge",
-    "m5a.4xlarge",
-    "m5a.8xlarge",
-    "m5a.12xlarge",
-    "m5a.16xlarge",
-    "m5a.24xlarge",
-    "c5.large",
-    "c5.xlarge",
-    "c5.2xlarge",
-    "c5.4xlarge",
-    "c5.9xlarge",
-    "c5.12xlarge",
-    "c5.18xlarge",
-    "c5.24xlarge",
-    "r5.large",
-    "r5.xlarge",
-    "r5.2xlarge",
-    "r5.4xlarge",
-    "r5.8xlarge",
-    "r5.12xlarge",
-    "r5.16xlarge",
-    "r5.24xlarge",
-))
+VALID_INSTANCE_TYPES = frozenset(
+    (
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "t2.xlarge",
+        "t2.2xlarge",
+        "t3.micro",
+        "t3.small",
+        "t3.medium",
+        "t3.large",
+        "t3.xlarge",
+        "t3.2xlarge",
+        "t3a.micro",
+        "t3a.small",
+        "t3a.medium",
+        "t3a.large",
+        "t3a.xlarge",
+        "t3a.2xlarge",
+        "m5.large",
+        "m5.xlarge",
+        "m5.2xlarge",
+        "m5.4xlarge",
+        "m5.8xlarge",
+        "m5.12xlarge",
+        "m5.16xlarge",
+        "m5.24xlarge",
+        "m5a.large",
+        "m5a.xlarge",
+        "m5a.2xlarge",
+        "m5a.4xlarge",
+        "m5a.8xlarge",
+        "m5a.12xlarge",
+        "m5a.16xlarge",
+        "m5a.24xlarge",
+        "c5.large",
+        "c5.xlarge",
+        "c5.2xlarge",
+        "c5.4xlarge",
+        "c5.9xlarge",
+        "c5.12xlarge",
+        "c5.18xlarge",
+        "c5.24xlarge",
+        "r5.large",
+        "r5.xlarge",
+        "r5.2xlarge",
+        "r5.4xlarge",
+        "r5.8xlarge",
+        "r5.12xlarge",
+        "r5.16xlarge",
+        "r5.24xlarge",
+    )
+)
 
 
 class EC2Manager:
@@ -164,10 +167,7 @@ class EC2Manager:
             True if endpoint URL contains 'localstack' or ':4566' (default
             LocalStack port), False otherwise
         """
-        endpoint = self.ec2_client.meta.endpoint_url
-        return endpoint is not None and (
-            "localstack" in endpoint.lower() or ":4566" in endpoint
-        )
+        return is_localstack_endpoint(self.ec2_client)
 
     def resolve_ami(self, config: dict[str, Any]) -> str:
         """Resolve AMI ID from configuration.
@@ -312,8 +312,8 @@ class EC2Manager:
 
         try:
             self.ec2_client.delete_key_pair(KeyName=key_name)
-        except ClientError:
-            pass
+        except ClientError as e:
+            logger.debug("Failed to delete key pair %s: %s", key_name, e)
 
         response = self.ec2_client.create_key_pair(KeyName=key_name)
 
@@ -327,7 +327,9 @@ class EC2Manager:
 
         return key_name, key_file
 
-    def create_security_group(self, unique_id: str, ssh_allowed_cidr: str | None = None) -> str:
+    def create_security_group(
+        self, unique_id: str, ssh_allowed_cidr: str | None = None
+    ) -> str:
         """Create security group with SSH access.
 
         Parameters
@@ -365,8 +367,8 @@ class EC2Manager:
                 self.ec2_client.delete_security_group(
                     GroupId=existing_sgs["SecurityGroups"][0]["GroupId"]
                 )
-        except ClientError:
-            pass
+        except ClientError as e:
+            logger.debug("Failed to delete existing security group: %s", e)
 
         response = self.ec2_client.create_security_group(
             GroupName=sg_name,
@@ -508,9 +510,7 @@ class EC2Manager:
         """
         ami_id = self.resolve_ami(config)
         unique_id = str(int(time.time()))
-        instance_tag_name = (
-            instance_name if instance_name else f"campers-{unique_id}"
-        )
+        instance_tag_name = instance_name if instance_name else f"campers-{unique_id}"
 
         key_name, key_file = self.create_key_pair(unique_id)
 
@@ -808,13 +808,17 @@ class EC2Manager:
         try:
             waiter = self.ec2_client.get_waiter("instance_stopped")
             waiter.wait(
-                InstanceIds=[instance_id], WaiterConfig={"Delay": WAITER_DELAY_SECONDS, "MaxAttempts": WAITER_MAX_ATTEMPTS_LONG}
+                InstanceIds=[instance_id],
+                WaiterConfig={
+                    "Delay": WAITER_DELAY_SECONDS,
+                    "MaxAttempts": WAITER_MAX_ATTEMPTS_LONG,
+                },
             )
         except WaiterError as e:
             raise RuntimeError(f"Failed to stop instance: {e}") from e
 
         response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-        instance = response["Reservations"][0]["Instances"][0]
+        instance = extract_instance_from_response(response)
 
         logger.info(f"Instance {instance_id} stopped")
         return {
@@ -848,7 +852,7 @@ class EC2Manager:
         logger.info(f"Starting instance {instance_id}...")
 
         response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-        instance = response["Reservations"][0]["Instances"][0]
+        instance = extract_instance_from_response(response)
         current_state = instance["State"]["Name"]
 
         if current_state == "running":
@@ -873,7 +877,11 @@ class EC2Manager:
         try:
             waiter = self.ec2_client.get_waiter("instance_running")
             waiter.wait(
-                InstanceIds=[instance_id], WaiterConfig={"Delay": WAITER_DELAY_SECONDS, "MaxAttempts": WAITER_MAX_ATTEMPTS_SHORT}
+                InstanceIds=[instance_id],
+                WaiterConfig={
+                    "Delay": WAITER_DELAY_SECONDS,
+                    "MaxAttempts": WAITER_MAX_ATTEMPTS_SHORT,
+                },
             )
         except WaiterError as e:
             raise RuntimeError(f"Failed to start instance: {e}") from e
@@ -882,7 +890,7 @@ class EC2Manager:
         instance = None
         for attempt in range(max_retries):
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            instance = response["Reservations"][0]["Instances"][0]
+            instance = extract_instance_from_response(response)
             state = instance["State"]["Name"]
             if state == "running":
                 break
@@ -934,7 +942,7 @@ class EC2Manager:
             If instance has no root volume or volume information cannot be retrieved
         """
         response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-        instance = response["Reservations"][0]["Instances"][0]
+        instance = extract_instance_from_response(response)
 
         block_device_mappings = instance.get("BlockDeviceMappings", [])
         if not block_device_mappings:
@@ -971,7 +979,7 @@ class EC2Manager:
         """
         try:
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            instance = response["Reservations"][0]["Instances"][0]
+            instance = extract_instance_from_response(response)
             tags = instance.get("Tags", [])
             return {tag["Key"]: tag["Value"] for tag in tags}
         except (ClientError, IndexError, KeyError) as e:
@@ -1009,7 +1017,11 @@ class EC2Manager:
         try:
             waiter = self.ec2_client.get_waiter("instance_terminated")
             waiter.wait(
-                InstanceIds=[instance_id], WaiterConfig={"Delay": WAITER_DELAY_SECONDS, "MaxAttempts": WAITER_MAX_ATTEMPTS_LONG}
+                InstanceIds=[instance_id],
+                WaiterConfig={
+                    "Delay": WAITER_DELAY_SECONDS,
+                    "MaxAttempts": WAITER_MAX_ATTEMPTS_LONG,
+                },
             )
         except WaiterError as e:
             raise RuntimeError(f"Failed to terminate instance: {e}") from e
@@ -1017,8 +1029,8 @@ class EC2Manager:
         if unique_id:
             try:
                 self.ec2_client.delete_key_pair(KeyName=f"campers-{unique_id}")
-            except ClientError:
-                pass
+            except ClientError as e:
+                logger.debug("Failed to delete key pair during cleanup: %s", e)
 
             campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
             key_file = Path(campers_dir) / "keys" / f"{unique_id}.pem"
@@ -1029,5 +1041,5 @@ class EC2Manager:
         if sg_id:
             try:
                 self.ec2_client.delete_security_group(GroupId=sg_id)
-            except ClientError:
-                pass
+            except ClientError as e:
+                logger.debug("Failed to delete security group during cleanup: %s", e)

@@ -1,5 +1,6 @@
 """Utility functions for campers."""
 
+import fcntl
 import logging
 import os
 import re
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from campers.constants import (
@@ -211,3 +213,99 @@ def truncate_name(name: str, max_width: int = DEFAULT_NAME_COLUMN_WIDTH) -> str:
         return name[: max_width - 3] + "..."
 
     return name
+
+
+def extract_instance_from_response(response: dict[str, Any]) -> dict[str, Any]:
+    """Extract first instance from AWS describe_instances response.
+
+    Parameters
+    ----------
+    response : dict[str, Any]
+        Response from boto3 describe_instances call
+
+    Returns
+    -------
+    dict[str, Any]
+        The first instance dictionary
+
+    Raises
+    ------
+    ValueError
+        If response has no reservations or instances
+    """
+    if not response.get("Reservations"):
+        raise ValueError("No reservations in response")
+    if not response["Reservations"][0].get("Instances"):
+        raise ValueError("No instances in reservation")
+    return response["Reservations"][0]["Instances"][0]
+
+
+def is_localstack_endpoint(client: Any) -> bool:
+    """Check if boto3 client is configured for LocalStack.
+
+    Parameters
+    ----------
+    client : Any
+        Boto3 client instance
+
+    Returns
+    -------
+    bool
+        True if client endpoint URL contains 'localstack' or ':4566'
+    """
+    endpoint = getattr(client.meta, "endpoint_url", None)
+    if not endpoint:
+        return False
+    return "localstack" in endpoint.lower() or ":4566" in endpoint
+
+
+def validate_port(port: int) -> None:
+    """Validate port number is in valid range.
+
+    Parameters
+    ----------
+    port : int
+        Port number to validate
+
+    Raises
+    ------
+    ValueError
+        If port is not in valid range 1-65535
+    """
+    if not isinstance(port, int) or port < 1 or port > 65535:
+        raise ValueError(f"Port must be between 1-65535, got {port}")
+
+
+def atomic_file_write(path: Path, content: str) -> None:
+    """Write file atomically using temp file and rename with file locking.
+
+    Uses exclusive file locking to prevent concurrent access during write.
+    Writes to temporary file and renames to target atomically.
+
+    Parameters
+    ----------
+    path : Path
+        Target file path
+    content : str
+        File content to write
+
+    Raises
+    ------
+    Exception
+        Propagates any exception from write operation after cleanup
+    """
+    temp_path = path.with_suffix(".tmp")
+    lock_path = path.with_suffix(".lock")
+
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            with open(temp_path, "w") as f:
+                f.write(content)
+            temp_path.rename(path)
+        except Exception:
+            if temp_path.exists():
+                temp_path.unlink()
+            raise
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)

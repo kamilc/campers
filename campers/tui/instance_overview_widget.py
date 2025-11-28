@@ -81,7 +81,9 @@ class InstanceOverviewWidget(Static):
 
     def _start_refresh_timer(self) -> None:
         """Start the refresh timer and do initial refresh after initialization."""
-        self._interval_timer = self.set_interval(STATS_REFRESH_INTERVAL_SECONDS, self.refresh_stats)
+        self._interval_timer = self.set_interval(
+            STATS_REFRESH_INTERVAL_SECONDS, self.refresh_stats
+        )
         self.run_worker(self._refresh_stats_sync, thread=True)
 
     def _show_init_error(self) -> None:

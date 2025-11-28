@@ -8,6 +8,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from campers.utils import atomic_file_write
+
 logger = logging.getLogger(__name__)
 
 SYNC_STATUS_POLL_INTERVAL_SECONDS = 2
@@ -191,8 +193,12 @@ class MutagenManager:
 
         key_path = str(Path(key_file).expanduser().resolve())
 
-        with open(key_path, "r") as f:
-            key_content = f.read()
+        try:
+            with open(key_path, "r") as f:
+                key_content = f.read()
+        except (IOError, FileNotFoundError, PermissionError) as e:
+            logger.error("Failed to read SSH key file: %s", e)
+            raise RuntimeError(f"Failed to read SSH key file {key_path}: {e}") from e
 
         if ssh_wrapper_dir is None:
             ssh_wrapper_dir = tempfile.gettempdir()
@@ -242,16 +248,22 @@ Host {host}
         user_ssh_config.parent.mkdir(parents=True, exist_ok=True)
         include_line = f"Include {campers_config_path}"
 
-        if user_ssh_config.exists():
-            with open(user_ssh_config, "r") as f:
-                user_config_content = f.read()
-        else:
-            user_config_content = ""
+        try:
+            if user_ssh_config.exists():
+                with open(user_ssh_config, "r") as f:
+                    user_config_content = f.read()
+            else:
+                user_config_content = ""
 
-        if include_line not in user_config_content:
-            with open(user_ssh_config, "w") as f:
-                f.write(f"{include_line}\n\n{user_config_content}")
-            logger.debug("Added Include to %s", user_ssh_config)
+            if include_line not in user_config_content:
+                new_content = f"{include_line}\n\n{user_config_content}"
+                atomic_file_write(user_ssh_config, new_content)
+                logger.debug("Added Include to %s", user_ssh_config)
+        except (IOError, PermissionError, OSError) as e:
+            logger.error("Failed to update SSH config: %s", e)
+            raise RuntimeError(
+                f"Failed to update SSH config at {user_ssh_config}: {e}"
+            ) from e
 
         logger.debug("SSH config for host %s:\n%s", host, host_config.strip())
 
@@ -305,6 +317,8 @@ Host {host}
                 )
         except subprocess.TimeoutExpired:
             logger.warning("SSH connection test timed out")
+        except (FileNotFoundError, subprocess.SubprocessError) as e:
+            logger.warning("SSH connection test failed: %s", e)
 
         logger.debug("Mutagen create command: %s", " ".join(cmd))
 

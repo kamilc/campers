@@ -179,9 +179,7 @@ class RunExecutor:
                 update_queue,
             )
 
-            self._phase_ansible_provisioning(
-                merged_config, instance_details, ssh_port
-            )
+            self._phase_ansible_provisioning(merged_config, instance_details, ssh_port)
 
             self._phase_script_execution(
                 merged_config, instance_details, ssh_manager, env_vars
@@ -306,26 +304,20 @@ class RunExecutor:
         if merged_config.get("sync_paths"):
             mutagen_mgr.check_mutagen_installed()
 
-        compute_provider = self.compute_provider_factory(
-            region=merged_config["region"]
-        )
+        compute_provider = self.compute_provider_factory(region=merged_config["region"])
 
         with self.resources_lock:
             self.resources["compute_provider"] = compute_provider
 
         instance_name = generate_instance_name()
-        instance_details = self._get_or_create_instance(
-            instance_name, merged_config
-        )
+        instance_details = self._get_or_create_instance(instance_name, merged_config)
 
         with self.resources_lock:
             self.resources["instance_details"] = instance_details
 
         if update_queue is not None:
             logging.debug("Sending instance_details to TUI queue")
-            update_queue.put(
-                {"type": "instance_details", "payload": instance_details}
-            )
+            update_queue.put({"type": "instance_details", "payload": instance_details})
 
         return instance_details, compute_provider
 
@@ -473,13 +465,9 @@ class RunExecutor:
                     }
                 )
 
-            campers_dir = os.environ.get(
-                "CAMPERS_DIR", str(Path.home() / ".campers")
-            )
+            campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
 
-            logging.debug(
-                "Creating Mutagen sync session: %s", mutagen_session_name
-            )
+            logging.debug("Creating Mutagen sync session: %s", mutagen_session_name)
 
             mutagen_mgr.create_sync_session(
                 session_name=mutagen_session_name,
@@ -601,9 +589,7 @@ class RunExecutor:
             exit_code = ssh_manager.execute_command(setup_with_env)
 
             if exit_code != 0:
-                raise RuntimeError(
-                    f"Setup script failed with exit code: {exit_code}"
-                )
+                raise RuntimeError(f"Setup script failed with exit code: {exit_code}")
 
             logging.info("Setup script completed successfully")
 
@@ -654,9 +640,7 @@ class RunExecutor:
             exit_code = ssh_manager.execute_command_raw(startup_with_env)
 
             if exit_code != 0:
-                raise RuntimeError(
-                    f"Startup script failed with exit code: {exit_code}"
-                )
+                raise RuntimeError(f"Startup script failed with exit code: {exit_code}")
 
             logging.info("Startup script completed successfully")
 

@@ -11,6 +11,8 @@ import boto3
 import paramiko
 from paramiko.channel import Channel, ChannelFile
 
+from campers.utils import is_localstack_endpoint, validate_port
+
 logger = logging.getLogger(__name__)
 
 MAX_COMMAND_LENGTH = 10000
@@ -69,14 +71,10 @@ def get_ssh_connection_info(
 
     try:
         ec2_client = boto3.client("ec2")
-        endpoint = ec2_client.meta.endpoint_url
-        logger.info(f"EC2 endpoint: {endpoint}")
-        is_localstack = endpoint and (
-            "localstack" in endpoint.lower() or ":4566" in endpoint
-        )
-        logger.info(f"Is LocalStack: {is_localstack}")
+        logger.info(f"EC2 endpoint: {ec2_client.meta.endpoint_url}")
 
-        if is_localstack:
+        if is_localstack_endpoint(ec2_client):
+            logger.info("Detected LocalStack endpoint")
             max_retries = 10
             retry_delay = 0.5
 
@@ -103,7 +101,14 @@ def get_ssh_connection_info(
                     and "CampersSSHKeyFile" in tags
                 ):
                     host = tags["CampersSSHHost"]
-                    port = int(tags["CampersSSHPort"])
+                    try:
+                        port = int(tags["CampersSSHPort"])
+                        validate_port(port)
+                    except (ValueError, TypeError) as e:
+                        logger.error("Invalid SSH port in tags: %s", e)
+                        raise ValueError(
+                            f"Invalid SSH port in instance tags: {e}"
+                        ) from e
                     tag_key_file = tags["CampersSSHKeyFile"]
                     logger.info(
                         f"Using tag-based SSH config for {instance_id}: {host}:{port}"

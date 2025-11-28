@@ -30,7 +30,7 @@ def test_port_forward_manager_initialization() -> None:
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_create_tunnels_success_single_port(
@@ -67,7 +67,7 @@ def test_create_tunnels_success_single_port(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_create_tunnels_success_multiple_ports(
@@ -122,7 +122,7 @@ def test_create_tunnels_success_multiple_ports(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_create_tunnels_default_username(
@@ -148,7 +148,7 @@ def test_create_tunnels_default_username(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_create_tunnels_failure_raises_runtime_error(
@@ -173,7 +173,7 @@ def test_create_tunnels_failure_raises_runtime_error(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_create_tunnels_start_failure_raises_runtime_error(
@@ -200,7 +200,7 @@ def test_create_tunnels_start_failure_raises_runtime_error(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_create_tunnels_empty_port_list(
@@ -283,7 +283,7 @@ def test_stop_all_tunnels_empty_state(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_create_tunnels_localhost_binding(
@@ -311,7 +311,7 @@ def test_create_tunnels_localhost_binding(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_create_tunnels_custom_ssh_port(
@@ -358,7 +358,7 @@ def test_stop_all_tunnels_multiple_times_idempotent(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_port_already_in_use_error(
@@ -383,7 +383,7 @@ def test_port_already_in_use_error(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_authentication_failure_invalid_key(
@@ -408,7 +408,7 @@ def test_authentication_failure_invalid_key(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_sshtunnel_base_error_handling(
@@ -433,7 +433,7 @@ def test_sshtunnel_base_error_handling(
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
-@patch("campers.services.portforward.PortForwardManager.validate_port")
+@patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
 @patch("campers.services.portforward.SSHTunnelForwarder")
 def test_create_tunnels_multiple_ports_different_values(

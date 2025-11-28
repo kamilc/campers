@@ -1,13 +1,18 @@
 import copy
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
 
 from omegaconf import OmegaConf
+from omegaconf.errors import InterpolationResolutionError
+import yaml
 
 from campers.constants import DEFAULT_REGION, OnExitAction
 from campers.providers import list_providers
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigLoader:
@@ -56,7 +61,14 @@ class ConfigLoader:
         if not config_file.exists():
             return {"defaults": {}}
 
-        cfg = OmegaConf.load(config_file)
+        try:
+            cfg = OmegaConf.load(config_file)
+        except yaml.YAMLError as e:
+            logger.error("Failed to parse YAML config file %s: %s", config_file, e)
+            raise ValueError(f"Invalid YAML in {config_file}: {e}") from e
+        except (OSError, IOError) as e:
+            logger.error("Failed to read config file %s: %s", config_file, e)
+            raise RuntimeError(f"Failed to read config file {config_file}: {e}") from e
 
         if cfg is None:
             return {"defaults": {}}
@@ -67,7 +79,14 @@ class ConfigLoader:
                 if key not in cfg:
                     cfg[key] = value
 
-        config = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
+        try:
+            config = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
+        except InterpolationResolutionError as e:
+            logger.error("Failed to resolve configuration variables: %s", e)
+            raise
+        except Exception as e:
+            logger.error("Failed to resolve configuration variables: %s", e)
+            raise ValueError(f"Configuration variable resolution error: {e}") from e
 
         return config
 

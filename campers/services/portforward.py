@@ -28,6 +28,8 @@ from pathlib import Path
 import paramiko
 from sshtunnel import BaseSSHTunnelForwarderError, SSHTunnelForwarder
 
+from campers.utils import validate_port
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,28 +48,6 @@ class PortForwardManager:
         """Initialize PortForwardManager."""
         self.tunnel: SSHTunnelForwarder | None = None
         self.ports: list[int] = []
-
-    def validate_port(self, port: int) -> None:
-        """Validate port number is in valid range.
-
-        Parameters
-        ----------
-        port : int
-            Port number to validate
-
-        Raises
-        ------
-        ValueError
-            If port is not in range 1-65535
-        """
-        if not 1 <= port <= 65535:
-            raise ValueError(f"Port {port} is not in valid range 1-65535")
-
-        if port < 1024:
-            logger.warning(
-                f"Port {port} is a privileged port (< 1024). "
-                "Root privileges may be required on the local machine."
-            )
 
     def validate_key_file(self, key_file: str) -> None:
         """Validate SSH key file exists and is accessible.
@@ -127,7 +107,12 @@ class PortForwardManager:
             return
 
         for port in ports:
-            self.validate_port(port)
+            validate_port(port)
+            if port < 1024:
+                logger.warning(
+                    f"Port {port} is a privileged port (< 1024). "
+                    "Root privileges may be required on the local machine."
+                )
         self.validate_key_file(key_file)
 
         if os.getenv("CAMPERS_TEST_MODE") == "1":

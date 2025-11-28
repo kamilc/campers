@@ -10,12 +10,13 @@ import sys
 import threading
 import types
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from campers.core.signals import set_cleanup_instance, setup_signal_handlers
 from campers.core.cleanup import CleanupManager
 from campers.core.run_executor import RunExecutor
 from campers.core.setup import SetupManager
+from campers.core.interfaces import ComputeProvider
 from campers.lifecycle import LifecycleManager
 
 setup_signal_handlers()
@@ -41,10 +42,10 @@ class Campers:
 
     def __init__(
         self,
-        compute_provider_factory: Any | None = None,
-        ssh_manager_factory: Any | None = None,
-        boto3_client_factory: Any | None = None,
-        boto3_resource_factory: Any | None = None,
+        compute_provider_factory: Callable[[str], ComputeProvider] | None = None,
+        ssh_manager_factory: type | None = None,
+        boto3_client_factory: Callable | None = None,
+        boto3_resource_factory: Callable | None = None,
     ) -> None:
         """Initialize Campers CLI with optional dependency injection."""
         self._config_loader = ConfigLoader()
@@ -84,13 +85,13 @@ class Campers:
         set_cleanup_instance(self)
 
     @property
-    def compute_provider_factory(self) -> Any:
+    def compute_provider_factory(self) -> Callable[[str], ComputeProvider]:
         """Get the compute provider factory."""
         if self._compute_provider_factory_override is not None:
             return self._compute_provider_factory_override
         return self._create_compute_provider
 
-    def _create_compute_provider(self, region: str) -> Any:
+    def _create_compute_provider(self, region: str) -> ComputeProvider:
         """Create a compute provider instance based on configured provider."""
         return EC2Manager(
             region=region,
@@ -152,8 +153,7 @@ class Campers:
     ) -> dict[str, Any] | str:
         """Launch cloud instance with file sync and command execution."""
         is_tty = sys.stdout.isatty()
-
-        use_tui = not (plain or json_output or not is_tty)
+        use_tui = is_tty and not (plain or json_output)
 
         if use_tui:
             run_kwargs = {
@@ -294,7 +294,15 @@ class Campers:
         return self._setup_manager.setup(region=region, ec2_client=ec2_client)
 
     def doctor(self, region: str | None = None, ec2_client: Any = None) -> None:
-        """Diagnose AWS environment and configuration issues."""
+        """Diagnose AWS environment and configuration issues.
+
+        Parameters
+        ----------
+        region : str | None
+            AWS region to diagnose, or None for default region
+        ec2_client : Any
+            Optional boto3 EC2 client (for testing/mocking)
+        """
         return self._setup_manager.doctor(region=region, ec2_client=ec2_client)
 
     def init(self, force: bool = False) -> None:
