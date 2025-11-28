@@ -8,6 +8,44 @@ import json
 from typing import Optional
 
 
+def parse_aws_pricing_response(price_item_json: str) -> Optional[float]:
+    """Extract on-demand USD rate from AWS pricing response.
+
+    Handles both EC2 and EBS pricing responses using the same structure:
+    terms → OnDemand → {offer_code} → priceDimensions → {dimension} → pricePerUnit → USD
+
+    Parameters
+    ----------
+    price_item_json : str
+        JSON string from AWS Price List API response containing pricing data
+
+    Returns
+    -------
+    float or None
+        USD rate for EC2 (hourly) or EBS (per GB-month), or None if parsing fails
+    """
+    try:
+        data = json.loads(price_item_json)
+        terms = data.get("terms", {})
+        on_demand = terms.get("OnDemand", {})
+
+        if not on_demand:
+            return None
+
+        offer_code = next(iter(on_demand.keys()))
+        price_dimensions = on_demand[offer_code].get("priceDimensions", {})
+
+        if not price_dimensions:
+            return None
+
+        dimension = price_dimensions[next(iter(price_dimensions.keys()))]
+        usd_price = dimension.get("pricePerUnit", {}).get("USD")
+
+        return float(usd_price) if usd_price is not None else None
+    except (json.JSONDecodeError, KeyError, ValueError, StopIteration):
+        return None
+
+
 def parse_ec2_pricing(price_item_json: str) -> Optional[float]:
     """Extract hourly on-demand rate from AWS EC2 pricing response.
 
@@ -26,32 +64,7 @@ def parse_ec2_pricing(price_item_json: str) -> Optional[float]:
     AWS Pricing API returns complex nested JSON with this structure:
     terms → OnDemand → {offer_code} → priceDimensions → {dimension} → pricePerUnit → USD
     """
-    try:
-        data = json.loads(price_item_json)
-        terms = data.get("terms", {})
-        on_demand = terms.get("OnDemand", {})
-
-        if not on_demand:
-            return None
-
-        offer_code = next(iter(on_demand.keys()))
-        offer_terms = on_demand[offer_code]
-        price_dimensions = offer_terms.get("priceDimensions", {})
-
-        if not price_dimensions:
-            return None
-
-        dimension_code = next(iter(price_dimensions.keys()))
-        dimension = price_dimensions[dimension_code]
-        price_per_unit = dimension.get("pricePerUnit", {})
-        usd_price = price_per_unit.get("USD")
-
-        if usd_price is None:
-            return None
-
-        return float(usd_price)
-    except (json.JSONDecodeError, KeyError, ValueError, StopIteration):
-        return None
+    return parse_aws_pricing_response(price_item_json)
 
 
 def parse_ebs_pricing(price_item_json: str) -> Optional[float]:
@@ -71,29 +84,4 @@ def parse_ebs_pricing(price_item_json: str) -> Optional[float]:
     -----
     Uses same nested structure as EC2 pricing but for EBS storage rates.
     """
-    try:
-        data = json.loads(price_item_json)
-        terms = data.get("terms", {})
-        on_demand = terms.get("OnDemand", {})
-
-        if not on_demand:
-            return None
-
-        offer_code = next(iter(on_demand.keys()))
-        offer_terms = on_demand[offer_code]
-        price_dimensions = offer_terms.get("priceDimensions", {})
-
-        if not price_dimensions:
-            return None
-
-        dimension_code = next(iter(price_dimensions.keys()))
-        dimension = price_dimensions[dimension_code]
-        price_per_unit = dimension.get("pricePerUnit", {})
-        usd_price = price_per_unit.get("USD")
-
-        if usd_price is None:
-            return None
-
-        return float(usd_price)
-    except (json.JSONDecodeError, KeyError, ValueError, StopIteration):
-        return None
+    return parse_aws_pricing_response(price_item_json)

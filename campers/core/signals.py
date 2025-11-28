@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import signal
+import threading
 import types
 from typing import Any
 
+_cleanup_lock = threading.Lock()
 _cleanup_instance: Any = None
 
 
@@ -21,13 +23,17 @@ def setup_signal_handlers() -> None:
 
     def sigint_handler(signum: int, frame: types.FrameType | None) -> None:
         """Handle SIGINT (Ctrl+C) signal."""
-        if _cleanup_instance is not None:
-            _cleanup_instance._cleanup_resources(signum=signum, frame=frame)
+        with _cleanup_lock:
+            instance = _cleanup_instance
+        if instance is not None:
+            instance._cleanup_resources(signum=signum, frame=frame)
 
     def sigterm_handler(signum: int, frame: types.FrameType | None) -> None:
         """Handle SIGTERM signal."""
-        if _cleanup_instance is not None:
-            _cleanup_instance._cleanup_resources(signum=signum, frame=frame)
+        with _cleanup_lock:
+            instance = _cleanup_instance
+        if instance is not None:
+            instance._cleanup_resources(signum=signum, frame=frame)
 
     signal.signal(signal.SIGINT, sigint_handler)
     signal.signal(signal.SIGTERM, sigterm_handler)
@@ -42,7 +48,8 @@ def set_cleanup_instance(instance: Any) -> None:
         The Campers instance that will handle cleanup
     """
     global _cleanup_instance
-    _cleanup_instance = instance
+    with _cleanup_lock:
+        _cleanup_instance = instance
 
 
 def get_cleanup_instance() -> Any:
@@ -53,4 +60,5 @@ def get_cleanup_instance() -> Any:
     Any
         The Campers instance handling cleanup, or None if not set
     """
-    return _cleanup_instance
+    with _cleanup_lock:
+        return _cleanup_instance

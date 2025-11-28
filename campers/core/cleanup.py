@@ -32,8 +32,6 @@ class CleanupManager:
         Configuration dictionary containing on_exit setting (optional)
     """
 
-    DEFAULT_EBS_STORAGE_COST_PER_GB_MONTH = 0.08
-
     def __init__(
         self,
         resources_dict: dict[str, Any],
@@ -68,7 +66,7 @@ class CleanupManager:
             )
 
     def _get_storage_rate(self, region: str) -> float:
-        """Get EBS storage rate for a region, using API or fallback to default.
+        """Get EBS storage rate for a region using Pricing API.
 
         Parameters
         ----------
@@ -78,7 +76,7 @@ class CleanupManager:
         Returns
         -------
         float
-            Storage rate in USD per GB-month
+            Storage rate in USD per GB-month (0.0 if API unavailable)
         """
         try:
             pricing_service = PricingService()
@@ -89,7 +87,7 @@ class CleanupManager:
         except Exception as e:
             logging.debug("Failed to fetch storage pricing: %s", e)
 
-        return self.DEFAULT_EBS_STORAGE_COST_PER_GB_MONTH
+        return 0.0
 
     def cleanup_resources(
         self, signum: int | None = None, frame: types.FrameType | None = None

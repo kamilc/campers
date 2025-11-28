@@ -1490,17 +1490,13 @@ def before_feature(context: Context, feature) -> None:
         "localstack" in getattr(scenario, "tags", []) for scenario in scenarios
     )
 
-    print(f"DEBUG: before_feature - has_localstack_scenario={has_localstack_scenario}")
-
     if not has_localstack_scenario:
-        print("DEBUG: skipping before_feature - no localstack scenarios")
         return
 
     try:
         import time
         import boto3
 
-        print("DEBUG: before_feature - starting cleanup")
         time.sleep(1)
 
         logger.info("Cleaning up stale instances before feature starts...")
@@ -1513,13 +1509,10 @@ def before_feature(context: Context, feature) -> None:
             return boto3.client(service, **kwargs)
 
         try:
-            print("DEBUG: creating EC2Manager")
             ec2_manager = EC2Manager(
                 region="us-east-1", boto3_client_factory=localstack_client_factory
             )
-            print("DEBUG: listing instances")
             all_instances = ec2_manager.list_instances(region_filter=None)
-            print(f"DEBUG: found {len(all_instances)} instances")
             if all_instances:
                 logger.info(
                     f"Cleaning up {len(all_instances)} stale instances from LocalStack before feature"
@@ -1537,7 +1530,6 @@ def before_feature(context: Context, feature) -> None:
                     "LocalStack is clean - no stale instances found at feature start"
                 )
         except Exception as e:
-            print(f"DEBUG: exception in cleanup: {e}")
             logger.debug(f"Could not connect to LocalStack: {e}")
     except Exception as e:
         logger.warning(f"Error in before_feature cleanup: {e}", exc_info=True)

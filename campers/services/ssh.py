@@ -11,11 +11,10 @@ import boto3
 import paramiko
 from paramiko.channel import Channel, ChannelFile
 
+from campers.constants import MAX_COMMAND_LENGTH
 from campers.utils import is_localstack_endpoint, validate_port
 
 logger = logging.getLogger(__name__)
-
-MAX_COMMAND_LENGTH = 10000
 
 
 def get_ssh_connection_info(

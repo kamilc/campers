@@ -5,6 +5,7 @@ with in-memory caching to minimize API calls.
 """
 
 import logging
+import threading
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -26,11 +27,14 @@ class PricingCache:
     Notes
     -----
     Cache is not persisted to disk. All entries are lost when process terminates.
+    Cache access is protected by a thread-safe lock to prevent race conditions
+    during concurrent get/set operations.
     """
 
     def __init__(self, ttl_hours: int = 24) -> None:
         self._cache: dict[str, tuple[Any, datetime]] = {}
         self._ttl = timedelta(hours=ttl_hours)
+        self._lock = threading.Lock()
 
     def get(self, key: str) -> Optional[Any]:
         """Retrieve value from cache if not expired.
@@ -45,15 +49,16 @@ class PricingCache:
         Any or None
             Cached value if key exists and not expired, None otherwise
         """
-        if key in self._cache:
-            value, timestamp = self._cache[key]
+        with self._lock:
+            if key in self._cache:
+                value, timestamp = self._cache[key]
 
-            if datetime.now() - timestamp < self._ttl:
-                return value
+                if datetime.now() - timestamp < self._ttl:
+                    return value
 
-            del self._cache[key]
+                del self._cache[key]
 
-        return None
+            return None
 
     def set(self, key: str, value: Any) -> None:
         """Store value in cache with current timestamp.
@@ -65,7 +70,8 @@ class PricingCache:
         value : Any
             Value to cache
         """
-        self._cache[key] = (value, datetime.now())
+        with self._lock:
+            self._cache[key] = (value, datetime.now())
 
 
 class PricingService:

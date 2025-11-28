@@ -297,15 +297,21 @@ def atomic_file_write(path: Path, content: str) -> None:
     temp_path = path.with_suffix(".tmp")
     lock_path = path.with_suffix(".lock")
 
-    with open(lock_path, "w") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    try:
+        with open(lock_path, "w") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                with open(temp_path, "w") as f:
+                    f.write(content)
+                temp_path.rename(path)
+            except Exception:
+                if temp_path.exists():
+                    temp_path.unlink()
+                raise
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    finally:
         try:
-            with open(temp_path, "w") as f:
-                f.write(content)
-            temp_path.rename(path)
-        except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise
-        finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_path.unlink()
+        except OSError:
+            pass

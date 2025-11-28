@@ -382,6 +382,8 @@ class TestAnsibleManagerIntegration:
                     ssh_key_file="/path/to/key.pem",
                 )
 
+                assert execution_order == ["base", "webapp"]
+
     def test_execute_playbooks_cleanup_on_failure(self) -> None:
         """Test that temp files are cleaned up even on failure."""
         manager = AnsibleManager()

@@ -217,14 +217,17 @@ class AnsibleManager:
             bufsize=1,
         )
 
-        for line in process.stdout:
-            logger.info(line.rstrip())
-
         try:
+            for line in process.stdout:
+                logger.info(line.rstrip())
             process.wait(timeout=ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             process.kill()
+            process.wait()
             raise RuntimeError("Ansible playbook execution timed out after 1 hour")
+        finally:
+            if process.stdout and hasattr(process.stdout, "close"):
+                process.stdout.close()
 
         if process.returncode != 0:
             raise RuntimeError(
