@@ -126,7 +126,7 @@ class PricingService:
             self.pricing_available = True
             logger.debug("AWS Pricing API initialized successfully")
         except Exception as e:
-            logger.debug(f"Failed to initialize AWS Pricing API: {e}")
+            logger.debug("Failed to initialize AWS Pricing API: %s", e)
             self.pricing_client = None
 
     def get_ec2_hourly_rate(
@@ -177,7 +177,7 @@ class PricingService:
 
             return rate
         except Exception as e:
-            logger.error(f"Failed to fetch EC2 pricing: {e}")
+            logger.error("Failed to fetch EC2 pricing: %s", e)
             return None
 
     def _fetch_ec2_rate_from_api(
@@ -275,7 +275,7 @@ class PricingService:
 
             return rate
         except Exception as e:
-            logger.error(f"Failed to fetch EBS pricing: {e}")
+            logger.error("Failed to fetch EBS pricing: %s", e)
             return None
 
     def _fetch_ebs_rate_from_api(

@@ -17,14 +17,13 @@ from campers.core.cleanup import CleanupManager
 from campers.core.run_executor import RunExecutor
 from campers.core.interfaces import ComputeProvider
 from campers.lifecycle import LifecycleManager
+from campers.providers.aws.client_factory import create_aws_client_factory
 from campers.providers.aws.setup import SetupManager
 
 setup_signal_handlers()
 
-import boto3  # noqa: E402
-
-for _boto_module in ["botocore", "boto3", "urllib3"]:
-    logging.getLogger(_boto_module).setLevel(logging.WARNING)
+logging.getLogger("botocore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 from campers.core.config import ConfigLoader  # noqa: E402
 from campers.providers import get_provider  # noqa: E402
@@ -45,8 +44,6 @@ class Campers:
         self,
         compute_provider_factory: Callable[[str], ComputeProvider] | None = None,
         ssh_manager_factory: type | None = None,
-        boto3_client_factory: Callable | None = None,
-        boto3_resource_factory: Callable | None = None,
     ) -> None:
         """Initialize Campers CLI with optional dependency injection."""
         self._config_loader = ConfigLoader()
@@ -56,8 +53,10 @@ class Campers:
         self._abort_requested = False
         self._resources: dict[str, Any] = {}
         self._update_queue: queue.Queue | None = None
-        self._boto3_client_factory = boto3_client_factory or boto3.client
-        self._boto3_resource_factory = boto3_resource_factory or boto3.resource
+
+        aws_client_factory = create_aws_client_factory()
+        self._boto3_client_factory = aws_client_factory.get_client
+        self._boto3_resource_factory = aws_client_factory.get_resource
 
         self._compute_provider_factory_override = compute_provider_factory
 
@@ -232,14 +231,17 @@ class Campers:
     ) -> dict[str, Any]:
         return self.run_executor._get_or_create_instance(instance_name, config)
 
-    def _stop_instance_cleanup(self, signum: int | None = None) -> None:
+    def _sync_cleanup_manager_resources(self) -> None:
+        """Ensure cleanup manager uses the current resources dictionary."""
         if self._cleanup_manager.resources is not self._resources:
             self._cleanup_manager.resources = self._resources
+
+    def _stop_instance_cleanup(self, signum: int | None = None) -> None:
+        self._sync_cleanup_manager_resources()
         return self._cleanup_manager.stop_instance_cleanup(signum=signum)
 
     def _terminate_instance_cleanup(self, signum: int | None = None) -> None:
-        if self._cleanup_manager.resources is not self._resources:
-            self._cleanup_manager.resources = self._resources
+        self._sync_cleanup_manager_resources()
         return self._cleanup_manager.terminate_instance_cleanup(signum=signum)
 
     def _cleanup_resources(
@@ -249,8 +251,7 @@ class Campers:
         if merged_config:
             self._cleanup_manager.config_dict = merged_config
 
-        if self._cleanup_manager.resources is not self._resources:
-            self._cleanup_manager.resources = self._resources
+        self._sync_cleanup_manager_resources()
 
         self._cleanup_manager.cleanup_in_progress = self._cleanup_in_progress
 

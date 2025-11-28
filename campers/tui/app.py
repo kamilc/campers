@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-import os
 import queue
+import sys
 import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -472,7 +472,7 @@ class CampersTUI(App):
                 if hasattr(self, "_driver") and self._driver is not None:
                     self.exit(130)
                 else:
-                    os._exit(130)
+                    sys.exit(130)
             else:
                 self.last_ctrl_c_time = current_time
                 self.action_quit()

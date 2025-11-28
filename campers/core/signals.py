@@ -7,8 +7,39 @@ import threading
 import types
 from typing import Any
 
-_cleanup_lock = threading.Lock()
-_cleanup_instance: Any = None
+
+class CleanupInstanceManager:
+    """Thread-safe manager for the cleanup instance."""
+
+    def __init__(self) -> None:
+        """Initialize the cleanup instance manager."""
+        self._lock = threading.Lock()
+        self._instance: Any = None
+
+    def set(self, instance: Any) -> None:
+        """Set the cleanup instance.
+
+        Parameters
+        ----------
+        instance : Any
+            The Campers instance that will handle cleanup
+        """
+        with self._lock:
+            self._instance = instance
+
+    def get(self) -> Any:
+        """Get the current cleanup instance.
+
+        Returns
+        -------
+        Any
+            The Campers instance handling cleanup, or None if not set
+        """
+        with self._lock:
+            return self._instance
+
+
+_cleanup_manager = CleanupInstanceManager()
 
 
 def setup_signal_handlers() -> None:
@@ -23,15 +54,13 @@ def setup_signal_handlers() -> None:
 
     def sigint_handler(signum: int, frame: types.FrameType | None) -> None:
         """Handle SIGINT (Ctrl+C) signal."""
-        with _cleanup_lock:
-            instance = _cleanup_instance
+        instance = _cleanup_manager.get()
         if instance is not None:
             instance._cleanup_resources(signum=signum, frame=frame)
 
     def sigterm_handler(signum: int, frame: types.FrameType | None) -> None:
         """Handle SIGTERM signal."""
-        with _cleanup_lock:
-            instance = _cleanup_instance
+        instance = _cleanup_manager.get()
         if instance is not None:
             instance._cleanup_resources(signum=signum, frame=frame)
 
@@ -47,9 +76,7 @@ def set_cleanup_instance(instance: Any) -> None:
     instance : Any
         The Campers instance that will handle cleanup
     """
-    global _cleanup_instance
-    with _cleanup_lock:
-        _cleanup_instance = instance
+    _cleanup_manager.set(instance)
 
 
 def get_cleanup_instance() -> Any:
@@ -60,5 +87,4 @@ def get_cleanup_instance() -> Any:
     Any
         The Campers instance handling cleanup, or None if not set
     """
-    with _cleanup_lock:
-        return _cleanup_instance
+    return _cleanup_manager.get()

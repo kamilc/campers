@@ -150,7 +150,7 @@ class CleanupManager:
                     sys.exit(exit_code)
 
         if force_exit and exit_code is not None:
-            os._exit(exit_code)
+            sys.exit(exit_code)
 
     def cleanup_ssh_connections(
         self, resources: dict[str, Any], errors: list[Exception]

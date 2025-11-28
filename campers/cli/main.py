@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import socket
 import sys
 from typing import Any
@@ -241,8 +242,6 @@ def main() -> None:
         error_msg = str(e)
 
         if "No default VPC" in error_msg:
-            import re
-
             match = re.search(r"in\s+region\s+(\S+)", error_msg)
             region = match.group(1) if match else "us-east-1"
 

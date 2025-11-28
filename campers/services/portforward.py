@@ -30,6 +30,8 @@ from sshtunnel import BaseSSHTunnelForwarderError, SSHTunnelForwarder
 
 from campers.utils import validate_port
 
+PRIVILEGED_PORT_THRESHOLD = 1024
+
 logger = logging.getLogger(__name__)
 
 
@@ -102,15 +104,21 @@ class PortForwardManager:
         ------
         RuntimeError
             If tunnel creation fails
+
+        Notes
+        -----
+        When CAMPERS_TEST_MODE environment variable is set to "1", tunnels are
+        created in mock mode for testing purposes. No actual SSH connections are
+        established; instead, tunnel creation is simulated for test harness integration.
         """
         if not ports:
             return
 
         for port in ports:
             validate_port(port)
-            if port < 1024:
+            if port < PRIVILEGED_PORT_THRESHOLD:
                 logger.warning(
-                    f"Port {port} is a privileged port (< 1024). "
+                    f"Port {port} is a privileged port (< {PRIVILEGED_PORT_THRESHOLD}). "
                     "Root privileges may be required on the local machine."
                 )
         self.validate_key_file(key_file)

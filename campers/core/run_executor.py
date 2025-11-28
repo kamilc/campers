@@ -709,13 +709,18 @@ class RunExecutor:
         dict[str, Any] | str
             Formatted output
         """
+        def json_default_handler(obj: Any) -> str:
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            if isinstance(obj, Path):
+                return str(obj)
+            raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
         if json_output:
             return json.dumps(
                 instance_details,
                 indent=2,
-                default=lambda obj: obj.isoformat()
-                if isinstance(obj, datetime)
-                else obj,
+                default=json_default_handler,
             )
 
         return instance_details
