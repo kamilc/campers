@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# dependencies = [
-#   "boto3>=1.40.0",
-#   "PyYAML>=6.0",
-#   "fire>=0.7.0",
-#   "textual>=0.47.0",
-#   "paramiko>=3.0.0",
-#   "sshtunnel>=0.4.0",
-# ]
-# ///
-
 """Campers - EC2 remote development tool."""
 
 from __future__ import annotations
