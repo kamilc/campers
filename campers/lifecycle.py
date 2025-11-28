@@ -504,16 +504,8 @@ class LifecycleManager:
             unique_id = target.get("unique_id")
             if not unique_id:
                 try:
-                    response = regional_manager.ec2_client.describe_instances(
-                        InstanceIds=[instance_id]
-                    )
-                    instance = response["Reservations"][0]["Instances"][0]
-
-                    tags = instance.get("Tags", [])
-                    for tag in tags:
-                        if tag["Key"] == "UniqueId":
-                            unique_id = tag["Value"]
-                            break
+                    tags = regional_manager.get_instance_tags(instance_id)
+                    unique_id = tags.get("UniqueId")
                 except (AttributeError, KeyError):
                     pass
 

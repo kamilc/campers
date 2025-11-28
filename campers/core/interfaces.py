@@ -12,6 +12,17 @@ class ComputeProvider(Protocol):
     must implement to work with campers.
     """
 
+    @property
+    def region(self) -> str:
+        """Get the region for this provider.
+
+        Returns
+        -------
+        str
+            Region identifier
+        """
+        ...
+
     def launch_instance(
         self, config: dict[str, Any], instance_name: str
     ) -> dict[str, Any]:
@@ -116,6 +127,21 @@ class ComputeProvider(Protocol):
         """
         ...
 
+    def get_instance_tags(self, instance_id: str) -> dict[str, str]:
+        """Get tags for an instance.
+
+        Parameters
+        ----------
+        instance_id : str
+            ID of the instance
+
+        Returns
+        -------
+        dict[str, str]
+            Dictionary of tag keys and values
+        """
+        ...
+
 
 class PricingProvider(Protocol):
     """Protocol for cloud pricing information providers.
@@ -187,5 +213,19 @@ class SSHProvider(Protocol):
         -------
         dict[str, Any]
             Connection details including hostname, username, key path, etc.
+        """
+        ...
+
+    def abort_active_command(self) -> None:
+        """Abort any active command execution.
+
+        Terminates the currently running command if one exists.
+        """
+        ...
+
+    def close(self) -> None:
+        """Close the SSH connection.
+
+        Ensures all resources are properly released.
         """
         ...

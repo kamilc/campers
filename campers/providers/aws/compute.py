@@ -15,6 +15,13 @@ from botocore.exceptions import (
     WaiterError,
 )
 
+from campers.constants import (
+    WAITER_DELAY_SECONDS,
+    WAITER_MAX_ATTEMPTS_LONG,
+    WAITER_MAX_ATTEMPTS_SHORT,
+    SSH_IP_RETRY_DELAY,
+    SSH_IP_RETRY_MAX,
+)
 from campers.providers.exceptions import (
     ProviderCredentialsError,
 )
@@ -23,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 ACTIVE_INSTANCE_STATES = ["pending", "running", "stopping", "stopped"]
 
-VALID_INSTANCE_TYPES = [
+VALID_INSTANCE_TYPES = frozenset((
     "t2.micro",
     "t2.small",
     "t2.medium",
@@ -74,7 +81,7 @@ VALID_INSTANCE_TYPES = [
     "r5.12xlarge",
     "r5.16xlarge",
     "r5.24xlarge",
-]
+))
 
 
 class EC2Manager:
@@ -320,13 +327,15 @@ class EC2Manager:
 
         return key_name, key_file
 
-    def create_security_group(self, unique_id: str) -> str:
+    def create_security_group(self, unique_id: str, ssh_allowed_cidr: str | None = None) -> str:
         """Create security group with SSH access.
 
         Parameters
         ----------
         unique_id : str
             Unique identifier to use in security group name
+        ssh_allowed_cidr : str | None
+            CIDR block for SSH access. If None, defaults to 0.0.0.0/0
 
         Returns
         -------
@@ -371,6 +380,8 @@ class EC2Manager:
             Resources=[sg_id], Tags=[{"Key": "ManagedBy", "Value": "campers"}]
         )
 
+        cidr_block = ssh_allowed_cidr if ssh_allowed_cidr else "0.0.0.0/0"
+
         self.ec2_client.authorize_security_group_ingress(
             GroupId=sg_id,
             IpPermissions=[
@@ -378,7 +389,7 @@ class EC2Manager:
                     "IpProtocol": "tcp",
                     "FromPort": 22,
                     "ToPort": 22,
-                    "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                    "IpRanges": [{"CidrIp": cidr_block}],
                 }
             ],
         )
@@ -438,131 +449,207 @@ class EC2Manager:
         Raises
         ------
         RuntimeError
-            If instance fails to reach running state within timeout or if an
-            existing instance with the same camp name exists in a different region
-        ClientError
+            If instance fails to reach running state within timeout, if an
+            existing instance with the same camp name exists in a different region,
+            or if instance launch fails
+        ValueError
             If instance type is invalid
         """
-        instance_type = config["instance_type"]
-
-        if instance_type not in VALID_INSTANCE_TYPES:
-            raise ClientError(
-                {
-                    "Error": {
-                        "Code": "InvalidParameterValue",
-                        "Message": f"Invalid instance type: {instance_type}",
-                    }
-                },
-                "RunInstances",
-            )
+        self._validate_instance_type(config["instance_type"])
 
         camp_name = config.get("camp_name", "ad-hoc")
-
         self._check_region_mismatch(camp_name, config.get("region", self.region))
 
-        ami_id = self.resolve_ami(config)
-        unique_id = str(int(time.time()))
-
-        instance_tag_name = instance_name if instance_name else f"campers-{unique_id}"
-
-        key_name = None
-        key_file = None
-        sg_id = None
-        instance = None
+        resources = self._prepare_launch_resources(config, instance_name)
 
         try:
-            key_name, key_file = self.create_key_pair(unique_id)
-
-            sg_id = self.create_security_group(unique_id)
-
-            instances = self.ec2_resource.create_instances(
-                ImageId=ami_id,
-                InstanceType=instance_type,
-                KeyName=key_name,
-                SecurityGroupIds=[sg_id],
-                MinCount=1,
-                MaxCount=1,
-                BlockDeviceMappings=[
-                    {
-                        "DeviceName": "/dev/sda1",
-                        "Ebs": {
-                            "VolumeSize": config["disk_size"],
-                            "VolumeType": "gp3",
-                            "DeleteOnTermination": True,
-                        },
-                    }
-                ],
-                TagSpecifications=[
-                    {
-                        "ResourceType": "instance",
-                        "Tags": [
-                            {"Key": "ManagedBy", "Value": "campers"},
-                            {"Key": "Name", "Value": instance_tag_name},
-                            {"Key": "MachineConfig", "Value": camp_name},
-                            {"Key": "UniqueId", "Value": unique_id},
-                        ],
-                    }
-                ],
-            )
-
-            instance = instances[0]
-            instance_id = instance.id
-
-            waiter = self.ec2_client.get_waiter("instance_running")
-            waiter.wait(
-                InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 20}
-            )
-            instance.reload()
-
-            public_ip = instance.public_ip_address
-            if self._is_localstack_endpoint():
-                public_ip = None
-
-            return {
-                "instance_id": instance_id,
-                "public_ip": public_ip,
-                "state": instance.state["Name"],
-                "key_file": str(key_file),
-                "security_group_id": sg_id,
-                "unique_id": unique_id,
-                "launch_time": instance.launch_time,
-            }
-
+            instance_details = self._launch_ec2_instance(config, resources)
+            return instance_details
         except Exception as e:
-            if instance:
-                try:
-                    instance.terminate()
-                except ClientError as cleanup_error:
-                    logger.warning(
-                        f"Failed to terminate instance during rollback: {cleanup_error}"
-                    )
-
-            if sg_id:
-                try:
-                    self.ec2_client.delete_security_group(GroupId=sg_id)
-                except ClientError as cleanup_error:
-                    logger.warning(
-                        "Failed to delete security group during rollback: "
-                        f"{cleanup_error}"
-                    )
-
-            if key_name:
-                try:
-                    self.ec2_client.delete_key_pair(KeyName=key_name)
-                except ClientError as cleanup_error:
-                    logger.warning(
-                        f"Failed to delete key pair during rollback: {cleanup_error}"
-                    )
-
-            if key_file and key_file.exists():
-                try:
-                    key_file.unlink()
-                except OSError as cleanup_error:
-                    logger.warning(
-                        f"Failed to delete key file during rollback: {cleanup_error}"
-                    )
-
+            self._rollback_resources(resources)
             raise RuntimeError(f"Failed to launch instance: {e}") from e
+
+    def _validate_instance_type(self, instance_type: str) -> None:
+        """Validate that instance type is supported.
+
+        Parameters
+        ----------
+        instance_type : str
+            Instance type to validate
+
+        Raises
+        ------
+        ValueError
+            If instance type is invalid
+        """
+        if instance_type not in VALID_INSTANCE_TYPES:
+            raise ValueError(
+                f"Invalid instance type: {instance_type}. "
+                f"Must be one of: {', '.join(sorted(VALID_INSTANCE_TYPES))}"
+            )
+
+    def _prepare_launch_resources(
+        self, config: dict[str, Any], instance_name: str | None
+    ) -> dict[str, Any]:
+        """Prepare resources for instance launch (key pair and security group).
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Merged configuration
+        instance_name : str | None
+            Instance name for tags
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary containing prepared resources: key_name, key_file, sg_id,
+            ami_id, unique_id, instance_tag_name, instance_type
+        """
+        ami_id = self.resolve_ami(config)
+        unique_id = str(int(time.time()))
+        instance_tag_name = (
+            instance_name if instance_name else f"campers-{unique_id}"
+        )
+
+        key_name, key_file = self.create_key_pair(unique_id)
+
+        ssh_allowed_cidr = config.get("ssh_allowed_cidr")
+        sg_id = self.create_security_group(unique_id, ssh_allowed_cidr)
+
+        return {
+            "key_name": key_name,
+            "key_file": key_file,
+            "sg_id": sg_id,
+            "ami_id": ami_id,
+            "unique_id": unique_id,
+            "instance_tag_name": instance_tag_name,
+            "instance_type": config["instance_type"],
+            "disk_size": config["disk_size"],
+            "camp_name": config.get("camp_name", "ad-hoc"),
+            "instance": None,
+        }
+
+    def _launch_ec2_instance(
+        self, config: dict[str, Any], resources: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Launch EC2 instance and wait for it to be running.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Merged configuration
+        resources : dict[str, Any]
+            Prepared resources from _prepare_launch_resources
+
+        Returns
+        -------
+        dict[str, Any]
+            Instance details dictionary
+        """
+        instances = self.ec2_resource.create_instances(
+            ImageId=resources["ami_id"],
+            InstanceType=resources["instance_type"],
+            KeyName=resources["key_name"],
+            SecurityGroupIds=[resources["sg_id"]],
+            MinCount=1,
+            MaxCount=1,
+            BlockDeviceMappings=[
+                {
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": resources["disk_size"],
+                        "VolumeType": "gp3",
+                        "DeleteOnTermination": True,
+                    },
+                }
+            ],
+            TagSpecifications=[
+                {
+                    "ResourceType": "instance",
+                    "Tags": [
+                        {"Key": "ManagedBy", "Value": "campers"},
+                        {"Key": "Name", "Value": resources["instance_tag_name"]},
+                        {"Key": "MachineConfig", "Value": resources["camp_name"]},
+                        {"Key": "UniqueId", "Value": resources["unique_id"]},
+                    ],
+                }
+            ],
+        )
+
+        instance = instances[0]
+        resources["instance"] = instance
+        instance_id = instance.id
+
+        waiter = self.ec2_client.get_waiter("instance_running")
+        waiter.wait(
+            InstanceIds=[instance_id],
+            WaiterConfig={
+                "Delay": WAITER_DELAY_SECONDS,
+                "MaxAttempts": WAITER_MAX_ATTEMPTS_SHORT,
+            },
+        )
+        instance.reload()
+
+        public_ip = instance.public_ip_address
+        if self._is_localstack_endpoint():
+            public_ip = None
+
+        return {
+            "instance_id": instance_id,
+            "public_ip": public_ip,
+            "state": instance.state["Name"],
+            "key_file": str(resources["key_file"]),
+            "security_group_id": resources["sg_id"],
+            "unique_id": resources["unique_id"],
+            "launch_time": instance.launch_time,
+        }
+
+    def _rollback_resources(self, resources: dict[str, Any]) -> None:
+        """Clean up resources after failed launch.
+
+        Parameters
+        ----------
+        resources : dict[str, Any]
+            Resources dictionary from _prepare_launch_resources
+        """
+        instance = resources.get("instance")
+        if instance:
+            try:
+                instance.terminate()
+            except ClientError as cleanup_error:
+                logger.warning(
+                    "Failed to terminate instance during rollback: %s",
+                    cleanup_error,
+                )
+
+        sg_id = resources.get("sg_id")
+        if sg_id:
+            try:
+                self.ec2_client.delete_security_group(GroupId=sg_id)
+            except ClientError as cleanup_error:
+                logger.warning(
+                    "Failed to delete security group during rollback: %s",
+                    cleanup_error,
+                )
+
+        key_name = resources.get("key_name")
+        if key_name:
+            try:
+                self.ec2_client.delete_key_pair(KeyName=key_name)
+            except ClientError as cleanup_error:
+                logger.warning(
+                    "Failed to delete key pair during rollback: %s", cleanup_error
+                )
+
+        key_file = resources.get("key_file")
+        if key_file and key_file.exists():
+            try:
+                key_file.unlink()
+            except OSError as cleanup_error:
+                logger.warning(
+                    "Failed to delete key file during rollback: %s", cleanup_error
+                )
 
     def list_instances(self, region_filter: str | None = None) -> list[dict[str, Any]]:
         """List all campers-managed instances across regions.
@@ -721,7 +808,7 @@ class EC2Manager:
         try:
             waiter = self.ec2_client.get_waiter("instance_stopped")
             waiter.wait(
-                InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 40}
+                InstanceIds=[instance_id], WaiterConfig={"Delay": WAITER_DELAY_SECONDS, "MaxAttempts": WAITER_MAX_ATTEMPTS_LONG}
             )
         except WaiterError as e:
             raise RuntimeError(f"Failed to stop instance: {e}") from e
@@ -786,12 +873,12 @@ class EC2Manager:
         try:
             waiter = self.ec2_client.get_waiter("instance_running")
             waiter.wait(
-                InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 20}
+                InstanceIds=[instance_id], WaiterConfig={"Delay": WAITER_DELAY_SECONDS, "MaxAttempts": WAITER_MAX_ATTEMPTS_SHORT}
             )
         except WaiterError as e:
             raise RuntimeError(f"Failed to start instance: {e}") from e
 
-        max_retries = 10
+        max_retries = SSH_IP_RETRY_MAX
         instance = None
         for attempt in range(max_retries):
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
@@ -800,7 +887,7 @@ class EC2Manager:
             if state == "running":
                 break
             if attempt < max_retries - 1:
-                time.sleep(0.5)
+                time.sleep(SSH_IP_RETRY_DELAY)
 
         new_ip = instance.get("PublicIpAddress")
         logger.info(f"Instance {instance_id} started with IP {new_ip}")
@@ -869,6 +956,28 @@ class EC2Manager:
                 f"Failed to get volume size for {instance_id}: {e}"
             ) from e
 
+    def get_instance_tags(self, instance_id: str) -> dict[str, str]:
+        """Get tags for an instance.
+
+        Parameters
+        ----------
+        instance_id : str
+            Instance ID
+
+        Returns
+        -------
+        dict[str, str]
+            Dictionary mapping tag keys to values
+        """
+        try:
+            response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
+            instance = response["Reservations"][0]["Instances"][0]
+            tags = instance.get("Tags", [])
+            return {tag["Key"]: tag["Value"] for tag in tags}
+        except (ClientError, IndexError, KeyError) as e:
+            logger.warning(f"Failed to get tags for instance {instance_id}: {e}")
+            return {}
+
     def terminate_instance(self, instance_id: str) -> None:
         """Terminate instance and clean up resources.
 
@@ -900,7 +1009,7 @@ class EC2Manager:
         try:
             waiter = self.ec2_client.get_waiter("instance_terminated")
             waiter.wait(
-                InstanceIds=[instance_id], WaiterConfig={"Delay": 15, "MaxAttempts": 40}
+                InstanceIds=[instance_id], WaiterConfig={"Delay": WAITER_DELAY_SECONDS, "MaxAttempts": WAITER_MAX_ATTEMPTS_LONG}
             )
         except WaiterError as e:
             raise RuntimeError(f"Failed to terminate instance: {e}") from e

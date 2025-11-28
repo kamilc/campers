@@ -6,6 +6,10 @@ from typing import TYPE_CHECKING, Optional
 
 from textual.widgets import Static
 
+from campers.constants import STATS_REFRESH_INTERVAL_SECONDS
+from campers.providers.aws.compute import EC2Manager
+from campers.providers.aws.pricing import PricingService
+
 if TYPE_CHECKING:
     from campers import Campers
 
@@ -42,8 +46,8 @@ class InstanceOverviewWidget(Static):
             campers_instance._compute_provider_factory_override
             or campers_instance._create_compute_provider
         )
-        self.ec2_manager = None
-        self.pricing_service = None
+        self.ec2_manager: Optional[EC2Manager] = None
+        self.pricing_service: Optional[PricingService] = None
         self.running_count = 0
         self.stopped_count = 0
         self.daily_cost: Optional[float] = None
@@ -72,12 +76,12 @@ class InstanceOverviewWidget(Static):
             self._initialized = True
             self.app.call_from_thread(self._start_refresh_timer)
         except Exception as e:
-            logger.debug(f"Failed to initialize AWS services: {e}")
+            logger.debug("Failed to initialize AWS services: %s", e)
             self.app.call_from_thread(self._show_init_error)
 
     def _start_refresh_timer(self) -> None:
         """Start the refresh timer and do initial refresh after initialization."""
-        self._interval_timer = self.set_interval(30, self.refresh_stats)
+        self._interval_timer = self.set_interval(STATS_REFRESH_INTERVAL_SECONDS, self.refresh_stats)
         self.run_worker(self._refresh_stats_sync, thread=True)
 
     def _show_init_error(self) -> None:
@@ -121,7 +125,7 @@ class InstanceOverviewWidget(Static):
             self.app.call_from_thread(self._update_display)
 
         except Exception as e:
-            logger.debug(f"Failed to refresh instance stats: {e}")
+            logger.debug("Failed to refresh instance stats: %s", e)
 
     def _update_display(self) -> None:
         """Update the widget display on the main thread."""

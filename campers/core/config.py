@@ -6,6 +6,7 @@ from typing import Any
 
 from omegaconf import OmegaConf
 
+from campers.constants import DEFAULT_REGION, OnExitAction
 from campers.providers import list_providers
 
 
@@ -14,7 +15,7 @@ class ConfigLoader:
 
     BUILT_IN_DEFAULTS = {
         "provider": "aws",
-        "region": "us-east-1",
+        "region": DEFAULT_REGION,
         "instance_type": "t3.medium",
         "disk_size": 50,
         "ports": [],
@@ -23,7 +24,8 @@ class ConfigLoader:
         "env_filter": ["AWS_.*"],
         "sync_paths": [],
         "ssh_username": "ubuntu",
-        "on_exit": "stop",
+        "on_exit": OnExitAction.STOP.value,
+        "ssh_allowed_cidr": None,
     }
 
     def load_config(self, config_path: str | None = None) -> dict[str, Any]:
@@ -136,6 +138,26 @@ class ConfigLoader:
                 f"Available providers: {available_providers}"
             )
 
+        self._validate_required_fields(config)
+        self._validate_optional_fields(config)
+        self._validate_ports(config)
+        self._validate_sync_paths(config)
+        self._validate_ansible_config(config)
+        self._validate_on_exit(config)
+
+    def _validate_required_fields(self, config: dict[str, Any]) -> None:
+        """Validate required configuration fields.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration to validate
+
+        Raises
+        ------
+        ValueError
+            If required fields are missing or invalid
+        """
         required_validations = {
             "region": (str, "region is required", "region must be a string"),
             "instance_type": (
@@ -161,6 +183,19 @@ class ConfigLoader:
             if not isinstance(config[field], expected_type):
                 raise ValueError(type_msg)
 
+    def _validate_optional_fields(self, config: dict[str, Any]) -> None:
+        """Validate optional configuration fields.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration to validate
+
+        Raises
+        ------
+        ValueError
+            If optional fields are invalid
+        """
         optional_validations = {
             "include_vcs": (bool, "include_vcs must be a boolean"),
             "ignore": (list, "ignore must be a list"),
@@ -194,6 +229,30 @@ class ConfigLoader:
                         f"Invalid regex pattern in env_filter: '{pattern}' - {e}"
                     )
 
+        if "ssh_username" in config:
+            ssh_username = config["ssh_username"]
+            pattern: str = r"^[a-z_][a-z0-9_-]{0,31}$"
+            if not re.match(pattern, ssh_username):
+                raise ValueError(
+                    f"Invalid ssh_username '{ssh_username}'. "
+                    f"Must start with lowercase letter or underscore, "
+                    f"contain only lowercase letters, numbers, underscores, "
+                    f"and hyphens, and be 1-32 characters long."
+                )
+
+    def _validate_ports(self, config: dict[str, Any]) -> None:
+        """Validate port configuration.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration to validate
+
+        Raises
+        ------
+        ValueError
+            If port configuration is invalid
+        """
         if "port" in config and "ports" in config:
             raise ValueError("cannot specify both port and ports")
 
@@ -215,30 +274,47 @@ class ConfigLoader:
                 if not (1 <= port <= 65535):
                     raise ValueError("ports entries must be between 1 and 65535")
 
-        if "sync_paths" in config:
-            if not isinstance(config["sync_paths"], list):
-                raise ValueError("sync_paths must be a list")
+    def _validate_sync_paths(self, config: dict[str, Any]) -> None:
+        """Validate sync_paths configuration.
 
-            for sync_path in config["sync_paths"]:
-                if not isinstance(sync_path, dict):
-                    raise ValueError("sync_paths entries must be dictionaries")
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration to validate
 
-                if "local" not in sync_path or "remote" not in sync_path:
-                    raise ValueError(
-                        "sync_paths entry must have both 'local' and 'remote' keys"
-                    )
+        Raises
+        ------
+        ValueError
+            If sync_paths configuration is invalid
+        """
+        if "sync_paths" not in config:
+            return
 
-        if "ssh_username" in config:
-            ssh_username = config["ssh_username"]
-            pattern: str = r"^[a-z_][a-z0-9_-]{0,31}$"
-            if not re.match(pattern, ssh_username):
+        if not isinstance(config["sync_paths"], list):
+            raise ValueError("sync_paths must be a list")
+
+        for sync_path in config["sync_paths"]:
+            if not isinstance(sync_path, dict):
+                raise ValueError("sync_paths entries must be dictionaries")
+
+            if "local" not in sync_path or "remote" not in sync_path:
                 raise ValueError(
-                    f"Invalid ssh_username '{ssh_username}'. "
-                    f"Must start with lowercase letter or underscore, "
-                    f"contain only lowercase letters, numbers, underscores, and hyphens, "
-                    f"and be 1-32 characters long."
+                    "sync_paths entry must have both 'local' and 'remote' keys"
                 )
 
+    def _validate_ansible_config(self, config: dict[str, Any]) -> None:
+        """Validate Ansible configuration.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration to validate
+
+        Raises
+        ------
+        ValueError
+            If Ansible configuration is invalid
+        """
         if "ansible_playbook" in config and "ansible_playbooks" in config:
             raise ValueError(
                 "Cannot specify both 'ansible_playbook' and 'ansible_playbooks'. "
@@ -249,25 +325,42 @@ class ConfigLoader:
             if not isinstance(config["ansible_playbooks"], list):
                 raise ValueError("ansible_playbooks must be a list")
 
-        if "playbooks" in config:
-            if not isinstance(config["playbooks"], dict):
-                raise ValueError("playbooks must be a dictionary")
+        if "playbooks" not in config:
+            return
 
-            for playbook_name, playbook_content in config["playbooks"].items():
-                if not isinstance(playbook_name, str):
-                    raise ValueError("playbook names must be strings")
+        if not isinstance(config["playbooks"], dict):
+            raise ValueError("playbooks must be a dictionary")
 
-                if not isinstance(playbook_content, list):
-                    raise ValueError(
-                        f"playbook '{playbook_name}' content must be a list of tasks, "
-                        f"got {type(playbook_content).__name__}"
-                    )
+        for playbook_name, playbook_content in config["playbooks"].items():
+            if not isinstance(playbook_name, str):
+                raise ValueError("playbook names must be strings")
 
-        if "on_exit" in config:
-            if not isinstance(config["on_exit"], str):
-                raise ValueError("on_exit must be a string")
-
-            if config["on_exit"] not in ("stop", "terminate"):
+            if not isinstance(playbook_content, list):
                 raise ValueError(
-                    f"on_exit must be 'stop' or 'terminate', got '{config['on_exit']}'"
+                    f"playbook '{playbook_name}' content must be a list of tasks, "
+                    f"got {type(playbook_content).__name__}"
                 )
+
+    def _validate_on_exit(self, config: dict[str, Any]) -> None:
+        """Validate on_exit configuration.
+
+        Parameters
+        ----------
+        config : dict[str, Any]
+            Configuration to validate
+
+        Raises
+        ------
+        ValueError
+            If on_exit configuration is invalid
+        """
+        if "on_exit" not in config:
+            return
+
+        if not isinstance(config["on_exit"], str):
+            raise ValueError("on_exit must be a string")
+
+        if config["on_exit"] not in ("stop", "terminate"):
+            raise ValueError(
+                f"on_exit must be 'stop' or 'terminate', got '{config['on_exit']}'"
+            )

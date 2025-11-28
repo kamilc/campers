@@ -8,13 +8,16 @@ import yaml
 from pathlib import Path
 from typing import Any
 
+from campers.constants import ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS
+
 logger = logging.getLogger(__name__)
 
 
 class AnsibleManager:
     """Manage Ansible playbook execution in push mode."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize AnsibleManager."""
         self._temp_files: list[Path] = []
 
     def check_ansible_installed(self) -> None:
@@ -108,6 +111,24 @@ class AnsibleManager:
         key_file: str,
         port: int,
     ) -> Path:
+        """Generate Ansible inventory file.
+
+        Parameters
+        ----------
+        host : str
+            Target host IP address
+        user : str
+            SSH username
+        key_file : str
+            Path to SSH private key
+        port : int
+            SSH port number
+
+        Returns
+        -------
+        Path
+            Path to generated temporary inventory file
+        """
         inventory_content = (
             "[all]\n"
             f"ec2instance "
@@ -137,6 +158,20 @@ class AnsibleManager:
         name: str,
         playbook_yaml: list[dict],
     ) -> Path:
+        """Write Ansible playbook YAML to temporary file.
+
+        Parameters
+        ----------
+        name : str
+            Playbook name for file naming
+        playbook_yaml : list[dict]
+            Playbook content as YAML structure
+
+        Returns
+        -------
+        Path
+            Path to generated temporary playbook file
+        """
         with tempfile.NamedTemporaryFile(
             mode="w",
             suffix=".yml",
@@ -155,6 +190,15 @@ class AnsibleManager:
         inventory: Path,
         playbook: Path,
     ) -> None:
+        """Execute Ansible playbook against target host.
+
+        Parameters
+        ----------
+        inventory : Path
+            Path to Ansible inventory file
+        playbook : Path
+            Path to Ansible playbook file
+        """
         cmd = [
             "ansible-playbook",
             "-i",
@@ -177,7 +221,7 @@ class AnsibleManager:
             logger.info(line.rstrip())
 
         try:
-            process.wait(timeout=3600)
+            process.wait(timeout=ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             process.kill()
             raise RuntimeError("Ansible playbook execution timed out after 1 hour")
@@ -187,7 +231,11 @@ class AnsibleManager:
                 f"Ansible playbook failed with exit code {process.returncode}"
             )
 
-    def _cleanup_temp_files(self):
+    def _cleanup_temp_files(self) -> None:
+        """Clean up temporary inventory and playbook files.
+
+        Removes all temporary files created during ansible execution.
+        """
         for temp_file in self._temp_files:
             try:
                 if temp_file.exists():

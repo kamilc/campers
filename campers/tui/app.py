@@ -15,6 +15,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import Log, Static
 
+from campers.constants import CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS, UPTIME_UPDATE_INTERVAL_SECONDS
 from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.logging import StreamFormatter, TuiLogHandler, TuiLogMessage
 from campers.tui.styling import TUI_CSS
@@ -139,7 +140,7 @@ class CampersTUI(App):
 
         self.instance_start_time = datetime.now()
         self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
-        self.set_interval(1.0, self.update_uptime, name="uptime-timer")
+        self.set_interval(UPTIME_UPDATE_INTERVAL_SECONDS, self.update_uptime, name="uptime-timer")
 
         if self._start_worker:
             self.run_worker(self.run_campers_logic, exit_on_error=False, thread=True)
@@ -452,7 +453,7 @@ class CampersTUI(App):
 
             if (
                 self.last_ctrl_c_time > 0
-                and (current_time - self.last_ctrl_c_time) < 1.5
+                and (current_time - self.last_ctrl_c_time) < CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS
             ):
                 try:
                     log_widget = self.query_one(Log)

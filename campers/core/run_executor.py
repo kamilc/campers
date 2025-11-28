@@ -23,7 +23,8 @@ from campers.utils import generate_instance_name
 class RunExecutor:
     """Orchestrates the run command execution flow.
 
-    Manages instance lifecycle, file synchronization, command execution, and resource cleanup.
+    Manages instance lifecycle, file synchronization, command execution,
+    and resource cleanup.
 
     Parameters
     ----------
@@ -123,6 +124,123 @@ class RunExecutor:
         dict[str, Any] | str
             Instance details (dict or JSON string)
         """
+        try:
+            merged_config = self._phase_config_validation(
+                verbose,
+                camp_name,
+                command,
+                instance_type,
+                disk_size,
+                region,
+                port,
+                include_vcs,
+                ignore,
+                update_queue,
+            )
+
+            mutagen_mgr = self.mutagen_manager_factory()
+            instance_details, compute_provider = self._phase_instance_provision(
+                merged_config, mutagen_mgr, update_queue
+            )
+
+            need_ssh = (
+                merged_config.get("setup_script")
+                or merged_config.get("startup_script")
+                or merged_config.get("command")
+            )
+
+            if not need_ssh:
+                return self._format_output(instance_details, json_output)
+
+            skip_ssh = os.environ.get("CAMPERS_SKIP_SSH_CONNECTION") == "1"
+            if skip_ssh:
+                while not self.cleanup_in_progress_getter():
+                    time.sleep(0.1)
+                return instance_details
+
+            ssh_manager, ssh_host, ssh_port = self._phase_ssh_connection(
+                instance_details, merged_config, update_queue
+            )
+
+            env_vars = ssh_manager.filter_environment_variables(
+                merged_config.get("env_filter")
+            )
+
+            logging.info(f"Forwarding {len(env_vars)} environment variables")
+
+            disable_mutagen = os.environ.get("CAMPERS_DISABLE_MUTAGEN") == "1"
+            self._phase_file_sync(
+                merged_config,
+                instance_details,
+                mutagen_mgr,
+                ssh_host,
+                ssh_port,
+                disable_mutagen,
+                update_queue,
+            )
+
+            self._phase_ansible_provisioning(
+                merged_config, instance_details, ssh_port
+            )
+
+            self._phase_script_execution(
+                merged_config, instance_details, ssh_manager, env_vars
+            )
+
+            self._phase_command_execution(
+                merged_config, instance_details, ssh_manager, env_vars
+            )
+
+            return self._format_output(instance_details, json_output)
+
+        finally:
+            if not tui_mode and not self.cleanup_in_progress_getter():
+                if cleanup_resources_callback:
+                    cleanup_resources_callback()
+
+    def _phase_config_validation(
+        self,
+        verbose: bool,
+        camp_name: str | None,
+        command: str | None,
+        instance_type: str | None,
+        disk_size: int | None,
+        region: str | None,
+        port: str | list[int] | tuple[int, ...] | None,
+        include_vcs: str | bool | None,
+        ignore: str | None,
+        update_queue: queue.Queue | None,
+    ) -> dict[str, Any]:
+        """Phase 1: Validate and prepare configuration.
+
+        Parameters
+        ----------
+        verbose : bool
+            Enable verbose logging
+        camp_name : str | None
+            Named camp configuration
+        command : str | None
+            Command to execute
+        instance_type : str | None
+            Instance type override
+        disk_size : int | None
+            Disk size override
+        region : str | None
+            Region override
+        port : str | list[int] | tuple[int, ...] | None
+            Port configuration
+        include_vcs : str | bool | None
+            Include VCS files
+        ignore : str | None
+            File patterns to ignore
+        update_queue : queue.Queue | None
+            TUI update queue
+
+        Returns
+        -------
+        dict[str, Any]
+            Merged and validated configuration
+        """
         if verbose:
             logging.getLogger().setLevel(logging.DEBUG)
             logging.debug("Verbose mode enabled")
@@ -156,355 +274,463 @@ class RunExecutor:
 
         self._validate_sync_paths_config(merged_config.get("sync_paths"))
 
-        disable_mutagen = os.environ.get("CAMPERS_DISABLE_MUTAGEN") == "1"
-
         if update_queue is not None:
             logging.debug("Sending merged_config to TUI queue")
             update_queue.put({"type": "merged_config", "payload": merged_config})
 
         self.update_queue = update_queue
+        return merged_config
+
+    def _phase_instance_provision(
+        self,
+        merged_config: dict[str, Any],
+        mutagen_mgr: Any,
+        update_queue: queue.Queue | None,
+    ) -> tuple[dict[str, Any], Any]:
+        """Phase 2: Provision instance.
+
+        Parameters
+        ----------
+        merged_config : dict[str, Any]
+            Validated configuration
+        mutagen_mgr : Any
+            Mutagen manager instance
+        update_queue : queue.Queue | None
+            TUI update queue
+
+        Returns
+        -------
+        tuple[dict[str, Any], Any]
+            Instance details and compute provider
+        """
+        if merged_config.get("sync_paths"):
+            mutagen_mgr.check_mutagen_installed()
+
+        compute_provider = self.compute_provider_factory(
+            region=merged_config["region"]
+        )
+
+        with self.resources_lock:
+            self.resources["compute_provider"] = compute_provider
+
+        instance_name = generate_instance_name()
+        instance_details = self._get_or_create_instance(
+            instance_name, merged_config
+        )
+
+        with self.resources_lock:
+            self.resources["instance_details"] = instance_details
+
+        if update_queue is not None:
+            logging.debug("Sending instance_details to TUI queue")
+            update_queue.put(
+                {"type": "instance_details", "payload": instance_details}
+            )
+
+        return instance_details, compute_provider
+
+    def _phase_ssh_connection(
+        self,
+        instance_details: dict[str, Any],
+        merged_config: dict[str, Any],
+        update_queue: queue.Queue | None,
+    ) -> tuple[Any, str, int]:
+        """Phase 3: Establish SSH connection.
+
+        Parameters
+        ----------
+        instance_details : dict[str, Any]
+            Instance details
+        merged_config : dict[str, Any]
+            Merged configuration
+        update_queue : queue.Queue | None
+            TUI update queue
+
+        Returns
+        -------
+        tuple[Any, str, int]
+            SSH manager, host, and port
+        """
+        logging.info("Waiting for SSH to be ready...")
+
+        ssh_host, ssh_port, ssh_key_file = get_ssh_connection_info(
+            instance_details["instance_id"],
+            instance_details["public_ip"],
+            instance_details["key_file"],
+        )
+
+        ssh_manager = self.ssh_manager_factory(
+            host=ssh_host,
+            key_file=ssh_key_file,
+            username=merged_config.get("ssh_username", "ubuntu"),
+            port=ssh_port,
+        )
 
         try:
-            mutagen_mgr = self.mutagen_manager_factory()
+            ssh_manager.connect(max_retries=10)
+            logging.info("SSH connection established")
+        except ConnectionError as e:
+            error_msg = (
+                f"Failed to establish SSH connection after 10 attempts: {str(e)}"
+            )
+            logging.error(error_msg)
+            raise
 
-            if merged_config.get("sync_paths") and not disable_mutagen:
-                mutagen_mgr.check_mutagen_installed()
+        if self.cleanup_in_progress_getter():
+            logging.debug("Cleanup in progress, aborting further operations")
+            return None, None, None
 
-            compute_provider = self.compute_provider_factory(
-                region=merged_config["region"]
+        if update_queue is not None:
+            update_queue.put(
+                {"type": "status_update", "payload": {"status": "running"}}
             )
 
-            with self.resources_lock:
-                self.resources["compute_provider"] = compute_provider
+        with self.resources_lock:
+            self.resources["ssh_manager"] = ssh_manager
 
-            instance_name = generate_instance_name()
-            instance_details = self._get_or_create_instance(
-                instance_name, merged_config
+        return ssh_manager, ssh_host, ssh_port
+
+    def _phase_file_sync(
+        self,
+        merged_config: dict[str, Any],
+        instance_details: dict[str, Any],
+        mutagen_mgr: Any,
+        ssh_host: str,
+        ssh_port: int,
+        disable_mutagen: bool,
+        update_queue: queue.Queue | None,
+    ) -> None:
+        """Phase 4: Synchronize files using Mutagen.
+
+        Parameters
+        ----------
+        merged_config : dict[str, Any]
+            Merged configuration
+        instance_details : dict[str, Any]
+            Instance details
+        mutagen_mgr : Any
+            Mutagen manager instance
+        ssh_host : str
+            SSH host address
+        ssh_port : int
+            SSH port
+        disable_mutagen : bool
+            Whether Mutagen is disabled
+        update_queue : queue.Queue | None
+            TUI update queue
+        """
+        sync_paths = merged_config.get("sync_paths")
+
+        if sync_paths:
+            mutagen_session_name = f"campers-{instance_details['unique_id']}"
+            mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)
+
+            with self.resources_lock:
+                self.resources["mutagen_mgr"] = mutagen_mgr
+                self.resources["mutagen_session_name"] = mutagen_session_name
+        else:
+            if update_queue is not None:
+                update_queue.put(
+                    {
+                        "type": "mutagen_status",
+                        "payload": {"state": "not_configured"},
+                    }
+                )
+            return
+
+        if disable_mutagen:
+            logging.info(
+                "Mutagen disabled via CAMPERS_DISABLE_MUTAGEN=1; skipping sync setup."
             )
-
-            with self.resources_lock:
-                self.resources["instance_details"] = instance_details
 
             if update_queue is not None:
-                logging.debug("Sending instance_details to TUI queue")
                 update_queue.put(
-                    {"type": "instance_details", "payload": instance_details}
+                    {
+                        "type": "mutagen_status",
+                        "payload": {"state": "disabled"},
+                    }
+                )
+        else:
+            if self.cleanup_in_progress_getter():
+                logging.debug("Cleanup in progress, aborting Mutagen sync")
+                return
+
+            sync_config = sync_paths[0]
+
+            logging.info("Starting Mutagen file sync...")
+            logging.debug(
+                "Mutagen sync details - local: %s, remote: %s, host: %s",
+                sync_config["local"],
+                sync_config["remote"],
+                instance_details["public_ip"],
+            )
+
+            if update_queue is not None:
+                update_queue.put(
+                    {
+                        "type": "mutagen_status",
+                        "payload": {"state": "starting", "files_synced": 0},
+                    }
                 )
 
-            ssh_manager = None
-            mutagen_session_name = None
-            portforward_mgr = None
-            need_ssh = (
-                merged_config.get("setup_script")
-                or merged_config.get("startup_script")
-                or merged_config.get("command")
+            campers_dir = os.environ.get(
+                "CAMPERS_DIR", str(Path.home() / ".campers")
             )
 
-            if not need_ssh:
-                if json_output:
-                    return json.dumps(
-                        instance_details,
-                        indent=2,
-                        default=lambda obj: obj.isoformat()
-                        if isinstance(obj, datetime)
-                        else obj,
-                    )
-
-                return instance_details
-
-            skip_ssh = os.environ.get("CAMPERS_SKIP_SSH_CONNECTION") == "1"
-            if skip_ssh:
-                with self.resources_lock:
-                    self.resources["instance_details"] = instance_details
-
-                while not self.cleanup_in_progress_getter():
-                    time.sleep(0.1)
-
-                return instance_details
-
-            logging.info("Waiting for SSH to be ready...")
-
-            ssh_host, ssh_port, ssh_key_file = get_ssh_connection_info(
-                instance_details["instance_id"],
-                instance_details["public_ip"],
-                instance_details["key_file"],
+            logging.debug(
+                "Creating Mutagen sync session: %s", mutagen_session_name
             )
 
-            ssh_manager = self.ssh_manager_factory(
+            mutagen_mgr.create_sync_session(
+                session_name=mutagen_session_name,
+                local_path=sync_config["local"],
+                remote_path=sync_config["remote"],
                 host=ssh_host,
-                key_file=ssh_key_file,
+                key_file=instance_details["key_file"],
                 username=merged_config.get("ssh_username", "ubuntu"),
-                port=ssh_port,
+                ignore_patterns=merged_config.get("ignore"),
+                include_vcs=merged_config.get("include_vcs", False),
+                ssh_wrapper_dir=campers_dir,
+                ssh_port=ssh_port,
             )
+
+            logging.info("Waiting for initial file sync to complete...")
+
+            if update_queue is not None:
+                update_queue.put(
+                    {
+                        "type": "mutagen_status",
+                        "payload": {"state": "syncing", "files_synced": 0},
+                    }
+                )
+
+            mutagen_mgr.wait_for_initial_sync(
+                mutagen_session_name, timeout=SYNC_TIMEOUT
+            )
+            logging.info("File sync completed")
+
+            if update_queue is not None:
+                update_queue.put(
+                    {
+                        "type": "mutagen_status",
+                        "payload": {"state": "idle"},
+                    }
+                )
+
+    def _phase_ansible_provisioning(
+        self,
+        merged_config: dict[str, Any],
+        instance_details: dict[str, Any],
+        ssh_port: int,
+    ) -> None:
+        """Phase 5: Execute Ansible playbooks.
+
+        Parameters
+        ----------
+        merged_config : dict[str, Any]
+            Merged configuration
+        instance_details : dict[str, Any]
+            Instance details
+        ssh_port : int
+            SSH port
+        """
+        playbook_refs = self._get_playbook_references(merged_config)
+        if not playbook_refs:
+            return
+
+        if self.cleanup_in_progress_getter():
+            logging.debug("Cleanup in progress, aborting Ansible playbooks")
+            return
+
+        full_config = self.config_loader.load_config()
+
+        if "playbooks" not in full_config:
+            raise ValueError(
+                "ansible_playbook(s) specified but no 'playbooks' section in config"
+            )
+
+        playbooks_config = full_config.get("playbooks", {})
+
+        logging.info(f"Running Ansible playbook(s): {', '.join(playbook_refs)}")
+
+        ansible_mgr = AnsibleManager()
+        try:
+            ansible_mgr.execute_playbooks(
+                playbook_names=playbook_refs,
+                playbooks_config=playbooks_config,
+                instance_ip=instance_details["public_ip"],
+                ssh_key_file=instance_details["key_file"],
+                ssh_username=merged_config.get("ssh_username", "ubuntu"),
+                ssh_port=ssh_port if ssh_port else 22,
+            )
+            logging.info("Ansible playbook(s) completed successfully")
+        except Exception as e:
+            logging.error(f"Ansible execution failed: {e}")
+            raise
+
+    def _phase_script_execution(
+        self,
+        merged_config: dict[str, Any],
+        instance_details: dict[str, Any],
+        ssh_manager: Any,
+        env_vars: dict[str, str],
+    ) -> None:
+        """Phase 6: Execute setup and startup scripts.
+
+        Parameters
+        ----------
+        merged_config : dict[str, Any]
+            Merged configuration
+        instance_details : dict[str, Any]
+            Instance details
+        ssh_manager : Any
+            SSH manager instance
+        env_vars : dict[str, str]
+            Environment variables to forward
+        """
+        if merged_config.get("setup_script", "").strip():
+            if self.cleanup_in_progress_getter():
+                logging.debug("Cleanup in progress, aborting setup_script")
+                return
+
+            logging.info("Running setup_script...")
+
+            setup_with_env = ssh_manager.build_command_with_env(
+                merged_config["setup_script"], env_vars
+            )
+            exit_code = ssh_manager.execute_command(setup_with_env)
+
+            if exit_code != 0:
+                raise RuntimeError(
+                    f"Setup script failed with exit code: {exit_code}"
+                )
+
+            logging.info("Setup script completed successfully")
+
+        if merged_config.get("ports"):
+            if self.cleanup_in_progress_getter():
+                logging.debug("Cleanup in progress, aborting port forwarding")
+                return
+
+            portforward_mgr = self.portforward_manager_factory()
+
+            with self.resources_lock:
+                self.resources["portforward_mgr"] = portforward_mgr
 
             try:
-                ssh_manager.connect(max_retries=10)
-                logging.info("SSH connection established")
-            except ConnectionError as e:
-                error_msg = (
-                    f"Failed to establish SSH connection after 10 attempts: {str(e)}"
+                pf_host, pf_port, pf_key_file = get_ssh_connection_info(
+                    instance_details["instance_id"],
+                    instance_details["public_ip"],
+                    instance_details["key_file"],
                 )
-                logging.error(error_msg)
-                raise
 
+                portforward_mgr.create_tunnels(
+                    ports=merged_config["ports"],
+                    host=pf_host,
+                    key_file=pf_key_file,
+                    username=merged_config.get("ssh_username", "ubuntu"),
+                    ssh_port=pf_port,
+                )
+            except RuntimeError as e:
+                logging.error("Port forwarding failed: %s", e)
+                with self.resources_lock:
+                    self.resources.pop("portforward_mgr", None)
+
+        if merged_config.get("startup_script"):
             if self.cleanup_in_progress_getter():
-                logging.debug("Cleanup in progress, aborting further operations")
-                return {}
+                logging.debug("Cleanup in progress, aborting startup_script")
+                return
 
-            if update_queue is not None:
-                update_queue.put(
-                    {"type": "status_update", "payload": {"status": "running"}}
+            working_dir = merged_config["sync_paths"][0]["remote"]
+
+            logging.info("Running startup_script...")
+
+            startup_command = self._build_command_in_directory(
+                working_dir, merged_config["startup_script"]
+            )
+            startup_with_env = ssh_manager.build_command_with_env(
+                startup_command, env_vars
+            )
+            exit_code = ssh_manager.execute_command_raw(startup_with_env)
+
+            if exit_code != 0:
+                raise RuntimeError(
+                    f"Startup script failed with exit code: {exit_code}"
                 )
 
-            with self.resources_lock:
-                self.resources["ssh_manager"] = ssh_manager
+            logging.info("Startup script completed successfully")
 
-            env_vars = ssh_manager.filter_environment_variables(
-                merged_config.get("env_filter")
+    def _phase_command_execution(
+        self,
+        merged_config: dict[str, Any],
+        instance_details: dict[str, Any],
+        ssh_manager: Any,
+        env_vars: dict[str, str],
+    ) -> None:
+        """Phase 7: Execute final command.
+
+        Parameters
+        ----------
+        merged_config : dict[str, Any]
+            Merged configuration
+        instance_details : dict[str, Any]
+            Instance details
+        ssh_manager : Any
+            SSH manager instance
+        env_vars : dict[str, str]
+            Environment variables to forward
+        """
+        if not merged_config.get("command"):
+            return
+
+        if self.cleanup_in_progress_getter():
+            logging.debug("Cleanup in progress, aborting command execution")
+            return
+
+        cmd = merged_config["command"]
+        logging.info("Executing command: %s", cmd)
+
+        if merged_config.get("sync_paths"):
+            working_dir = merged_config["sync_paths"][0]["remote"]
+            full_command = self._build_command_in_directory(working_dir, cmd)
+            command_with_env = ssh_manager.build_command_with_env(
+                full_command, env_vars
+            )
+            exit_code = ssh_manager.execute_command_raw(command_with_env)
+        else:
+            command_with_env = ssh_manager.build_command_with_env(cmd, env_vars)
+            exit_code = ssh_manager.execute_command(command_with_env)
+
+        logging.info("Command completed with exit code: %s", exit_code)
+        instance_details["command_exit_code"] = exit_code
+
+    def _format_output(
+        self, instance_details: dict[str, Any], json_output: bool
+    ) -> dict[str, Any] | str:
+        """Format output as JSON or dictionary.
+
+        Parameters
+        ----------
+        instance_details : dict[str, Any]
+            Instance details to format
+        json_output : bool
+            Whether to return JSON string
+
+        Returns
+        -------
+        dict[str, Any] | str
+            Formatted output
+        """
+        if json_output:
+            return json.dumps(
+                instance_details,
+                indent=2,
+                default=lambda obj: obj.isoformat()
+                if isinstance(obj, datetime)
+                else obj,
             )
 
-            logging.info(f"Forwarding {len(env_vars)} environment variables")
-
-            sync_paths = merged_config.get("sync_paths")
-
-            if sync_paths:
-                mutagen_session_name = f"campers-{instance_details['unique_id']}"
-                mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)
-
-                with self.resources_lock:
-                    self.resources["mutagen_mgr"] = mutagen_mgr
-                    self.resources["mutagen_session_name"] = mutagen_session_name
-            else:
-                if update_queue is not None:
-                    update_queue.put(
-                        {
-                            "type": "mutagen_status",
-                            "payload": {"state": "not_configured"},
-                        }
-                    )
-
-            if sync_paths:
-                if disable_mutagen:
-                    logging.info(
-                        "Mutagen disabled via CAMPERS_DISABLE_MUTAGEN=1; skipping sync setup."
-                    )
-
-                    if update_queue is not None:
-                        update_queue.put(
-                            {
-                                "type": "mutagen_status",
-                                "payload": {"state": "disabled"},
-                            }
-                        )
-                else:
-                    if self.cleanup_in_progress_getter():
-                        logging.debug("Cleanup in progress, aborting Mutagen sync")
-                        return {}
-
-                    sync_config = sync_paths[0]
-
-                    logging.info("Starting Mutagen file sync...")
-                    logging.debug(
-                        "Mutagen sync details - local: %s, remote: %s, host: %s",
-                        sync_config["local"],
-                        sync_config["remote"],
-                        instance_details["public_ip"],
-                    )
-
-                    if update_queue is not None:
-                        update_queue.put(
-                            {
-                                "type": "mutagen_status",
-                                "payload": {"state": "starting", "files_synced": 0},
-                            }
-                        )
-
-                    campers_dir = os.environ.get(
-                        "CAMPERS_DIR", str(Path.home() / ".campers")
-                    )
-
-                    logging.debug(
-                        "Creating Mutagen sync session: %s", mutagen_session_name
-                    )
-
-                    mutagen_mgr.create_sync_session(
-                        session_name=mutagen_session_name,
-                        local_path=sync_config["local"],
-                        remote_path=sync_config["remote"],
-                        host=ssh_host,
-                        key_file=ssh_key_file,
-                        username=merged_config.get("ssh_username", "ubuntu"),
-                        ignore_patterns=merged_config.get("ignore"),
-                        include_vcs=merged_config.get("include_vcs", False),
-                        ssh_wrapper_dir=campers_dir,
-                        ssh_port=ssh_port,
-                    )
-
-                    logging.info("Waiting for initial file sync to complete...")
-
-                    if update_queue is not None:
-                        update_queue.put(
-                            {
-                                "type": "mutagen_status",
-                                "payload": {"state": "syncing", "files_synced": 0},
-                            }
-                        )
-
-                    mutagen_mgr.wait_for_initial_sync(
-                        mutagen_session_name, timeout=SYNC_TIMEOUT
-                    )
-                    logging.info("File sync completed")
-
-                    if update_queue is not None:
-                        update_queue.put(
-                            {
-                                "type": "mutagen_status",
-                                "payload": {"state": "idle"},
-                            }
-                        )
-
-            playbook_refs = self._get_playbook_references(merged_config)
-            if playbook_refs:
-                if self.cleanup_in_progress_getter():
-                    logging.debug("Cleanup in progress, aborting Ansible playbooks")
-                    return {}
-
-                full_config = self.config_loader.load_config()
-
-                if "playbooks" not in full_config:
-                    raise ValueError(
-                        "ansible_playbook(s) specified but no 'playbooks' section in config"
-                    )
-
-                playbooks_config = full_config.get("playbooks", {})
-
-                logging.info(f"Running Ansible playbook(s): {', '.join(playbook_refs)}")
-
-                ansible_mgr = AnsibleManager()
-                try:
-                    ansible_mgr.execute_playbooks(
-                        playbook_names=playbook_refs,
-                        playbooks_config=playbooks_config,
-                        instance_ip=instance_details["public_ip"],
-                        ssh_key_file=instance_details["key_file"],
-                        ssh_username=merged_config.get("ssh_username", "ubuntu"),
-                        ssh_port=ssh_port if ssh_port else 22,
-                    )
-                    logging.info("Ansible playbook(s) completed successfully")
-                except Exception as e:
-                    logging.error(f"Ansible execution failed: {e}")
-                    raise
-
-            if merged_config.get("setup_script", "").strip():
-                if self.cleanup_in_progress_getter():
-                    logging.debug("Cleanup in progress, aborting setup_script")
-                    return {}
-
-                logging.info("Running setup_script...")
-
-                setup_with_env = ssh_manager.build_command_with_env(
-                    merged_config["setup_script"], env_vars
-                )
-                exit_code = ssh_manager.execute_command(setup_with_env)
-
-                if exit_code != 0:
-                    raise RuntimeError(
-                        f"Setup script failed with exit code: {exit_code}"
-                    )
-
-                logging.info("Setup script completed successfully")
-
-            if merged_config.get("ports"):
-                if self.cleanup_in_progress_getter():
-                    logging.debug("Cleanup in progress, aborting port forwarding")
-                    return {}
-
-                portforward_mgr = self.portforward_manager_factory()
-
-                with self.resources_lock:
-                    self.resources["portforward_mgr"] = portforward_mgr
-
-                try:
-                    pf_host, pf_port, pf_key_file = get_ssh_connection_info(
-                        instance_details["instance_id"],
-                        instance_details["public_ip"],
-                        instance_details["key_file"],
-                    )
-
-                    portforward_mgr.create_tunnels(
-                        ports=merged_config["ports"],
-                        host=pf_host,
-                        key_file=pf_key_file,
-                        username=merged_config.get("ssh_username", "ubuntu"),
-                        ssh_port=pf_port,
-                    )
-                except RuntimeError as e:
-                    logging.error("Port forwarding failed: %s", e)
-                    with self.resources_lock:
-                        self.resources.pop("portforward_mgr", None)
-                    portforward_mgr = None
-
-            if merged_config.get("startup_script"):
-                if self.cleanup_in_progress_getter():
-                    logging.debug("Cleanup in progress, aborting startup_script")
-                    return {}
-
-                working_dir = merged_config["sync_paths"][0]["remote"]
-
-                logging.info("Running startup_script...")
-
-                startup_command = self._build_command_in_directory(
-                    working_dir, merged_config["startup_script"]
-                )
-                startup_with_env = ssh_manager.build_command_with_env(
-                    startup_command, env_vars
-                )
-                exit_code = ssh_manager.execute_command_raw(startup_with_env)
-
-                if exit_code != 0:
-                    raise RuntimeError(
-                        f"Startup script failed with exit code: {exit_code}"
-                    )
-
-                logging.info("Startup script completed successfully")
-
-            if merged_config.get("command"):
-                if self.cleanup_in_progress_getter():
-                    logging.debug("Cleanup in progress, aborting command execution")
-                    return {}
-
-                cmd = merged_config["command"]
-                logging.info("Executing command: %s", cmd)
-
-                if merged_config.get("sync_paths"):
-                    working_dir = merged_config["sync_paths"][0]["remote"]
-                    full_command = self._build_command_in_directory(working_dir, cmd)
-                    command_with_env = ssh_manager.build_command_with_env(
-                        full_command, env_vars
-                    )
-                    exit_code = ssh_manager.execute_command_raw(command_with_env)
-                else:
-                    command_with_env = ssh_manager.build_command_with_env(cmd, env_vars)
-                    exit_code = ssh_manager.execute_command(command_with_env)
-
-                logging.info("Command completed with exit code: %s", exit_code)
-                instance_details["command_exit_code"] = exit_code
-
-            if json_output:
-                return json.dumps(
-                    instance_details,
-                    indent=2,
-                    default=lambda obj: obj.isoformat()
-                    if isinstance(obj, datetime)
-                    else obj,
-                )
-
-            return instance_details
-
-        finally:
-            if not tui_mode and not self.cleanup_in_progress_getter():
-                if cleanup_resources_callback:
-                    cleanup_resources_callback()
+        return instance_details
 
     def _get_or_create_instance(
         self, instance_name: str, config: dict[str, Any]

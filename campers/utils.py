@@ -9,6 +9,13 @@ import time
 from datetime import datetime
 from typing import Any
 
+from campers.constants import (
+    SECONDS_PER_MINUTE,
+    SECONDS_PER_HOUR,
+    SECONDS_PER_DAY,
+    DEFAULT_NAME_COLUMN_WIDTH,
+)
+
 
 def get_git_project_name() -> str | None:
     """Detect project name from git remote URL or directory name.
@@ -157,16 +164,16 @@ def format_time_ago(dt: datetime) -> str:
     if delta.total_seconds() < 0:
         raise ValueError("datetime cannot be in the future")
 
-    if delta.total_seconds() < 60:
+    if delta.total_seconds() < SECONDS_PER_MINUTE:
         return "just now"
-    elif delta.total_seconds() < 3600:
-        minutes = int(delta.total_seconds() / 60)
+    elif delta.total_seconds() < SECONDS_PER_HOUR:
+        minutes = int(delta.total_seconds() / SECONDS_PER_MINUTE)
         return f"{minutes}m ago"
-    elif delta.total_seconds() < 86400:
-        hours = int(delta.total_seconds() / 3600)
+    elif delta.total_seconds() < SECONDS_PER_DAY:
+        hours = int(delta.total_seconds() / SECONDS_PER_HOUR)
         return f"{hours}h ago"
     else:
-        days = int(delta.total_seconds() / 86400)
+        days = int(delta.total_seconds() / SECONDS_PER_DAY)
         return f"{days}d ago"
 
 
@@ -185,7 +192,7 @@ def log_and_print_error(message: str, *args: Any) -> None:
     print(f"Error: {formatted_msg}", file=sys.stderr)
 
 
-def truncate_name(name: str, max_width: int = 19) -> str:
+def truncate_name(name: str, max_width: int = DEFAULT_NAME_COLUMN_WIDTH) -> str:
     """Truncate name to fit in column width.
 
     Parameters
@@ -193,7 +200,7 @@ def truncate_name(name: str, max_width: int = 19) -> str:
     name : str
         Name to truncate
     max_width : int
-        Maximum width for name (default: 19)
+        Maximum width for name (default: DEFAULT_NAME_COLUMN_WIDTH)
 
     Returns
     -------
