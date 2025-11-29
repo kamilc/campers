@@ -789,7 +789,9 @@ class EC2Manager:
             logger.warning(f"Instance {instance_id} has no block device mappings")
             return None
 
-        volume_id = block_device_mappings[0].get("Ebs", {}).get("VolumeId")
+        block_device = block_device_mappings[0]
+        ebs = block_device.get("Ebs") if block_device else None
+        volume_id = ebs.get("VolumeId") if ebs else None
         if not volume_id:
             raise RuntimeError(f"Instance {instance_id} has no root volume")
 

@@ -6,6 +6,7 @@ import logging
 import sys
 from typing import Any
 
+import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from campers.core.config import ConfigLoader
@@ -21,14 +22,11 @@ class SetupManager:
     ----------
     config_loader : ConfigLoader
         Configuration loader for accessing configuration settings
-    boto3_client_factory : Callable[..., Any]
-        Factory function for creating boto3 clients
     """
 
     def __init__(
         self,
         config_loader: ConfigLoader,
-        boto3_client_factory: Any,
     ) -> None:
         """Initialize SetupManager with required dependencies.
 
@@ -36,11 +34,8 @@ class SetupManager:
         ----------
         config_loader : ConfigLoader
             Configuration loader for accessing configuration settings
-        boto3_client_factory : Callable[..., Any]
-            Factory function for creating boto3 clients
         """
         self._config_loader = config_loader
-        self._boto3_client_factory = boto3_client_factory
 
     def get_effective_region(self, region: str | None) -> str:
         """Get effective region from parameter or config.
@@ -78,7 +73,7 @@ class SetupManager:
             True if credentials are valid, False otherwise
         """
         try:
-            sts_client = self._boto3_client_factory("sts", region_name=effective_region)
+            sts_client = boto3.client("sts", region_name=effective_region)
             sts_client.get_caller_identity()
             print("AWS credentials found")
             return True
@@ -178,7 +173,7 @@ class SetupManager:
                 error_code = e.response.get("Error", {}).get("Code", "")
 
                 if error_code == "DryRunOperation":
-                    pass
+                    logging.debug("DryRunOperation for %s", perm_name)
                 elif error_code in ["UnauthorizedOperation", "AccessDenied"]:
                     missing.append(perm_name)
 
@@ -259,15 +254,13 @@ class SetupManager:
 
         return vpc_exists, missing_perms
 
-    def setup(self, region: str | None = None, ec2_client: Any = None) -> None:
+    def setup(self, region: str | None = None) -> None:
         """Validate and prepare AWS infrastructure prerequisites.
 
         Parameters
         ----------
         region : str | None
             AWS region to check (defaults to config or us-east-1)
-        ec2_client : Any
-            boto3 EC2 client (for testing purposes)
 
         Raises
         ------
@@ -281,8 +274,7 @@ class SetupManager:
         if not self.check_aws_credentials(effective_region):
             sys.exit(1)
 
-        if ec2_client is None:
-            ec2_client = self._boto3_client_factory("ec2", region_name=effective_region)
+        ec2_client = boto3.client("ec2", region_name=effective_region)
 
         vpc_exists, missing_perms = self.check_infrastructure(ec2_client, effective_region)
 
@@ -316,15 +308,13 @@ class SetupManager:
 
         print("\nSetup complete! Run: campers run")
 
-    def doctor(self, region: str | None = None, ec2_client: Any = None) -> None:
+    def doctor(self, region: str | None = None) -> None:
         """Diagnose AWS environment and report status.
 
         Parameters
         ----------
         region : str | None
             AWS region to check (defaults to config or us-east-1)
-        ec2_client : Any
-            boto3 EC2 client (for testing purposes)
 
         Raises
         ------
@@ -338,8 +328,7 @@ class SetupManager:
         if not self.check_aws_credentials(effective_region):
             sys.exit(1)
 
-        if ec2_client is None:
-            ec2_client = self._boto3_client_factory("ec2", region_name=effective_region)
+        ec2_client = boto3.client("ec2", region_name=effective_region)
 
         vpc_exists, missing_perms = self.check_infrastructure(ec2_client, effective_region)
 

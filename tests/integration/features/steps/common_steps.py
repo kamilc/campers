@@ -88,15 +88,10 @@ def execute_command_direct(
         campers = Campers(
             compute_provider_factory=compute_provider_factory,
             ssh_manager_factory=FakeSSHManager,
-            boto3_client_factory=mock_boto3_client_factory,
         )
 
-        campers._create_compute_provider = compute_provider_factory
-
-        ec2_client = getattr(context, "patched_ec2_client", None)
-
         if command == "doctor":
-            campers.doctor(region=region, ec2_client=ec2_client)
+            campers.doctor(region=region)
             context.exit_code = 0
 
         elif command == "setup":
@@ -107,7 +102,7 @@ def execute_command_direct(
                 return user_input
 
             with unittest.mock.patch("builtins.input", side_effect=mocked_input):
-                campers.setup(region=region, ec2_client=ec2_client)
+                campers.setup(region=region)
             context.exit_code = 0
 
         elif command == "list":

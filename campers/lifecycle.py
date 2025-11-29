@@ -511,8 +511,8 @@ class LifecycleManager:
                 try:
                     tags = regional_manager.get_instance_tags(instance_id)
                     unique_id = tags.get("UniqueId")
-                except (AttributeError, KeyError):
-                    pass
+                except (AttributeError, KeyError) as e:
+                    logging.debug("Failed to get UniqueId from instance tags: %s", e)
 
             key_file = None
             if unique_id:

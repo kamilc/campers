@@ -368,8 +368,9 @@ class CampersTUI(App):
             logging.error("AWS credentials not found")
             self.worker_exit_code = 1
         except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code", "")
-            error_msg = e.response.get("Error", {}).get("Message", str(e))
+            error_response = e.response.get("Error") if e.response else None
+            error_code = error_response.get("Code", "") if error_response else ""
+            error_msg = error_response.get("Message", str(e)) if error_response else str(e)
 
             if error_code in [
                 "ExpiredToken",

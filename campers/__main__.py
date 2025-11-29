@@ -35,8 +35,6 @@ class Campers:
         self,
         compute_provider_factory: Callable[[str], ComputeProvider] | None = None,
         ssh_manager_factory: type | None = None,
-        boto3_client_factory: Any = None,
-        boto3_resource_factory: Any = None,
     ) -> None:
         """Initialize Campers CLI with optional dependency injection."""
         self._config_loader = ConfigLoader()
@@ -46,9 +44,6 @@ class Campers:
         self._abort_requested = False
         self._resources: dict[str, Any] = {}
         self._update_queue: queue.Queue | None = None
-
-        self._boto3_client_factory = boto3_client_factory
-        self._boto3_resource_factory = boto3_resource_factory
 
         self._compute_provider_factory_override = compute_provider_factory
 
@@ -86,8 +81,6 @@ class Campers:
         compute_class = provider["compute"]
         return compute_class(
             region=region,
-            boto3_client_factory=self._boto3_client_factory,
-            boto3_resource_factory=self._boto3_resource_factory,
         )
 
     @property
@@ -113,7 +106,7 @@ class Campers:
         return self._run_executor
 
     def _validate_region_wrapper(self, region: str) -> None:
-        compute_provider = self._create_compute_provider(region)
+        compute_provider = self.compute_provider_factory(region)
         compute_provider.validate_region(region)
 
     @property
@@ -136,7 +129,6 @@ class Campers:
 
             self._setup_manager = SetupManager(
                 config_loader=self._config_loader,
-                boto3_client_factory=self._boto3_client_factory,
             )
         return self._setup_manager
 
@@ -269,7 +261,7 @@ class Campers:
         return truncate_name(name)
 
     def _validate_region(self, region: str) -> None:
-        compute_provider = self._create_compute_provider(region)
+        compute_provider = self.compute_provider_factory(region)
         compute_provider.validate_region(region)
 
     def list(self, region: str | None = None) -> None:
@@ -292,21 +284,19 @@ class Campers:
         """Destroy a managed instance."""
         return self.lifecycle_manager.destroy(name_or_id=name_or_id, region=region)
 
-    def setup(self, region: str | None = None, ec2_client: Any = None) -> None:
+    def setup(self, region: str | None = None) -> None:
         """Set up cloud environment and validate configuration."""
-        return self.setup_manager.setup(region=region, ec2_client=ec2_client)
+        return self.setup_manager.setup(region=region)
 
-    def doctor(self, region: str | None = None, ec2_client: Any = None) -> None:
+    def doctor(self, region: str | None = None) -> None:
         """Diagnose cloud environment and configuration issues.
 
         Parameters
         ----------
         region : str | None
             Cloud region to diagnose, or None for default region
-        ec2_client : Any
-            Optional boto3 EC2 client (for testing/mocking)
         """
-        return self.setup_manager.doctor(region=region, ec2_client=ec2_client)
+        return self.setup_manager.doctor(region=region)
 
     def init(self, force: bool = False) -> None:
         """Create a default campers.yaml configuration file."""

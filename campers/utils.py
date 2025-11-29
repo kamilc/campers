@@ -54,8 +54,8 @@ def get_git_project_name() -> str | None:
                     return os.path.basename(os.getcwd())
 
                 return project
-    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
-        pass
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError) as e:
+        logging.debug("Could not detect git project name: %s", e)
 
     return os.path.basename(os.getcwd())
 
@@ -83,8 +83,8 @@ def get_git_branch() -> str | None:
             branch = result.stdout.strip()
             if branch and branch != "HEAD":
                 return branch
-    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
-        pass
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError) as e:
+        logging.debug("Could not detect git branch: %s", e)
 
     return None
 

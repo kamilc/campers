@@ -44,12 +44,6 @@ class CampersCLI:
     ssh_manager_factory : Callable[..., Any] | None
         Optional factory function for creating SSHManager instances.
         If None, uses the default SSHManager class.
-    boto3_client_factory : Callable[..., Any] | None
-        Optional factory function for creating boto3 clients.
-        If None, uses the default boto3.client function.
-    boto3_resource_factory : Callable[..., Any] | None
-        Optional factory function for creating boto3 resources.
-        If None, uses the default boto3.resource function.
     """
 
     _cached_class: type | None = None
@@ -58,8 +52,6 @@ class CampersCLI:
         cls,
         compute_provider_factory: Callable[..., Any] | None = None,
         ssh_manager_factory: Callable[..., Any] | None = None,
-        boto3_client_factory: Callable[..., Any] | None = None,
-        boto3_resource_factory: Callable[..., Any] | None = None,
     ) -> Any:
         """Create CampersCLI instance with dynamic subclassing.
 
@@ -69,10 +61,6 @@ class CampersCLI:
             Optional factory for compute provider (default: None, uses default provider)
         ssh_manager_factory : Callable[..., Any] | None
             Optional factory for SSHManager (default: None, uses SSHManager)
-        boto3_client_factory : Callable[..., Any] | None
-            Optional factory for boto3 clients (default: None, uses boto3.client)
-        boto3_resource_factory : Callable[..., Any] | None
-            Optional factory for boto3 resources (default: None, uses boto3.resource)
 
         Returns
         -------
@@ -89,8 +77,6 @@ class CampersCLI:
                     self,
                     compute_provider_factory: Callable[..., Any] | None = None,
                     ssh_manager_factory: Callable[..., Any] | None = None,
-                    boto3_client_factory: Callable[..., Any] | None = None,
-                    boto3_resource_factory: Callable[..., Any] | None = None,
                 ) -> None:
                     """Initialize CampersCLI with optional dependency injection.
 
@@ -100,16 +86,10 @@ class CampersCLI:
                         Optional factory for compute provider (default: None, uses default provider)
                     ssh_manager_factory : Callable[..., Any] | None
                         Optional factory for SSHManager (default: None, uses SSHManager)
-                    boto3_client_factory : Callable[..., Any] | None
-                        Optional factory for boto3 clients (default: None, uses boto3.client)
-                    boto3_resource_factory : Callable[..., Any] | None
-                        Optional factory for boto3 resources (default: None, uses boto3.resource)
                     """
                     super().__init__(
                         compute_provider_factory=compute_provider_factory,
                         ssh_manager_factory=ssh_manager_factory,
-                        boto3_client_factory=boto3_client_factory,
-                        boto3_resource_factory=boto3_resource_factory,
                     )
 
                 def run(
@@ -192,8 +172,6 @@ class CampersCLI:
         return cls._cached_class(
             compute_provider_factory=compute_provider_factory,
             ssh_manager_factory=ssh_manager_factory,
-            boto3_client_factory=boto3_client_factory,
-            boto3_resource_factory=boto3_resource_factory,
         )
 
 

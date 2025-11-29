@@ -544,7 +544,6 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                 cli = CampersCLI(
                     compute_provider_factory=compute_provider_factory,
                     ssh_manager_factory=ssh_manager_factory,
-                    boto3_client_factory=boto3_factory,
                 )
 
                 if args[0] == "run":

@@ -1683,18 +1683,13 @@ def test_list_command_invalid_region(campers_module, aws_credentials) -> None:
     """Test list command with invalid region parameter."""
     from unittest.mock import MagicMock
 
-    campers_instance = campers_module()
+    mock_compute_provider = MagicMock()
+    mock_compute_provider.validate_region.side_effect = ValueError("Invalid region: 'invalid-region-xyz'")
 
-    mock_ec2_client = MagicMock()
-    mock_ec2_client.describe_regions.return_value = {
-        "Regions": [
-            {"RegionName": "us-east-1"},
-            {"RegionName": "us-west-2"},
-            {"RegionName": "eu-west-1"},
-        ]
-    }
+    campers_instance = campers_module(
+        compute_provider_factory=MagicMock(return_value=mock_compute_provider)
+    )
 
-    campers_instance._boto3_client_factory = MagicMock(return_value=mock_ec2_client)
     with pytest.raises(ValueError, match="Invalid region: 'invalid-region-xyz'"):
         campers_instance.list(region="invalid-region-xyz")
 
@@ -1735,17 +1730,13 @@ def test_validate_region_valid(campers_module) -> None:
     """Test validate_region accepts valid AWS region."""
     from unittest.mock import MagicMock
 
-    campers_instance = campers_module()
+    mock_compute_provider = MagicMock()
+    mock_compute_provider.validate_region = MagicMock()
 
-    mock_ec2_client = MagicMock()
-    mock_ec2_client.describe_regions.return_value = {
-        "Regions": [
-            {"RegionName": "us-east-1"},
-            {"RegionName": "us-west-2"},
-        ]
-    }
+    campers_instance = campers_module(
+        compute_provider_factory=MagicMock(return_value=mock_compute_provider)
+    )
 
-    campers_instance._boto3_client_factory = MagicMock(return_value=mock_ec2_client)
     campers_instance._validate_region("us-east-1")
 
 
@@ -1753,17 +1744,13 @@ def test_validate_region_invalid(campers_module) -> None:
     """Test validate_region raises ValueError for invalid region."""
     from unittest.mock import MagicMock
 
-    campers_instance = campers_module()
+    mock_compute_provider = MagicMock()
+    mock_compute_provider.validate_region.side_effect = ValueError("Invalid region")
 
-    mock_ec2_client = MagicMock()
-    mock_ec2_client.describe_regions.return_value = {
-        "Regions": [
-            {"RegionName": "us-east-1"},
-            {"RegionName": "us-west-2"},
-        ]
-    }
+    campers_instance = campers_module(
+        compute_provider_factory=MagicMock(return_value=mock_compute_provider)
+    )
 
-    campers_instance._boto3_client_factory = MagicMock(return_value=mock_ec2_client)
     with pytest.raises(ValueError, match="Invalid region"):
         campers_instance._validate_region("invalid-region")
 

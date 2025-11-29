@@ -254,7 +254,8 @@ class CleanupManager:
 
         try:
             campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
-            host = resources.get("instance_details", {}).get("public_ip")
+            instance_details = resources.get("instance_details")
+            host = instance_details.get("public_ip") if instance_details else None
             resources["mutagen_mgr"].terminate_session(
                 resources["mutagen_session_name"],
                 ssh_wrapper_dir=campers_dir,

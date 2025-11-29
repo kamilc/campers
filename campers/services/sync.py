@@ -204,10 +204,21 @@ class MutagenManager:
 
         temp_key_path = campers_ssh_dir / f"campers-key-{session_name}.pem"
 
-        with open(temp_key_path, "w") as f:
+        try:
+            fd = os.open(
+                str(temp_key_path),
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o600,
+            )
+        except FileExistsError:
+            temp_key_path.unlink()
+            fd = os.open(
+                str(temp_key_path),
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o600,
+            )
+        with os.fdopen(fd, "w") as f:
             f.write(key_content)
-
-        os.chmod(temp_key_path, 0o600)
 
         campers_config_path = (campers_ssh_dir / "campers-ssh-config").resolve()
 
