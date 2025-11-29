@@ -11,6 +11,7 @@ import types
 from pathlib import Path
 from typing import Any
 
+from campers.core.utils import get_instance_id, get_volume_size_or_default
 from campers.providers.aws.pricing import PricingService
 from campers.tui.app import TUI_STATUS_UPDATE_PROCESSING_DELAY
 
@@ -301,7 +302,7 @@ class CleanupManager:
             return
 
         instance_details = resources_to_clean["instance_details"]
-        instance_id = instance_details.get("InstanceId") or instance_details.get("instance_id")
+        instance_id = get_instance_id(instance_details)
 
         if instance_id is None:
             logging.warning("Cannot %s instance: instance_id is None", action)
@@ -325,11 +326,9 @@ class CleanupManager:
                 if action == "stop":
                     compute_provider.stop_instance(instance_id)
                     logging.info("Cloud instance stopped successfully")
-                    volume_size = compute_provider.get_volume_size(instance_id)
+                    volume_size = get_volume_size_or_default(compute_provider, instance_id)
                     storage_rate = self._get_storage_rate(compute_provider.region)
-                    storage_cost = (
-                        float(volume_size) * storage_rate if volume_size is not None else 0.0
-                    )
+                    storage_cost = float(volume_size) * storage_rate
 
                     print("\nInstance stopped successfully")
                     print(f"  Instance ID: {instance_id}")

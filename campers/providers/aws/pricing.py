@@ -4,12 +4,14 @@ This module provides pricing information retrieval from AWS Price List API
 with in-memory caching to minimize API calls.
 """
 
+import json
 import logging
 import threading
 from datetime import datetime, timedelta
 from typing import Any
 
 import boto3
+from botocore.exceptions import ClientError, NoCredentialsError
 
 from campers.providers.aws.pricing_parsers import parse_ebs_pricing, parse_ec2_pricing
 
@@ -125,7 +127,7 @@ class PricingService:
             self.pricing_client = boto3.client("pricing", region_name="us-east-1")
             self.pricing_available = True
             logger.debug("AWS Pricing API initialized successfully")
-        except Exception as e:
+        except (ClientError, NoCredentialsError) as e:
             logger.debug("Failed to initialize AWS Pricing API: %s", e)
             self.pricing_client = None
 
@@ -174,7 +176,7 @@ class PricingService:
                 self.cache.set(cache_key, rate)
 
             return rate
-        except Exception as e:
+        except (ClientError, json.JSONDecodeError, TypeError, ValueError, KeyError) as e:
             logger.error("Failed to fetch EC2 pricing: %s", e)
             return None
 
@@ -272,7 +274,7 @@ class PricingService:
                 self.cache.set(cache_key, rate)
 
             return rate
-        except Exception as e:
+        except (ClientError, json.JSONDecodeError, TypeError, ValueError, KeyError) as e:
             logger.error("Failed to fetch EBS pricing: %s", e)
             return None
 

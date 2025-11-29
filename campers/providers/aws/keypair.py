@@ -2,6 +2,7 @@
 
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,22 @@ from campers.providers.aws.errors import handle_aws_errors
 from campers.providers.exceptions import ProviderAPIError
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class KeyPairInfo:
+    """SSH key pair information.
+
+    Attributes
+    ----------
+    name : str
+        Key pair name
+    file_path : Path
+        Path to private key file
+    """
+
+    name: str
+    file_path: Path
 
 
 class KeyPairManager:
@@ -27,7 +44,7 @@ class KeyPairManager:
         self.ec2_client = ec2_client
         self.region = region
 
-    def create_key_pair(self, unique_id: str) -> tuple[str, Path]:
+    def create_key_pair(self, unique_id: str) -> KeyPairInfo:
         """Create SSH key pair and save to disk.
 
         Parameters
@@ -37,8 +54,8 @@ class KeyPairManager:
 
         Returns
         -------
-        tuple[str, Path]
-            Tuple of (key_name, key_file_path)
+        KeyPairInfo
+            Key pair information with name and file path
         """
         key_name = f"campers-{unique_id}"
 
@@ -59,4 +76,4 @@ class KeyPairManager:
         key_file.write_text(response["KeyMaterial"])
         key_file.chmod(0o600)
 
-        return key_name, key_file
+        return KeyPairInfo(name=key_name, file_path=key_file)

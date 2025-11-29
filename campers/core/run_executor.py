@@ -350,17 +350,17 @@ class RunExecutor:
         """
         logging.info("Waiting for SSH to be ready...")
 
-        ssh_host, ssh_port, ssh_key_file = get_ssh_connection_info(
+        ssh_info = get_ssh_connection_info(
             instance_details["instance_id"],
             instance_details["public_ip"],
             instance_details["key_file"],
         )
 
         ssh_manager = self.ssh_manager_factory(
-            host=ssh_host,
-            key_file=ssh_key_file,
+            host=ssh_info.host,
+            key_file=ssh_info.key_file,
             username=merged_config.get("ssh_username", "ubuntu"),
-            port=ssh_port,
+            port=ssh_info.port,
         )
 
         try:
@@ -381,7 +381,7 @@ class RunExecutor:
         with self.resources_lock:
             self.resources["ssh_manager"] = ssh_manager
 
-        return ssh_manager, ssh_host, ssh_port
+        return ssh_manager, ssh_info.host, ssh_info.port
 
     def _phase_file_sync(
         self,
@@ -599,7 +599,7 @@ class RunExecutor:
                 self.resources["portforward_mgr"] = portforward_mgr
 
             try:
-                pf_host, pf_port, pf_key_file = get_ssh_connection_info(
+                pf_info = get_ssh_connection_info(
                     instance_details["instance_id"],
                     instance_details["public_ip"],
                     instance_details["key_file"],
@@ -607,10 +607,10 @@ class RunExecutor:
 
                 portforward_mgr.create_tunnels(
                     ports=merged_config["ports"],
-                    host=pf_host,
-                    key_file=pf_key_file,
+                    host=pf_info.host,
+                    key_file=pf_info.key_file,
                     username=merged_config.get("ssh_username", "ubuntu"),
-                    ssh_port=pf_port,
+                    ssh_port=pf_info.port,
                 )
             except RuntimeError as e:
                 logging.error("Port forwarding failed: %s", e)

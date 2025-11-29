@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from campers.core.config import ConfigLoader
+from campers.core.utils import get_volume_size_or_default
 from campers.providers.aws.pricing import (
     PricingService,
     calculate_monthly_cost,
@@ -278,10 +279,7 @@ class LifecycleManager:
             )
 
             regional_manager = self.compute_provider_factory(region=target["region"])
-            volume_size = regional_manager.get_volume_size(instance_id)
-
-            if volume_size is None:
-                volume_size = 0
+            volume_size = get_volume_size_or_default(regional_manager, instance_id)
 
             pricing_service = PricingService()
 
@@ -413,10 +411,7 @@ class LifecycleManager:
             )
 
             regional_manager = self.compute_provider_factory(region=target["region"])
-            volume_size = regional_manager.get_volume_size(instance_id)
-
-            if volume_size is None:
-                volume_size = 0
+            volume_size = get_volume_size_or_default(regional_manager, instance_id)
 
             pricing_service = PricingService()
 

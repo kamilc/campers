@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from campers.providers.aws.pricing import (
     PricingCache,
@@ -136,7 +137,10 @@ class TestPricingService:
     @patch("boto3.client")
     def test_initialization_failure(self, mock_boto_client: Mock) -> None:
         """Test pricing service handles initialization failure gracefully."""
-        mock_boto_client.side_effect = Exception("API not available")
+        mock_boto_client.side_effect = ClientError(
+            {"Error": {"Code": "ServiceUnavailable", "Message": "Service unavailable"}},
+            "GetPricingData",
+        )
 
         service = PricingService()
 
@@ -146,7 +150,10 @@ class TestPricingService:
     @patch("boto3.client")
     def test_get_ec2_hourly_rate_when_unavailable(self, mock_boto_client: Mock) -> None:
         """Test EC2 pricing returns None when API unavailable."""
-        mock_boto_client.side_effect = Exception("API not available")
+        mock_boto_client.side_effect = ClientError(
+            {"Error": {"Code": "ServiceUnavailable", "Message": "Service unavailable"}},
+            "GetPricingData",
+        )
 
         service = PricingService()
         rate = service.get_ec2_hourly_rate("t3.medium", "us-east-1")
@@ -256,7 +263,10 @@ class TestPricingService:
     @patch("boto3.client")
     def test_get_ebs_storage_rate_when_unavailable(self, mock_boto_client: Mock) -> None:
         """Test EBS pricing returns None when API unavailable."""
-        mock_boto_client.side_effect = Exception("API not available")
+        mock_boto_client.side_effect = ClientError(
+            {"Error": {"Code": "ServiceUnavailable", "Message": "Service unavailable"}},
+            "GetPricingData",
+        )
 
         service = PricingService()
         rate = service.get_ebs_storage_rate("us-east-1")

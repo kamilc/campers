@@ -23,7 +23,7 @@ from campers.constants import (
 )
 from campers.providers.aws.ami import AMIResolver
 from campers.providers.aws.errors import handle_aws_errors
-from campers.providers.aws.keypair import KeyPairManager
+from campers.providers.aws.keypair import KeyPairInfo, KeyPairManager
 from campers.providers.aws.network import NetworkManager
 from campers.providers.aws.utils import extract_instance_from_response
 from campers.providers.exceptions import (
@@ -218,7 +218,7 @@ class EC2Manager:
             architecture=architecture,
         )
 
-    def create_key_pair(self, unique_id: str) -> tuple[str, Path]:
+    def create_key_pair(self, unique_id: str) -> KeyPairInfo:
         """Create SSH key pair and save to disk.
 
         Parameters
@@ -228,8 +228,8 @@ class EC2Manager:
 
         Returns
         -------
-        tuple[str, Path]
-            Tuple of (key_name, key_file_path)
+        KeyPairInfo
+            Key pair information with name and file path
         """
         return self.keypair_manager.create_key_pair(unique_id)
 
@@ -361,7 +361,9 @@ class EC2Manager:
         unique_id = str(uuid.uuid4())[:8]
         instance_tag_name = instance_name if instance_name else f"campers-{unique_id}"
 
-        key_name, key_file = self.create_key_pair(unique_id)
+        key_pair_info = self.create_key_pair(unique_id)
+        key_name = key_pair_info.name
+        key_file = key_pair_info.file_path
 
         ssh_allowed_cidr = config.get("ssh_allowed_cidr")
         sg_id = self.create_security_group(unique_id, ssh_allowed_cidr)

@@ -6,6 +6,7 @@ import re
 import select
 import sys
 import time
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -17,17 +18,34 @@ except ImportError:
     tty = None
 
 
-def detect_terminal_background() -> tuple[str, bool]:
+@dataclass
+class TerminalBackground:
+    """Terminal background color information.
+
+    Attributes
+    ----------
+    color_hex : str
+        Background color in hex format (e.g., "#1e1e1e")
+    is_light : bool
+        Whether the background is light (True) or dark (False)
+    """
+
+    color_hex: str
+    is_light: bool
+
+
+def detect_terminal_background() -> TerminalBackground:
     """Detect terminal background color using OSC 11 query.
 
     Returns
     -------
-    tuple[str, bool]
-        (background_color_hex, is_light)
-        Example: ("#1e1e1e", False) for dark or ("#ffffff", True) for light
+    TerminalBackground
+        Terminal background color and lightness information
+        Example: TerminalBackground("#1e1e1e", False) for dark or
+                 TerminalBackground("#ffffff", True) for light
     """
     if platform.system() == "Windows" or termios is None or tty is None:
-        return ("#000000", False)
+        return TerminalBackground(color_hex="#000000", is_light=False)
 
     try:
         sys.stdout.write("\033]11;?\033\\")
@@ -62,11 +80,11 @@ def detect_terminal_background() -> tuple[str, bool]:
                 b_hex = int(b * 255)
                 bg_color = f"#{r_hex:02x}{g_hex:02x}{b_hex:02x}"
 
-                return (bg_color, is_light)
+                return TerminalBackground(color_hex=bg_color, is_light=is_light)
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
     except Exception as e:
         logger.debug("Terminal background detection failed: %s", e)
 
-    return ("#000000", False)
+    return TerminalBackground(color_hex="#000000", is_light=False)

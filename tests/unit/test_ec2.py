@@ -111,7 +111,9 @@ def test_create_key_pair(ec2_manager, cleanup_keys):
     """Test SSH key pair creation."""
     unique_id = str(int(time.time()))
 
-    key_name, key_file = ec2_manager.create_key_pair(unique_id)
+    key_pair_info = ec2_manager.create_key_pair(unique_id)
+    key_name = key_pair_info.name
+    key_file = key_pair_info.file_path
     cleanup_keys.append(key_file)
 
     campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
@@ -133,7 +135,9 @@ def test_create_key_pair_deletes_existing(ec2_manager, cleanup_keys):
 
     ec2_manager.ec2_client.create_key_pair(KeyName=f"campers-{unique_id}")
 
-    key_name, key_file = ec2_manager.create_key_pair(unique_id)
+    key_pair_info = ec2_manager.create_key_pair(unique_id)
+    key_name = key_pair_info.name
+    key_file = key_pair_info.file_path
     cleanup_keys.append(key_file)
 
     assert key_name == f"campers-{unique_id}"

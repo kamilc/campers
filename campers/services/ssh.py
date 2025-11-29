@@ -5,6 +5,7 @@ import os
 import re
 import shlex
 import time
+from dataclasses import dataclass
 
 import paramiko
 from paramiko.channel import Channel, ChannelFile
@@ -15,9 +16,26 @@ from campers.providers.aws.ssh import get_aws_ssh_connection_info
 logger = logging.getLogger(__name__)
 
 
-def get_ssh_connection_info(
-    instance_id: str, public_ip: str, key_file: str
-) -> tuple[str, int, str]:
+@dataclass
+class SSHConnectionInfo:
+    """SSH connection information.
+
+    Attributes
+    ----------
+    host : str
+        Remote host IP address or hostname
+    port : int
+        SSH port number
+    key_file : str
+        SSH private key file path
+    """
+
+    host: str
+    port: int
+    key_file: str
+
+
+def get_ssh_connection_info(instance_id: str, public_ip: str, key_file: str) -> SSHConnectionInfo:
     """Determine SSH connection host, port, and key file.
 
     Delegates to provider-specific SSH resolution. Currently only AWS is
@@ -34,8 +52,8 @@ def get_ssh_connection_info(
 
     Returns
     -------
-    tuple[str, int, str]
-        (host, port, key_file) tuple for SSH connection
+    SSHConnectionInfo
+        SSH connection information with host, port, and key file
 
     Raises
     ------
@@ -465,7 +483,7 @@ class SSHManager:
 
         try:
             self._active_channel.close()
-        except Exception as exc:  # pragma: no cover
+        except (OSError, paramiko.SSHException) as exc:  # pragma: no cover
             logging.debug("Failed to close active SSH channel: %s", exc)
         finally:
             self._active_channel = None

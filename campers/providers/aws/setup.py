@@ -4,12 +4,29 @@ from __future__ import annotations
 
 import logging
 import sys
+from dataclasses import dataclass
 from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from campers.core.config import ConfigLoader
+
+
+@dataclass
+class InfrastructureCheckResult:
+    """Result of infrastructure checks.
+
+    Attributes
+    ----------
+    vpc_exists : bool
+        Whether default VPC exists in the region
+    missing_permissions : list[str]
+        List of missing IAM permissions, empty if all required permissions exist
+    """
+
+    vpc_exists: bool
+    missing_permissions: list[str]
 
 
 class SetupManager:
@@ -234,7 +251,7 @@ class SetupManager:
 
     def check_infrastructure(
         self, ec2_client: Any, effective_region: str
-    ) -> tuple[bool, list[str]]:
+    ) -> InfrastructureCheckResult:
         """Check AWS infrastructure status.
 
         Parameters
@@ -246,13 +263,13 @@ class SetupManager:
 
         Returns
         -------
-        tuple[bool, list[str]]
-            Tuple of (vpc_exists, missing_permissions)
+        InfrastructureCheckResult
+            Infrastructure check result with VPC status and missing permissions
         """
         vpc_exists = self.check_vpc_status(ec2_client, effective_region)
         missing_perms = self.check_iam_permissions(ec2_client)
 
-        return vpc_exists, missing_perms
+        return InfrastructureCheckResult(vpc_exists, missing_perms)
 
     def setup(self, region: str | None = None) -> None:
         """Validate and prepare AWS infrastructure prerequisites.
@@ -276,9 +293,9 @@ class SetupManager:
 
         ec2_client = boto3.client("ec2", region_name=effective_region)
 
-        vpc_exists, missing_perms = self.check_infrastructure(ec2_client, effective_region)
+        check_result = self.check_infrastructure(ec2_client, effective_region)
 
-        if not vpc_exists:
+        if not check_result.vpc_exists:
             print(f"No default VPC found in {effective_region}\n")
 
             response = input("Create default VPC now? (y/n): ")
@@ -300,8 +317,8 @@ class SetupManager:
         else:
             print(f"Default VPC exists in {effective_region}")
 
-        if missing_perms:
-            print(f"Missing IAM permissions: {', '.join(missing_perms)}")
+        if check_result.missing_permissions:
+            print(f"Missing IAM permissions: {', '.join(check_result.missing_permissions)}")
             print("\nSome operations may fail without these permissions.")
         else:
             print("IAM permissions verified")
@@ -330,9 +347,9 @@ class SetupManager:
 
         ec2_client = boto3.client("ec2", region_name=effective_region)
 
-        vpc_exists, missing_perms = self.check_infrastructure(ec2_client, effective_region)
+        check_result = self.check_infrastructure(ec2_client, effective_region)
 
-        if not vpc_exists:
+        if not check_result.vpc_exists:
             print(f"No default VPC in {effective_region}\n")
             print("Fix it:")
             print("  campers setup")
@@ -341,17 +358,16 @@ class SetupManager:
         else:
             print(f"Default VPC exists in {effective_region}")
 
-        if missing_perms:
-            print(f"Missing IAM permissions: {', '.join(missing_perms)}")
+        if check_result.missing_permissions:
+            print(f"Missing IAM permissions: {', '.join(check_result.missing_permissions)}")
             print("\nRequired permissions:")
-            for perm in missing_perms:
+            for perm in check_result.missing_permissions:
                 print(f"  - {perm}")
         else:
             print("IAM permissions verified")
 
-        if ec2_client is not None:
-            print()
-            self.check_service_quotas(ec2_client, effective_region)
-            self.check_regional_availability(ec2_client, effective_region)
+        print()
+        self.check_service_quotas(ec2_client, effective_region)
+        self.check_regional_availability(ec2_client, effective_region)
 
         print("\nDiagnostics complete.")

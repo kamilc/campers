@@ -85,7 +85,9 @@ class CampersTUI(App):
             Whether to start the worker thread on mount (default: True)
             Set to False for tests that verify initial placeholder state
         """
-        self.terminal_bg, self.is_light_theme = detect_terminal_background()
+        terminal_bg_info = detect_terminal_background()
+        self.terminal_bg = terminal_bg_info.color_hex
+        self.is_light_theme = terminal_bg_info.is_light
         super().__init__()
         self.campers = campers_instance
         self.run_kwargs = run_kwargs
