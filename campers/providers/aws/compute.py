@@ -2,16 +2,13 @@
 
 import logging
 import os
-import re
 import time
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import boto3
 from botocore.exceptions import (
     ClientError,
-    EndpointConnectionError,
     NoCredentialsError,
     WaiterError,
 )
@@ -29,45 +26,14 @@ from campers.providers.exceptions import (
     ProviderCredentialsError,
 )
 from campers.providers.aws.utils import extract_instance_from_response
+from campers.providers.aws.errors import handle_aws_errors
+from campers.providers.aws.ami import AMIResolver
+from campers.providers.aws.keypair import KeyPairManager
+from campers.providers.aws.network import NetworkManager
 
 logger = logging.getLogger(__name__)
 
 ACTIVE_INSTANCE_STATES = ["pending", "running", "stopping", "stopped"]
-
-
-@contextmanager
-def handle_aws_errors():
-    """Context manager to translate AWS exceptions to ProviderError hierarchy.
-
-    Yields
-    ------
-    None
-
-    Raises
-    ------
-    ProviderCredentialsError
-        When AWS credentials are not configured or invalid
-    ProviderAPIError
-        When AWS API call fails
-    ProviderConnectionError
-        When unable to connect to AWS API
-    """
-    try:
-        yield
-    except NoCredentialsError as e:
-        raise ProviderCredentialsError(
-            "Cloud provider credentials not configured"
-        ) from e
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        message = e.response.get("Error", {}).get("Message", str(e))
-        raise ProviderAPIError(
-            message=message, error_code=error_code, original_exception=e
-        ) from e
-    except EndpointConnectionError as e:
-        raise ProviderConnectionError(
-            f"Unable to connect to cloud provider API: {e}"
-        ) from e
 
 
 VALID_INSTANCE_TYPES = frozenset(
@@ -152,6 +118,10 @@ class EC2Manager:
         self.ec2_client = self.boto3_client_factory("ec2", region_name=region)
         self.ec2_resource = self.boto3_resource_factory("ec2", region_name=region)
 
+        self.ami_resolver = AMIResolver(self.ec2_client, region)
+        self.keypair_manager = KeyPairManager(self.ec2_client, region)
+        self.network_manager = NetworkManager(self.ec2_client, region)
+
     def validate_region(self, region: str) -> None:
         """Validate that a region string is a valid AWS region.
 
@@ -213,37 +183,7 @@ class EC2Manager:
             invalid, if query.name is missing, if architecture is invalid,
             or if query matches no AMIs
         """
-        ami_config = config.get("ami", {})
-
-        if "image_id" in ami_config and "query" in ami_config:
-            raise ValueError(
-                "Cannot specify both 'ami.image_id' and 'ami.query'. "
-                "Use image_id for a specific AMI or query to search for the latest."
-            )
-
-        if "image_id" in ami_config:
-            ami_id = ami_config["image_id"]
-            if not re.match(r"^ami-[0-9a-f]{8,17}$", ami_id):
-                raise ValueError(f"Invalid AMI ID format: '{ami_id}'")
-            return ami_id
-
-        if "query" in ami_config:
-            query = ami_config["query"]
-
-            if "name" not in query:
-                raise ValueError("ami.query.name is required")
-
-            return self.find_ami_by_query(
-                name_pattern=query["name"],
-                owner=query.get("owner"),
-                architecture=query.get("architecture"),
-            )
-
-        return self.find_ami_by_query(
-            name_pattern="*Ubuntu 24*",
-            owner="amazon",
-            architecture="x86_64",
-        )
+        return self.ami_resolver.resolve_ami(config)
 
     def find_ami_by_query(
         self,
@@ -272,38 +212,11 @@ class EC2Manager:
         ValueError
             If architecture is invalid or no AMIs match the filters
         """
-        filters = [
-            {"Name": "name", "Values": [name_pattern]},
-            {"Name": "state", "Values": ["available"]},
-        ]
-
-        if architecture:
-            if architecture not in ("x86_64", "arm64"):
-                raise ValueError(
-                    f"Invalid architecture: '{architecture}'. Must be 'x86_64' or 'arm64'"
-                )
-            filters.append({"Name": "architecture", "Values": [architecture]})
-
-        kwargs: dict[str, Any] = {"Filters": filters}
-        if owner:
-            kwargs["Owners"] = [owner]
-
-        response = self.ec2_client.describe_images(**kwargs)
-
-        if not response["Images"]:
-            owner_msg = f"owner={owner}, " if owner else ""
-            arch_msg = f"architecture={architecture}, " if architecture else ""
-            raise ValueError(
-                f"No AMI found for {owner_msg}{arch_msg}name={name_pattern}"
-            )
-
-        images = sorted(
-            response["Images"],
-            key=lambda x: x["CreationDate"],
-            reverse=True,
+        return self.ami_resolver.find_ami_by_query(
+            name_pattern=name_pattern,
+            owner=owner,
+            architecture=architecture,
         )
-
-        return images[0]["ImageId"]
 
     def create_key_pair(self, unique_id: str) -> tuple[str, Path]:
         """Create SSH key pair and save to disk.
@@ -318,24 +231,7 @@ class EC2Manager:
         tuple[str, Path]
             Tuple of (key_name, key_file_path)
         """
-        key_name = f"campers-{unique_id}"
-
-        try:
-            self.ec2_client.delete_key_pair(KeyName=key_name)
-        except ClientError as e:
-            logger.debug("Failed to delete key pair %s: %s", key_name, e)
-
-        response = self.ec2_client.create_key_pair(KeyName=key_name)
-
-        campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
-        keys_dir = Path(campers_dir) / "keys"
-        keys_dir.mkdir(parents=True, exist_ok=True)
-
-        key_file = keys_dir / f"{unique_id}.pem"
-        key_file.write_text(response["KeyMaterial"])
-        key_file.chmod(0o600)
-
-        return key_name, key_file
+        return self.keypair_manager.create_key_pair(unique_id)
 
     def create_security_group(
         self, unique_id: str, ssh_allowed_cidr: str | None = None
@@ -354,59 +250,7 @@ class EC2Manager:
         str
             Security group ID
         """
-        sg_name = f"campers-{unique_id}"
-
-        vpcs = self.ec2_client.describe_vpcs(
-            Filters=[{"Name": "isDefault", "Values": ["true"]}]
-        )
-
-        if not vpcs["Vpcs"]:
-            raise ValueError(f"No default VPC found in region '{self.region}'")
-
-        vpc_id = vpcs["Vpcs"][0]["VpcId"]
-
-        try:
-            existing_sgs = self.ec2_client.describe_security_groups(
-                Filters=[
-                    {"Name": "group-name", "Values": [sg_name]},
-                    {"Name": "vpc-id", "Values": [vpc_id]},
-                ]
-            )
-
-            if existing_sgs["SecurityGroups"]:
-                self.ec2_client.delete_security_group(
-                    GroupId=existing_sgs["SecurityGroups"][0]["GroupId"]
-                )
-        except ClientError as e:
-            logger.debug("Failed to delete existing security group: %s", e)
-
-        response = self.ec2_client.create_security_group(
-            GroupName=sg_name,
-            Description=f"Campers security group {unique_id}",
-            VpcId=vpc_id,
-        )
-
-        sg_id = response["GroupId"]
-
-        self.ec2_client.create_tags(
-            Resources=[sg_id], Tags=[{"Key": "ManagedBy", "Value": "campers"}]
-        )
-
-        cidr_block = ssh_allowed_cidr if ssh_allowed_cidr else "0.0.0.0/0"
-
-        self.ec2_client.authorize_security_group_ingress(
-            GroupId=sg_id,
-            IpPermissions=[
-                {
-                    "IpProtocol": "tcp",
-                    "FromPort": 22,
-                    "ToPort": 22,
-                    "IpRanges": [{"CidrIp": cidr_block}],
-                }
-            ],
-        )
-
-        return sg_id
+        return self.network_manager.create_security_group(unique_id, ssh_allowed_cidr)
 
     def _check_region_mismatch(self, camp_name: str, target_region: str) -> None:
         """Check if an existing instance with same camp name exists in another region.
