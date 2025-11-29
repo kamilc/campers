@@ -71,9 +71,7 @@ class SignalRegistry:
             while signal_name not in self._signals or not self._signals[signal_name]:
                 remaining = deadline - time.time()
                 if remaining <= 0:
-                    raise HarnessTimeoutError(
-                        f"Timeout waiting for signal: {signal_name}"
-                    )
+                    raise HarnessTimeoutError(f"Timeout waiting for signal: {signal_name}")
 
                 self._condition.wait(timeout=remaining)
 

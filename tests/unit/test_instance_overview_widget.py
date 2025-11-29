@@ -172,9 +172,7 @@ def test_refresh_stats_sets_none_cost_when_pricing_unavailable(
     assert initialized_widget.running_count == 1
 
 
-def test_refresh_stats_handles_ec2_api_errors_gracefully(
-    initialized_widget, mock_ec2_manager
-):
+def test_refresh_stats_handles_ec2_api_errors_gracefully(initialized_widget, mock_ec2_manager):
     """Test _refresh_stats_sync maintains last known state when EC2 API fails."""
     mock_ec2_manager.list_instances.side_effect = Exception("EC2 API error")
 
@@ -224,9 +222,7 @@ def test_widget_queries_all_regions(initialized_widget, mock_ec2_manager):
     mock_ec2_manager.list_instances.assert_called_once_with(region_filter=None)
 
 
-def test_refresh_stats_shows_na_when_all_prices_none(
-    initialized_widget, mock_ec2_manager
-):
+def test_refresh_stats_shows_na_when_all_prices_none(initialized_widget, mock_ec2_manager):
     """Test widget shows N/A when all running instances return None for pricing."""
     mock_ec2_manager.list_instances.return_value = [
         {
@@ -246,10 +242,7 @@ def test_refresh_stats_shows_na_when_all_prices_none(
         initialized_widget._refresh_stats_sync()
 
         assert initialized_widget.daily_cost is None
-        assert (
-            initialized_widget.render_stats()
-            == "Instances - Running: 1  Stopped: 0  N/A"
-        )
+        assert initialized_widget.render_stats() == "Instances - Running: 1  Stopped: 0  N/A"
 
 
 def test_refresh_stats_skips_when_not_initialized(mock_campers, mock_ec2_manager):

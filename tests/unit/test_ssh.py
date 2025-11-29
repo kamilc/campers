@@ -22,9 +22,7 @@ def ssh_manager() -> SSHManager:
 
 def test_ssh_manager_initialization() -> None:
     """Test SSHManager initialization with correct parameters."""
-    manager = SSHManager(
-        host="203.0.113.1", key_file="/tmp/test.pem", username="ubuntu"
-    )
+    manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem", username="ubuntu")
 
     assert manager.host == "203.0.113.1"
     assert manager.key_file == "/tmp/test.pem"
@@ -137,9 +135,7 @@ def test_connect_handles_various_exceptions(
     mock_rsa_key.return_value = mock_key
 
     exceptions = [
-        paramiko.ssh_exception.NoValidConnectionsError(
-            {("203.0.113.1", 22): "Connection refused"}
-        ),
+        paramiko.ssh_exception.NoValidConnectionsError({("203.0.113.1", 22): "Connection refused"}),
         paramiko.ssh_exception.SSHException("SSH error"),
         TimeoutError("Timeout"),
         ConnectionResetError("Connection reset"),
@@ -222,9 +218,7 @@ def test_execute_command_success(
     exit_code = ssh_manager.execute_command("echo test")
 
     assert exit_code == 0
-    mock_client.exec_command.assert_called_once_with(
-        "cd ~ && bash -c 'echo test'", get_pty=True
-    )
+    mock_client.exec_command.assert_called_once_with("cd ~ && bash -c 'echo test'", get_pty=True)
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
@@ -695,6 +689,4 @@ def test_execute_command_with_env_no_vars(
     exit_code = ssh_manager.execute_command_with_env("echo test", None)
 
     assert exit_code == 0
-    mock_client.exec_command.assert_called_once_with(
-        "cd ~ && bash -c 'echo test'", get_pty=True
-    )
+    mock_client.exec_command.assert_called_once_with("cd ~ && bash -c 'echo test'", get_pty=True)

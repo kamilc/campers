@@ -1,7 +1,7 @@
 """Unit tests for PilotExtension."""
 
 import time
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock, Mock
 
 from tests.harness.localstack.pilot_extension import (
     PilotExtension,
@@ -89,9 +89,7 @@ class TestPilotExtensionEventPublishing:
             {"status": "running", "camp_name": "test-machine"},
         )
 
-        event = event_bus.wait_for(
-            "tui-status-changed", instance_id=None, timeout_sec=1.0
-        )
+        event = event_bus.wait_for("tui-status-changed", instance_id=None, timeout_sec=1.0)
         assert event.type == "tui-status-changed"
         assert event.instance_id is None
         assert event.data["status"] == "running"

@@ -3,6 +3,7 @@
 import logging
 import os
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -14,22 +15,22 @@ from botocore.exceptions import (
 )
 
 from campers.constants import (
+    SSH_IP_RETRY_DELAY,
+    SSH_IP_RETRY_MAX,
     WAITER_DELAY_SECONDS,
     WAITER_MAX_ATTEMPTS_LONG,
     WAITER_MAX_ATTEMPTS_SHORT,
-    SSH_IP_RETRY_DELAY,
-    SSH_IP_RETRY_MAX,
 )
+from campers.providers.aws.ami import AMIResolver
+from campers.providers.aws.errors import handle_aws_errors
+from campers.providers.aws.keypair import KeyPairManager
+from campers.providers.aws.network import NetworkManager
+from campers.providers.aws.utils import extract_instance_from_response
 from campers.providers.exceptions import (
     ProviderAPIError,
     ProviderConnectionError,
     ProviderCredentialsError,
 )
-from campers.providers.aws.utils import extract_instance_from_response
-from campers.providers.aws.errors import handle_aws_errors
-from campers.providers.aws.ami import AMIResolver
-from campers.providers.aws.keypair import KeyPairManager
-from campers.providers.aws.network import NetworkManager
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +143,7 @@ class EC2Manager:
 
             if region not in valid_regions:
                 raise ValueError(
-                    f"Invalid region: '{region}'. "
-                    f"Valid regions: {', '.join(sorted(valid_regions))}"
+                    f"Invalid region: '{region}'. Valid regions: {', '.join(sorted(valid_regions))}"
                 )
         except NoCredentialsError as e:
             logger.warning(
@@ -233,9 +233,7 @@ class EC2Manager:
         """
         return self.keypair_manager.create_key_pair(unique_id)
 
-    def create_security_group(
-        self, unique_id: str, ssh_allowed_cidr: str | None = None
-    ) -> str:
+    def create_security_group(self, unique_id: str, ssh_allowed_cidr: str | None = None) -> str:
         """Create security group with SSH access.
 
         Parameters
@@ -273,10 +271,7 @@ class EC2Manager:
         existing_instances = self.find_instances_by_name_or_id(camp_name)
 
         for instance in existing_instances:
-            if (
-                instance["region"] != target_region
-                and instance["camp_config"] == camp_name
-            ):
+            if instance["region"] != target_region and instance["camp_config"] == camp_name:
                 raise RuntimeError(
                     f"An instance for camp '{camp_name}' already exists in region "
                     f"'{instance['region']}', but you are trying to launch in region "
@@ -363,7 +358,7 @@ class EC2Manager:
             ami_id, unique_id, instance_tag_name, instance_type
         """
         ami_id = self.resolve_ami(config)
-        unique_id = str(int(time.time()))
+        unique_id = str(uuid.uuid4())[:8]
         instance_tag_name = instance_name if instance_name else f"campers-{unique_id}"
 
         key_name, key_file = self.create_key_pair(unique_id)
@@ -488,18 +483,14 @@ class EC2Manager:
             try:
                 self.ec2_client.delete_key_pair(KeyName=key_name)
             except ClientError as cleanup_error:
-                logger.warning(
-                    "Failed to delete key pair during rollback: %s", cleanup_error
-                )
+                logger.warning("Failed to delete key pair during rollback: %s", cleanup_error)
 
         key_file = resources.get("key_file")
         if key_file and key_file.exists():
             try:
                 key_file.unlink()
             except OSError as cleanup_error:
-                logger.warning(
-                    "Failed to delete key file during rollback: %s", cleanup_error
-                )
+                logger.warning("Failed to delete key file during rollback: %s", cleanup_error)
 
     def list_instances(self, region_filter: str | None = None) -> list[dict[str, Any]]:
         """List all campers-managed instances across regions.
@@ -529,9 +520,7 @@ class EC2Manager:
         else:
             try:
                 with handle_aws_errors():
-                    ec2_client = self.boto3_client_factory(
-                        "ec2", region_name=self.region
-                    )
+                    ec2_client = self.boto3_client_factory("ec2", region_name=self.region)
                     regions_response = ec2_client.describe_regions()
                     regions = [r["RegionName"] for r in regions_response["Regions"]]
             except ProviderCredentialsError:
@@ -566,8 +555,7 @@ class EC2Manager:
                         for reservation in page["Reservations"]:
                             for instance in reservation["Instances"]:
                                 tags = {
-                                    tag["Key"]: tag["Value"]
-                                    for tag in instance.get("Tags", [])
+                                    tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])
                                 }
 
                                 instances.append(
@@ -578,9 +566,7 @@ class EC2Manager:
                                         "region": region,
                                         "instance_type": instance["InstanceType"],
                                         "launch_time": instance["LaunchTime"],
-                                        "camp_config": tags.get(
-                                            "MachineConfig", "ad-hoc"
-                                        ),
+                                        "camp_config": tags.get("MachineConfig", "ad-hoc"),
                                     }
                                 )
             except ProviderCredentialsError:
@@ -814,9 +800,7 @@ class EC2Manager:
             logger.info(f"Instance {instance_id} has root volume size {size}GB")
             return size
         except ClientError as e:
-            raise RuntimeError(
-                f"Failed to get volume size for {instance_id}: {e}"
-            ) from e
+            raise RuntimeError(f"Failed to get volume size for {instance_id}: {e}") from e
 
     def get_instance_tags(self, instance_id: str) -> dict[str, str]:
         """Get tags for an instance.
@@ -862,9 +846,7 @@ class EC2Manager:
                 unique_id = tag["Value"]
                 break
 
-        sg_id = (
-            instance.security_groups[0]["GroupId"] if instance.security_groups else None
-        )
+        sg_id = instance.security_groups[0]["GroupId"] if instance.security_groups else None
 
         instance.terminate()
 

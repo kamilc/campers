@@ -1,7 +1,8 @@
 """BDD step definitions for instance list command."""
 
+import contextlib
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from io import StringIO
 from typing import Any
 
@@ -43,9 +44,7 @@ def create_test_instance(
 
     subnet_id = None
     if vpc_id:
-        subnets = ec2_client.describe_subnets(
-            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
-        )
+        subnets = ec2_client.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
         if subnets.get("Subnets"):
             subnet_id = subnets["Subnets"][0]["SubnetId"]
 
@@ -74,9 +73,7 @@ def create_test_instance(
 
     ec2_resource = boto3.resource("ec2", region_name=region)
     instance = ec2_resource.Instance(instance_id)
-    instance.modify_attribute(
-        Attribute="instanceInitiatedShutdownBehavior", Value="terminate"
-    )
+    instance.modify_attribute(Attribute="instanceInitiatedShutdownBehavior", Value="terminate")
 
     return instance_id, launch_time
 
@@ -156,12 +153,8 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
     try:
         if context.mock_time_instances is not None and context.mock_time_instances:
             with (
-                patch(
-                    "campers.providers.aws.compute.EC2Manager.list_instances"
-                ) as mock_list,
-                patch(
-                    "campers.providers.aws.compute.EC2Manager.get_volume_size"
-                ) as mock_volume,
+                patch("campers.providers.aws.compute.EC2Manager.list_instances") as mock_list,
+                patch("campers.providers.aws.compute.EC2Manager.get_volume_size") as mock_volume,
             ):
                 mock_list.return_value = context.instances
                 mock_volume.return_value = 0
@@ -182,10 +175,8 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
 
         if context.region_patches is not None and context.region_patches:
             for patch_obj in context.region_patches:
-                try:
+                with contextlib.suppress(RuntimeError):
                     patch_obj.stop()
-                except RuntimeError:
-                    pass
 
 
 @then('output displays "{text}"')
@@ -208,9 +199,7 @@ def step_output_displays_text(context: Context, text: str) -> None:
             f"in output but got: {context.stdout}"
         )
     else:
-        assert text in context.stdout, (
-            f"Expected '{text}' in output but got: {context.stdout}"
-        )
+        assert text in context.stdout, f"Expected '{text}' in output but got: {context.stdout}"
 
 
 @then("output displays {count:d} instance")
@@ -341,9 +330,7 @@ def step_instances_sorted_by_launch_time(context: Context) -> None:
 
 
 @given('instance "{instance_id}" exists with no CampConfig tag')
-def step_instance_exists_without_camp_config(
-    context: Context, instance_id: str
-) -> None:
+def step_instance_exists_without_camp_config(context: Context, instance_id: str) -> None:
     """Create instance without CampConfig tag.
 
     Parameters
@@ -376,9 +363,7 @@ def step_instance_exists_without_camp_config(
 
 
 @given('instance "{instance_id}" exists with no MachineConfig tag')
-def step_instance_exists_without_machine_config(
-    context: Context, instance_id: str
-) -> None:
+def step_instance_exists_without_machine_config(context: Context, instance_id: str) -> None:
     """Create instance without MachineConfig tag.
 
     Parameters
@@ -411,9 +396,7 @@ def step_instance_exists_without_machine_config(
 
 
 @then('instance "{instance_id}" shows NAME as "{expected_name}"')
-def step_instance_shows_name(
-    context: Context, instance_id: str, expected_name: str
-) -> None:
+def step_instance_shows_name(context: Context, instance_id: str, expected_name: str) -> None:
     """Verify instance shows specific name in output.
 
     Parameters
@@ -445,16 +428,12 @@ def step_instance_shows_name(
             instance_line = line
             break
 
-    assert instance_line is not None, (
-        f"Instance {actual_instance_id} not found in output"
-    )
+    assert instance_line is not None, f"Instance {actual_instance_id} not found in output"
 
     parts = instance_line.split()
     actual_name = parts[0]
 
-    assert actual_name == expected_name, (
-        f"Expected name '{expected_name}' but got '{actual_name}'"
-    )
+    assert actual_name == expected_name, f"Expected name '{expected_name}' but got '{actual_name}'"
 
 
 @given("instance launched {hours:d} hours ago")
@@ -468,7 +447,7 @@ def step_instance_launched_hours_ago(context: Context, hours: int) -> None:
     hours : int
         Hours ago the instance was launched
     """
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     if context.instances is None:
         context.instances = []
@@ -478,7 +457,7 @@ def step_instance_launched_hours_ago(context: Context, hours: int) -> None:
 
     region = "us-east-1"
     instance_id = f"i-time{hours}h"
-    launch_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+    launch_time = datetime.now(UTC) - timedelta(hours=hours)
 
     context.instances.append(
         {
@@ -508,7 +487,7 @@ def step_instance_launched_minutes_ago(context: Context, minutes: int) -> None:
     minutes : int
         Minutes ago the instance was launched
     """
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     if context.instances is None:
         context.instances = []
@@ -518,7 +497,7 @@ def step_instance_launched_minutes_ago(context: Context, minutes: int) -> None:
 
     region = "us-east-1"
     instance_id = f"i-time{minutes}m"
-    launch_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    launch_time = datetime.now(UTC) - timedelta(minutes=minutes)
 
     context.instances.append(
         {
@@ -548,7 +527,7 @@ def step_instance_launched_days_ago(context: Context, days: int) -> None:
     days : int
         Days ago the instance was launched
     """
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     if context.instances is None:
         context.instances = []
@@ -558,7 +537,7 @@ def step_instance_launched_days_ago(context: Context, days: int) -> None:
 
     region = "us-east-1"
     instance_id = f"i-time{days}d"
-    launch_time = datetime.now(timezone.utc) - timedelta(days=days)
+    launch_time = datetime.now(UTC) - timedelta(days=days)
 
     context.instances.append(
         {
@@ -630,9 +609,7 @@ def step_second_instance_shows_time(context: Context, time_str: str) -> None:
     assert len(data_lines) >= 2, "Less than 2 instances found in output"
 
     second_line = data_lines[1]
-    assert time_str in second_line, (
-        f"Expected '{time_str}' in second line: {second_line}"
-    )
+    assert time_str in second_line, f"Expected '{time_str}' in second line: {second_line}"
 
 
 @then('third instance shows "{time_str}"')
@@ -802,9 +779,7 @@ def step_instance_in_state(
 
     ec2_client = boto3.client("ec2", region_name=region)
 
-    if state == "stopped":
-        ec2_client.stop_instances(InstanceIds=[actual_instance_id])
-    elif state == "stopping":
+    if state == "stopped" or state == "stopping":
         ec2_client.stop_instances(InstanceIds=[actual_instance_id])
 
     context.instances.append(
@@ -845,9 +820,7 @@ def step_all_instances_displayed(context: Context, count: int) -> None:
         and not line.startswith("-")
     ]
 
-    assert len(data_lines) == count, (
-        f"Expected {count} instances but got {len(data_lines)}"
-    )
+    assert len(data_lines) == count, f"Expected {count} instances but got {len(data_lines)}"
 
 
 @then("STATUS column shows correct state for each instance")

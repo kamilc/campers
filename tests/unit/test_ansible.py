@@ -53,7 +53,7 @@ class TestAnsibleManagerInventoryGeneration:
         assert "ansible_user=ubuntu" in content
         assert "ansible_ssh_private_key_file=/path/to/key.pem" in content
         assert "ansible_port=22" in content
-        assert "StrictHostKeyChecking=no" in content
+        assert "StrictHostKeyChecking=accept-new" in content
 
     def test_generate_inventory_with_custom_port(self) -> None:
         """Test inventory generation with custom SSH port."""

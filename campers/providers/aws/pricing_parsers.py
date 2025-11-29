@@ -5,10 +5,9 @@ AWS Price List API JSON responses for EC2 and EBS services.
 """
 
 import json
-from typing import Optional
 
 
-def parse_aws_pricing_response(price_item_json: str) -> Optional[float]:
+def parse_aws_pricing_response(price_item_json: str) -> float | None:
     """Extract on-demand USD rate from AWS pricing response.
 
     Handles both EC2 and EBS pricing responses using the same structure:
@@ -46,7 +45,7 @@ def parse_aws_pricing_response(price_item_json: str) -> Optional[float]:
         return None
 
 
-def parse_ec2_pricing(price_item_json: str) -> Optional[float]:
+def parse_ec2_pricing(price_item_json: str) -> float | None:
     """Extract hourly on-demand rate from AWS EC2 pricing response.
 
     Parameters
@@ -67,7 +66,7 @@ def parse_ec2_pricing(price_item_json: str) -> Optional[float]:
     return parse_aws_pricing_response(price_item_json)
 
 
-def parse_ebs_pricing(price_item_json: str) -> Optional[float]:
+def parse_ebs_pricing(price_item_json: str) -> float | None:
     """Extract GB-month storage rate from AWS EBS pricing response.
 
     Parameters

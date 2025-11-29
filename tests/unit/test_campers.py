@@ -11,6 +11,7 @@ test_campers_class_exists
 """
 
 import shlex
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -74,7 +75,7 @@ def test_run_executes_setup_script_before_command(campers_module) -> None:
     execution_order = []
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -130,7 +131,7 @@ def test_run_setup_script_failure_prevents_command(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -177,7 +178,7 @@ def test_run_skips_ssh_when_no_setup_script_or_command(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -220,7 +221,7 @@ def test_run_only_setup_script_no_command(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -258,9 +259,7 @@ def test_run_startup_script_without_sync_paths_raises_error(campers_module) -> N
     }
     campers_instance._config_loader.validate_config.return_value = None
 
-    with pytest.raises(
-        ValueError, match="startup_script is defined but no sync_paths configured"
-    ):
+    with pytest.raises(ValueError, match="startup_script is defined but no sync_paths configured"):
         campers_instance.run()
 
 
@@ -289,7 +288,7 @@ def test_run_with_sync_paths_creates_mutagen_session(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
     ):
@@ -345,7 +344,7 @@ def test_run_executes_command_from_synced_directory(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
     ):
@@ -401,7 +400,7 @@ def test_run_executes_startup_script_from_synced_directory(campers_module) -> No
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
     ):
@@ -435,9 +434,7 @@ def test_build_command_in_directory(campers_module) -> None:
     """Test build_command_in_directory creates proper command string."""
     campers_instance = campers_module()
 
-    result = campers_instance._build_command_in_directory(
-        "~/myproject", "python app.py"
-    )
+    result = campers_instance._build_command_in_directory("~/myproject", "python app.py")
 
     assert result == "mkdir -p ~/myproject && cd ~/myproject && bash -c 'python app.py'"
 
@@ -446,9 +443,7 @@ def test_build_command_in_directory_with_special_chars(campers_module) -> None:
     """Test build_command_in_directory handles special characters."""
     campers_instance = campers_module()
 
-    result = campers_instance._build_command_in_directory(
-        "~/my project", "echo 'hello world'"
-    )
+    result = campers_instance._build_command_in_directory("~/my project", "echo 'hello world'")
 
     assert "mkdir -p ~/'my project'" in result
     assert "cd ~/'my project'" in result
@@ -465,10 +460,7 @@ python app.py"""
 
     result = campers_instance._build_command_in_directory("~/app", multiline_script)
 
-    assert (
-        result
-        == f"mkdir -p ~/app && cd ~/app && bash -c {shlex.quote(multiline_script)}"
-    )
+    assert result == f"mkdir -p ~/app && cd ~/app && bash -c {shlex.quote(multiline_script)}"
     assert "source .venv/bin/activate" in result
 
 
@@ -498,7 +490,7 @@ def test_run_startup_script_failure_prevents_command(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
     ):
@@ -519,9 +511,7 @@ def test_run_startup_script_failure_prevents_command(campers_module) -> None:
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
 
-        with pytest.raises(
-            RuntimeError, match="Startup script failed with exit code: 42"
-        ):
+        with pytest.raises(RuntimeError, match="Startup script failed with exit code: 42"):
             campers_instance.run()
 
         assert mock_ssh_instance.execute_command_raw.call_count == 1
@@ -559,7 +549,7 @@ cd src"""
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
     ):
@@ -614,7 +604,7 @@ def test_run_with_port_forwarding_creates_tunnels(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.PortForwardManager") as mock_portforward,
     ):
@@ -675,7 +665,7 @@ def test_run_port_forwarding_cleanup_order(campers_module) -> None:
     cleanup_order = []
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.PortForwardManager") as mock_portforward,
     ):
@@ -695,8 +685,8 @@ def test_run_port_forwarding_cleanup_order(campers_module) -> None:
         campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_portforward_instance = MagicMock()
-        mock_portforward_instance.stop_all_tunnels.side_effect = (
-            lambda: cleanup_order.append("tunnels_stop")
+        mock_portforward_instance.stop_all_tunnels.side_effect = lambda: cleanup_order.append(
+            "tunnels_stop"
         )
         mock_portforward.return_value = mock_portforward_instance
 
@@ -731,7 +721,7 @@ def test_run_port_forwarding_error_triggers_cleanup(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.PortForwardManager") as mock_portforward,
     ):
@@ -787,7 +777,7 @@ def test_run_port_forwarding_with_sync_paths(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
         patch("campers_cli.PortForwardManager") as mock_portforward,
@@ -848,7 +838,7 @@ def test_run_port_forwarding_with_startup_script(campers_module) -> None:
     execution_order = []
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
         patch("campers_cli.PortForwardManager") as mock_portforward,
@@ -949,7 +939,7 @@ def test_run_filters_environment_variables_after_ssh_connection(
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -960,9 +950,7 @@ def test_run_filters_environment_variables_after_ssh_connection(
         mock_get_provider.return_value = {"compute": mock_ec2}
 
         mock_ssh_instance = MagicMock()
-        mock_ssh_instance.filter_environment_variables.return_value = {
-            "AWS_REGION": "us-west-2"
-        }
+        mock_ssh_instance.filter_environment_variables.return_value = {"AWS_REGION": "us-west-2"}
         mock_ssh_instance.build_command_with_env.return_value = (
             "export AWS_REGION='us-west-2' && aws s3 ls"
         )
@@ -972,9 +960,7 @@ def test_run_filters_environment_variables_after_ssh_connection(
         campers_instance.run()
 
         mock_ssh_instance.connect.assert_called_once()
-        mock_ssh_instance.filter_environment_variables.assert_called_once_with(
-            ["AWS_.*"]
-        )
+        mock_ssh_instance.filter_environment_variables.assert_called_once_with(["AWS_.*"])
         mock_ssh_instance.build_command_with_env.assert_called()
 
 
@@ -1003,7 +989,7 @@ def test_run_forwards_env_to_setup_script(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -1014,9 +1000,7 @@ def test_run_forwards_env_to_setup_script(campers_module) -> None:
         mock_get_provider.return_value = {"compute": mock_ec2}
 
         mock_ssh_instance = MagicMock()
-        mock_ssh_instance.filter_environment_variables.return_value = {
-            "AWS_REGION": "us-west-2"
-        }
+        mock_ssh_instance.filter_environment_variables.return_value = {"AWS_REGION": "us-west-2"}
         mock_ssh_instance.build_command_with_env.return_value = (
             "export AWS_REGION='us-west-2' && aws s3 cp s3://bucket/setup.sh ."
         )
@@ -1057,7 +1041,7 @@ def test_run_forwards_env_to_startup_script(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
     ):
@@ -1069,10 +1053,10 @@ def test_run_forwards_env_to_startup_script(campers_module) -> None:
         mock_get_provider.return_value = {"compute": mock_ec2}
 
         mock_ssh_instance = MagicMock()
-        mock_ssh_instance.filter_environment_variables.return_value = {
-            "HF_TOKEN": "hf_test123"
-        }
-        mock_ssh_instance.build_command_with_env.return_value = "export HF_TOKEN='hf_test123' && cd ~/myproject && bash -c 'huggingface-cli login'"
+        mock_ssh_instance.filter_environment_variables.return_value = {"HF_TOKEN": "hf_test123"}
+        mock_ssh_instance.build_command_with_env.return_value = (
+            "export HF_TOKEN='hf_test123' && cd ~/myproject && bash -c 'huggingface-cli login'"
+        )
         mock_ssh_instance.execute_command_raw.return_value = 0
         campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
@@ -1111,7 +1095,7 @@ def test_run_forwards_env_to_main_command(campers_module) -> None:
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -1122,9 +1106,7 @@ def test_run_forwards_env_to_main_command(campers_module) -> None:
         mock_get_provider.return_value = {"compute": mock_ec2}
 
         mock_ssh_instance = MagicMock()
-        mock_ssh_instance.filter_environment_variables.return_value = {
-            "WANDB_API_KEY": "test-key"
-        }
+        mock_ssh_instance.filter_environment_variables.return_value = {"WANDB_API_KEY": "test-key"}
         mock_ssh_instance.build_command_with_env.return_value = (
             "export WANDB_API_KEY='test-key' && python train.py"
         )
@@ -1212,9 +1194,7 @@ def test_cleanup_resources_executes_in_correct_order(campers_module) -> None:
 
     cleanup_order = []
 
-    mock_portforward.stop_all_tunnels.side_effect = lambda: cleanup_order.append(
-        "portforward"
-    )
+    mock_portforward.stop_all_tunnels.side_effect = lambda: cleanup_order.append("portforward")
     mock_mutagen.terminate_session.side_effect = (
         lambda name, ssh_wrapper_dir=None, host=None: cleanup_order.append("mutagen")
     )
@@ -1370,7 +1350,7 @@ def test_run_tracks_resources_incrementally(campers_module) -> None:
         captured_resources.update(campers_instance._resources)
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
         patch("campers_cli.PortForwardManager") as mock_portforward,
@@ -1435,7 +1415,7 @@ def test_finally_block_calls_cleanup_if_not_already_done(campers_module) -> None
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -1460,44 +1440,44 @@ def test_finally_block_calls_cleanup_if_not_already_done(campers_module) -> None
 
 def test_format_time_ago_just_now(campers_module) -> None:
     """Test format_time_ago returns 'just now' for recent times."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from campers.utils import format_time_ago
 
-    dt = datetime.now(timezone.utc)
+    dt = datetime.now(UTC)
     result = format_time_ago(dt)
     assert result == "just now"
 
 
 def test_format_time_ago_minutes(campers_module) -> None:
     """Test format_time_ago returns minutes ago for times under an hour."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from campers.utils import format_time_ago
 
-    dt = datetime.now(timezone.utc) - timedelta(minutes=30)
+    dt = datetime.now(UTC) - timedelta(minutes=30)
     result = format_time_ago(dt)
     assert result == "30m ago"
 
 
 def test_format_time_ago_hours(campers_module) -> None:
     """Test format_time_ago returns hours ago for times under a day."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from campers.utils import format_time_ago
 
-    dt = datetime.now(timezone.utc) - timedelta(hours=2)
+    dt = datetime.now(UTC) - timedelta(hours=2)
     result = format_time_ago(dt)
     assert result == "2h ago"
 
 
 def test_format_time_ago_days(campers_module) -> None:
     """Test format_time_ago returns days ago for times over a day."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from campers.utils import format_time_ago
 
-    dt = datetime.now(timezone.utc) - timedelta(days=5)
+    dt = datetime.now(UTC) - timedelta(days=5)
     result = format_time_ago(dt)
     assert result == "5d ago"
 
@@ -1516,7 +1496,7 @@ def test_format_time_ago_raises_on_naive_datetime(campers_module) -> None:
 
 def test_list_command_all_regions(campers_module, aws_credentials) -> None:
     """Test list command displays instances from all regions."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     from io import StringIO
     from unittest.mock import MagicMock, patch
 
@@ -1530,7 +1510,7 @@ def test_list_command_all_regions(campers_module, aws_credentials) -> None:
             "state": "running",
             "region": "us-east-1",
             "instance_type": "t3.medium",
-            "launch_time": datetime.now(timezone.utc),
+            "launch_time": datetime.now(UTC),
         },
         {
             "instance_id": "i-test2",
@@ -1538,7 +1518,7 @@ def test_list_command_all_regions(campers_module, aws_credentials) -> None:
             "state": "running",
             "region": "us-west-2",
             "instance_type": "t3.large",
-            "launch_time": datetime.now(timezone.utc),
+            "launch_time": datetime.now(UTC),
         },
     ]
 
@@ -1548,7 +1528,7 @@ def test_list_command_all_regions(campers_module, aws_credentials) -> None:
 
     with patch("sys.stdout", captured_output):
         with (
-            patch("campers_cli.EC2Manager", mock_ec2_class),
+            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
             patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
         ):
             campers_instance.list()
@@ -1569,7 +1549,7 @@ def test_list_command_all_regions(campers_module, aws_credentials) -> None:
 
 def test_list_command_filtered_region(campers_module, aws_credentials) -> None:
     """Test list command displays instances from specific region."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     from io import StringIO
     from unittest.mock import MagicMock, patch
 
@@ -1583,7 +1563,7 @@ def test_list_command_filtered_region(campers_module, aws_credentials) -> None:
             "state": "running",
             "region": "us-east-1",
             "instance_type": "t3.medium",
-            "launch_time": datetime.now(timezone.utc),
+            "launch_time": datetime.now(UTC),
         }
     ]
 
@@ -1601,7 +1581,7 @@ def test_list_command_filtered_region(campers_module, aws_credentials) -> None:
 
     with patch("sys.stdout", captured_output):
         with (
-            patch("campers_cli.EC2Manager", mock_ec2_class),
+            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
             patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
             patch("boto3.client", return_value=mock_ec2_client),
         ):
@@ -1631,7 +1611,7 @@ def test_list_command_no_instances(campers_module, aws_credentials) -> None:
     captured_output = StringIO()
 
     with patch("sys.stdout", captured_output):
-        with patch("campers_cli.EC2Manager", return_value=mock_ec2_manager):
+        with patch("campers.providers.aws.compute.EC2Manager", return_value=mock_ec2_manager):
             campers_instance.list()
 
     output = captured_output.getvalue()
@@ -1658,7 +1638,7 @@ def test_list_command_no_credentials(campers_module) -> None:
 
     with patch("sys.stdout", captured_output):
         with (
-            patch("campers_cli.EC2Manager", mock_ec2_class),
+            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
             patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
         ):
             with pytest.raises(ProviderCredentialsError):
@@ -1689,7 +1669,7 @@ def test_list_command_permission_error(campers_module, aws_credentials) -> None:
 
     with patch("sys.stdout", captured_output):
         with (
-            patch("campers_cli.EC2Manager", mock_ec2_class),
+            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
             patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
         ):
             with pytest.raises(ProviderAPIError):
@@ -1876,7 +1856,7 @@ def test_multiple_run_calls_work_correctly(campers_module) -> None:
         campers_instance._config_loader.validate_config.return_value = None
 
         with (
-            patch("campers_cli.EC2Manager") as mock_ec2_class,
+            patch("campers.providers.aws.compute.EC2Manager") as mock_ec2_class,
             patch("campers_cli.get_provider") as mock_get_provider,
             patch("campers_cli.SSHManager") as mock_ssh_class,
         ):
@@ -1958,9 +1938,7 @@ def test_get_or_create_stopped_instance_starts_it(campers_module) -> None:
     campers_instance._resources = {"compute_provider": mock_ec2}
 
     with patch("builtins.print"):
-        result = campers_instance._get_or_create_instance(
-            "test-branch", {"region": "us-east-1"}
-        )
+        result = campers_instance._get_or_create_instance("test-branch", {"region": "us-east-1"})
 
     assert result["reused"] is True
     assert result["instance_id"] == "i-stopped123"
@@ -2054,9 +2032,7 @@ def test_get_or_create_terminated_creates_new(campers_module) -> None:
     campers_instance._resources = {"compute_provider": mock_ec2}
 
     with patch("builtins.print"):
-        result = campers_instance._get_or_create_instance(
-            "test-branch", {"region": "us-east-1"}
-        )
+        result = campers_instance._get_or_create_instance("test-branch", {"region": "us-east-1"})
 
     assert result["reused"] is False
     assert result["instance_id"] == "i-new123"
@@ -2084,9 +2060,7 @@ def test_get_or_create_no_existing_creates_new(campers_module) -> None:
     campers_instance._resources = {"compute_provider": mock_ec2}
 
     with patch("builtins.print"):
-        result = campers_instance._get_or_create_instance(
-            "test-branch", {"region": "us-east-1"}
-        )
+        result = campers_instance._get_or_create_instance("test-branch", {"region": "us-east-1"})
 
     assert result["reused"] is False
     assert result["instance_id"] == "i-new456"
@@ -2120,11 +2094,8 @@ def test_get_or_create_multiple_matches_uses_first(campers_module) -> None:
 
     campers_instance._resources = {"compute_provider": mock_ec2}
 
-    with patch("builtins.print"):
-        with patch("logging.warning") as mock_logging:
-            result = campers_instance._get_or_create_instance(
-                "test-branch", {"region": "us-east-1"}
-            )
+    with patch("builtins.print"), patch("logging.warning") as mock_logging:
+        result = campers_instance._get_or_create_instance("test-branch", {"region": "us-east-1"})
 
     assert result["instance_id"] == "i-first-stopped"
     mock_logging.assert_called()
@@ -2461,7 +2432,7 @@ def test_launch_raises_error_when_instance_region_mismatches_config(
     campers_instance._config_loader.validate_config.return_value = None
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2_class,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2_class,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -2509,7 +2480,7 @@ def test_launch_succeeds_when_instance_region_matches_config(campers_module) -> 
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2_class,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2_class,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()
@@ -2562,7 +2533,7 @@ def test_launch_succeeds_when_instance_has_no_region_field(campers_module) -> No
     }
 
     with (
-        patch("campers_cli.EC2Manager") as mock_ec2_class,
+        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2_class,
         patch("campers_cli.get_provider") as mock_get_provider,
     ):
         mock_ec2_instance = MagicMock()

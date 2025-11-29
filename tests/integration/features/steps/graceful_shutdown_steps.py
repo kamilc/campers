@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 from behave import given, then, when
 from behave.runner import Context
+
 from tests.integration.features.steps.diagnostics_utils import (
     collect_diagnostics,
     send_signal_to_process,
@@ -43,9 +44,7 @@ class CapturingHandler(logging.Handler):
         self.messages.append(self.format(record))
 
 
-def capture_logs_during_cleanup(
-    context: Context, cleanup_func: callable, *args, **kwargs
-) -> None:
+def capture_logs_during_cleanup(context: Context, cleanup_func: callable, *args, **kwargs) -> None:
     """Capture log messages during cleanup execution.
 
     Parameters
@@ -99,9 +98,7 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
         lambda: context.cleanup_order.append("portforward")
     )
     context.mock_campers._resources["mutagen_mgr"].terminate_session.side_effect = (
-        lambda name, ssh_wrapper_dir=None, host=None: context.cleanup_order.append(
-            "mutagen"
-        )
+        lambda name, ssh_wrapper_dir=None, host=None: context.cleanup_order.append("mutagen")
     )
     context.mock_campers._resources["ssh_manager"].close.side_effect = (
         lambda: context.cleanup_order.append("ssh")
@@ -129,6 +126,7 @@ def step_instance_running_with_all_resources(context: Context) -> None:
     """
     if hasattr(context, "scenario") and "localstack" in context.scenario.tags:
         import tempfile
+
         import yaml
 
         if not hasattr(context, "config_data") or context.config_data is None:
@@ -223,6 +221,7 @@ def step_instance_launch_in_progress(context: Context) -> None:
     """
     if hasattr(context, "scenario") and "localstack" in context.scenario.tags:
         import tempfile
+
         import yaml
 
         if not hasattr(context, "config_data") or context.config_data is None:
@@ -250,9 +249,7 @@ def step_instance_launch_in_progress(context: Context) -> None:
 
         scenario_name = context.scenario.name if hasattr(context, "scenario") else ""
         if "only cleans created resources" in scenario_name:
-            context.harness.services.configuration_env.set(
-                "CAMPERS_SKIP_SSH_CONNECTION", "1"
-            )
+            context.harness.services.configuration_env.set("CAMPERS_SKIP_SSH_CONNECTION", "1")
 
         context.app_process = subprocess.Popen(
             ["uv", "run", "campers", "run", "test-box"],
@@ -278,10 +275,8 @@ def step_instance_launch_in_progress(context: Context) -> None:
         }
         context.cleanup_order = []
 
-        context.mock_campers._resources[
-            "ec2_manager"
-        ].terminate_instance.side_effect = lambda id: context.cleanup_order.append(
-            "ec2"
+        context.mock_campers._resources["ec2_manager"].terminate_instance.side_effect = (
+            lambda id: context.cleanup_order.append("ec2")
         )
 
 
@@ -322,10 +317,8 @@ def step_mutagen_will_fail(context: Context) -> None:
     else:
         context.cleanup_order = []
 
-        context.mock_campers._resources[
-            "portforward_mgr"
-        ].stop_all_tunnels.side_effect = lambda: context.cleanup_order.append(
-            "portforward"
+        context.mock_campers._resources["portforward_mgr"].stop_all_tunnels.side_effect = (
+            lambda: context.cleanup_order.append("portforward")
         )
 
         def mutagen_fail(
@@ -334,17 +327,13 @@ def step_mutagen_will_fail(context: Context) -> None:
             context.cleanup_order.append("mutagen_fail")
             raise RuntimeError("Mutagen error")
 
-        context.mock_campers._resources[
-            "mutagen_mgr"
-        ].terminate_session.side_effect = mutagen_fail
+        context.mock_campers._resources["mutagen_mgr"].terminate_session.side_effect = mutagen_fail
 
         context.mock_campers._resources["ssh_manager"].close.side_effect = (
             lambda: context.cleanup_order.append("ssh")
         )
-        context.mock_campers._resources[
-            "ec2_manager"
-        ].terminate_instance.side_effect = lambda id: context.cleanup_order.append(
-            "ec2"
+        context.mock_campers._resources["ec2_manager"].terminate_instance.side_effect = (
+            lambda id: context.cleanup_order.append("ec2")
         )
 
 
@@ -372,9 +361,7 @@ def step_sigint_received(context: Context) -> None:
         send_signal_to_process(context.app_process, signal.SIGINT)
 
         try:
-            returncode = context.app_process.wait(
-                timeout=GRACEFUL_CLEANUP_TIMEOUT_SECONDS
-            )
+            returncode = context.app_process.wait(timeout=GRACEFUL_CLEANUP_TIMEOUT_SECONDS)
             stdout, stderr = context.app_process.communicate()
             context.exit_code = returncode
             context.process_output = stdout + stderr
@@ -420,9 +407,7 @@ def step_sigterm_received(context: Context) -> None:
         send_signal_to_process(context.app_process, signal.SIGTERM)
 
         try:
-            returncode = context.app_process.wait(
-                timeout=GRACEFUL_CLEANUP_TIMEOUT_SECONDS
-            )
+            returncode = context.app_process.wait(timeout=GRACEFUL_CLEANUP_TIMEOUT_SECONDS)
             stdout, stderr = context.app_process.communicate()
             context.exit_code = returncode
             context.process_output = stdout + stderr
@@ -544,8 +529,7 @@ def step_cleanup_sequence_executes(context: Context) -> None:
 
             if not cleanup_started or not ec2_cleanup_found:
                 raise AssertionError(
-                    "Cleanup sequence did not execute properly. "
-                    f"Output preview: {output[-1000:]}"
+                    f"Cleanup sequence did not execute properly. Output preview: {output[-1000:]}"
                 )
     else:
         assert context.cleanup_order == ["portforward", "mutagen", "ssh", "ec2"]
@@ -585,9 +569,7 @@ def step_port_forwarding_stopped_first(context: Context) -> None:
                         result = s.connect_ex(("localhost", port))
 
                         if result == 0:
-                            raise AssertionError(
-                                f"Port {port} still forwarding after cleanup"
-                            )
+                            raise AssertionError(f"Port {port} still forwarding after cleanup")
     else:
         assert context.cleanup_order[0] == "portforward"
 
@@ -612,13 +594,9 @@ def step_mutagen_terminated_second(context: Context) -> None:
         if hasattr(context, "process_output") and context.process_output:
             output = context.process_output
 
-            mutagen_cleanup_found = (
-                "Terminating Mutagen" in output or "terminate_mutagen" in output
-            )
+            mutagen_cleanup_found = "Terminating Mutagen" in output or "terminate_mutagen" in output
 
-            mutagen_not_established = (
-                "Waiting for SSH" in output or "SSH not ready" in output
-            )
+            mutagen_not_established = "Waiting for SSH" in output or "SSH not ready" in output
 
             if mutagen_cleanup_found:
                 try:
@@ -632,9 +610,7 @@ def step_mutagen_terminated_second(context: Context) -> None:
                     session_name = context.mutagen_session_name
 
                     if session_name in result.stdout:
-                        raise AssertionError(
-                            f"Session {session_name} still exists after cleanup"
-                        )
+                        raise AssertionError(f"Session {session_name} still exists after cleanup")
                 except subprocess.TimeoutExpired:
                     raise AssertionError("Mutagen sync list timed out")
             elif not mutagen_not_established:
@@ -706,8 +682,7 @@ def step_ec2_terminated_fourth(context: Context) -> None:
 
             if not ec2_cleanup_found:
                 raise AssertionError(
-                    "EC2 termination not found in process output. "
-                    f"Output preview: {output[-1000:]}"
+                    f"EC2 termination not found in process output. Output preview: {output[-1000:]}"
                 )
     else:
         assert context.cleanup_order[3] == "ec2"

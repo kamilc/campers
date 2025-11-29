@@ -258,9 +258,7 @@ def step_run_setup_with_input(context: Context, user_input: str) -> None:
     vpc_exists = bool(vpcs.get("Vpcs", []))
     vpc_env_value = "true" if vpc_exists else "false"
 
-    context.harness.services.configuration_env.set(
-        "CAMPERS_TEST_VPC_EXISTS", vpc_env_value
-    )
+    context.harness.services.configuration_env.set("CAMPERS_TEST_VPC_EXISTS", vpc_env_value)
 
     result = subprocess.run(
         ["uv", "run", "python", "-m", "campers", "setup"],
@@ -308,20 +306,14 @@ def step_run_simple_command(context: Context, command: str) -> None:
 
         try:
             ec2_client = boto3.client("ec2", region_name="us-east-1")
-            vpcs = ec2_client.describe_vpcs(
-                Filters=[{"Name": "isDefault", "Values": ["true"]}]
-            )
+            vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
             vpc_exists = bool(vpcs.get("Vpcs", []))
             vpc_env_value = "true" if vpc_exists else "false"
 
-            context.harness.services.configuration_env.set(
-                "CAMPERS_TEST_VPC_EXISTS", vpc_env_value
-            )
+            context.harness.services.configuration_env.set("CAMPERS_TEST_VPC_EXISTS", vpc_env_value)
         except Exception:
             vpc_env_value = "false"
-            context.harness.services.configuration_env.set(
-                "CAMPERS_TEST_VPC_EXISTS", vpc_env_value
-            )
+            context.harness.services.configuration_env.set("CAMPERS_TEST_VPC_EXISTS", vpc_env_value)
 
     result = subprocess.run(
         ["uv", "run", "python", "-m", "campers", command],

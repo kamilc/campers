@@ -5,9 +5,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+import yaml
 from omegaconf import OmegaConf
 from omegaconf.errors import InterpolationResolutionError
-import yaml
 
 from campers.constants import DEFAULT_REGION, OnExitAction
 from campers.providers import list_providers
@@ -66,7 +66,7 @@ class ConfigLoader:
         except yaml.YAMLError as e:
             logger.error("Failed to parse YAML config file %s: %s", config_file, e)
             raise ValueError(f"Invalid YAML in {config_file}: {e}") from e
-        except (OSError, IOError) as e:
+        except OSError as e:
             logger.error("Failed to read config file %s: %s", config_file, e)
             raise RuntimeError(f"Failed to read config file {config_file}: {e}") from e
 
@@ -126,8 +126,7 @@ class ConfigLoader:
                     )
 
                 raise ValueError(
-                    f"Camp '{camp_name}' not found in configuration. "
-                    f"Available camps: {available}"
+                    f"Camp '{camp_name}' not found in configuration. Available camps: {available}"
                 )
 
             camp_config = camps[camp_name]
@@ -153,8 +152,7 @@ class ConfigLoader:
         available_providers = list_providers()
         if provider not in available_providers:
             raise ValueError(
-                f"Unknown provider: {provider}. "
-                f"Available providers: {available_providers}"
+                f"Unknown provider: {provider}. Available providers: {available_providers}"
             )
 
         self._validate_required_fields(config)
@@ -246,7 +244,7 @@ class ConfigLoader:
                 except re.error as e:
                     raise ValueError(
                         f"Invalid regex pattern in env_filter: '{pattern}' - {e}"
-                    )
+                    ) from e
 
         if "ssh_username" in config:
             ssh_username = config["ssh_username"]
@@ -317,9 +315,7 @@ class ConfigLoader:
                 raise ValueError("sync_paths entries must be dictionaries")
 
             if "local" not in sync_path or "remote" not in sync_path:
-                raise ValueError(
-                    "sync_paths entry must have both 'local' and 'remote' keys"
-                )
+                raise ValueError("sync_paths entry must have both 'local' and 'remote' keys")
 
     def _validate_ansible_config(self, config: dict[str, Any]) -> None:
         """Validate Ansible configuration.
@@ -340,9 +336,8 @@ class ConfigLoader:
                 "These fields are mutually exclusive."
             )
 
-        if "ansible_playbooks" in config:
-            if not isinstance(config["ansible_playbooks"], list):
-                raise ValueError("ansible_playbooks must be a list")
+        if "ansible_playbooks" in config and not isinstance(config["ansible_playbooks"], list):
+            raise ValueError("ansible_playbooks must be a list")
 
         if "playbooks" not in config:
             return
@@ -380,6 +375,4 @@ class ConfigLoader:
             raise ValueError("on_exit must be a string")
 
         if config["on_exit"] not in ("stop", "terminate"):
-            raise ValueError(
-                f"on_exit must be 'stop' or 'terminate', got '{config['on_exit']}'"
-            )
+            raise ValueError(f"on_exit must be 'stop' or 'terminate', got '{config['on_exit']}'")

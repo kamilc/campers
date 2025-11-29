@@ -13,9 +13,9 @@ import yaml
 from behave import given, then, when
 from behave.runner import Context
 
-from tests.integration.features.steps.common_steps import execute_command_direct
 from campers.cli.main import CampersCLI
 from campers.services.portforward import PortForwardManager
+from tests.integration.features.steps.common_steps import execute_command_direct
 
 JSON_OUTPUT_TRUNCATE_LENGTH = 200
 
@@ -122,9 +122,7 @@ def create_cli_test_boto3_factory():
                     {"RegionName": "eu-west-1"},
                 ]
             }
-            mock_client.describe_vpcs.return_value = {
-                "Vpcs": [{"VpcId": "vpc-12345678"}]
-            }
+            mock_client.describe_vpcs.return_value = {"Vpcs": [{"VpcId": "vpc-12345678"}]}
             return mock_client
         elif service_name == "sts":
             mock_client = MagicMock()
@@ -249,9 +247,7 @@ def step_config_with_camp_defined(context: Context, camp_name: str) -> None:
 
 
 @given('camp "{camp_name}" has instance_type "{instance_type}"')
-def step_camp_has_instance_type(
-    context: Context, camp_name: str, instance_type: str
-) -> None:
+def step_camp_has_instance_type(context: Context, camp_name: str, instance_type: str) -> None:
     ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["instance_type"] = instance_type
 
@@ -485,9 +481,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
 
     args = shlex.split(campers_args)
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
     is_cli_test = (
         hasattr(context, "scenario")
@@ -568,9 +562,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                     )
 
                     context.exit_code = 0
-                    context.stdout = (
-                        result if isinstance(result, str) else json.dumps(result)
-                    )
+                    context.stdout = result if isinstance(result, str) else json.dumps(result)
                     context.stderr = stderr_capture.getvalue()
 
                     if isinstance(result, str):
@@ -589,9 +581,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                     )
 
                     if hasattr(context, "monitor_error") and context.monitor_error:
-                        logger.error(
-                            f"Monitor thread reported error: {context.monitor_error}"
-                        )
+                        logger.error(f"Monitor thread reported error: {context.monitor_error}")
 
                     if hasattr(cli, "_resources"):
                         portforward_mgr = cli._resources.get("portforward_mgr")
@@ -615,9 +605,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                     context.stderr = ""
 
                 else:
-                    raise ValueError(
-                        f"Unsupported command for in-process execution: {args[0]}"
-                    )
+                    raise ValueError(f"Unsupported command for in-process execution: {args[0]}")
 
         except SystemExit as e:
             logger.debug(f"CLI raised SystemExit with code {e.code}")
@@ -625,9 +613,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
             captured_stderr = stderr_capture.getvalue()
             context.stderr = captured_stderr
             context.stdout = ""
-            context.error = (
-                captured_stderr if captured_stderr else f"SystemExit: {e.code}"
-            )
+            context.error = captured_stderr if captured_stderr else f"SystemExit: {e.code}"
         except Exception as e:
             logger.error(f"In-process execution failed: {e}", exc_info=True)
             context.exit_code = 1
@@ -736,12 +722,8 @@ def step_command_fails_with_value_error(context: Context) -> None:
             f"Expected ValueError, got {type(context.exception).__name__}: {context.exception}"
         )
     else:
-        assert context.exit_code != 0, (
-            f"Expected failure, got exit code {context.exit_code}"
-        )
-        assert context.stderr.strip(), (
-            "Expected error message in stderr but got nothing"
-        )
+        assert context.exit_code != 0, f"Expected failure, got exit code {context.exit_code}"
+        assert context.stderr.strip(), "Expected error message in stderr but got nothing"
 
         assert "Configuration error" in context.stderr, (
             f"Expected 'Configuration error' in stderr but got: {context.stderr}"

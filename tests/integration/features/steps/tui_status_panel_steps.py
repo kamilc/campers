@@ -393,9 +393,7 @@ def step_status_panel_shows_instance_id(context: Context) -> None:
         )
         async with app.run_test() as pilot:
             await pilot.pause()
-            update_queue.put(
-                {"type": "instance_details", "payload": context.instance_details}
-            )
+            update_queue.put({"type": "instance_details", "payload": context.instance_details})
             app.check_for_updates()
             await pilot.pause()
             widget = app.query_one("#ssh-widget", Static)
@@ -593,9 +591,7 @@ def step_status_panel_shows_ssh_connection_string(context: Context) -> None:
         )
         async with app.run_test() as pilot:
             await pilot.pause()
-            update_queue.put(
-                {"type": "instance_details", "payload": context.instance_details}
-            )
+            update_queue.put({"type": "instance_details", "payload": context.instance_details})
             app.check_for_updates()
             await pilot.pause()
             widget = app.query_one("#ssh-widget", Static)
@@ -773,9 +769,7 @@ def step_status_panel_processes_in_order(context: Context) -> None:
             assert "launching..." in initial_status
 
             update_queue.put({"type": "merged_config", "payload": context.test_config})
-            update_queue.put(
-                {"type": "instance_details", "payload": context.test_instance}
-            )
+            update_queue.put({"type": "instance_details", "payload": context.test_instance})
 
             app.check_for_updates()
             await pilot.pause()
@@ -787,9 +781,7 @@ def step_status_panel_processes_in_order(context: Context) -> None:
 
             try:
                 update_queue.get_nowait()
-                raise AssertionError(
-                    "Queue should be empty after processing all updates"
-                )
+                raise AssertionError("Queue should be empty after processing all updates")
             except queue.Empty:
                 pass
 
@@ -821,9 +813,7 @@ def step_widgets_reflect_both_updates(context: Context) -> None:
             await pilot.pause()
 
             update_queue.put({"type": "merged_config", "payload": context.test_config})
-            update_queue.put(
-                {"type": "instance_details", "payload": context.test_instance}
-            )
+            update_queue.put({"type": "instance_details", "payload": context.test_instance})
 
             app.check_for_updates()
             await pilot.pause()

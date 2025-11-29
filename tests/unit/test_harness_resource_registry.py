@@ -53,9 +53,7 @@ class TestResourceRegistryBasic:
             return dispose
 
         registry.register("kind1", "handle1", make_dispose("first"), label="1")
-        registry.register(
-            "kind2", "handle2", make_dispose("second", should_fail=True), label="2"
-        )
+        registry.register("kind2", "handle2", make_dispose("second", should_fail=True), label="2")
         registry.register("kind3", "handle3", make_dispose("third"), label="3")
 
         registry.cleanup_all()

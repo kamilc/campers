@@ -23,9 +23,7 @@ class ComputeProvider(Protocol):
         """
         ...
 
-    def launch_instance(
-        self, config: dict[str, Any], instance_name: str
-    ) -> dict[str, Any]:
+    def launch_instance(self, config: dict[str, Any], instance_name: str) -> dict[str, Any]:
         """Launch a new compute instance.
 
         Parameters

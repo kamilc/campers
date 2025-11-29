@@ -3,37 +3,28 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import queue
 import sys
 import threading
 import types
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from campers.core.signals import set_cleanup_instance, setup_signal_handlers
+from campers.cli.main import main  # noqa: E402
 from campers.core.cleanup import CleanupManager
-from campers.core.run_executor import RunExecutor
-from campers.core.interfaces import ComputeProvider
-from campers.lifecycle import LifecycleManager
-from campers.providers.aws.client_factory import create_aws_client_factory
-from campers.providers.aws.setup import SetupManager
-
-setup_signal_handlers()
-
-logging.getLogger("botocore").setLevel(logging.WARNING)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-
 from campers.core.config import ConfigLoader  # noqa: E402
+from campers.core.interfaces import ComputeProvider
+from campers.core.run_executor import RunExecutor
+from campers.core.signals import set_cleanup_instance, setup_signal_handlers
+from campers.lifecycle import LifecycleManager
 from campers.providers import get_provider  # noqa: E402
-from campers.providers.aws.compute import EC2Manager  # noqa: E402, F401
-from campers.services.ssh import SSHManager  # noqa: E402
-from campers.services.sync import MutagenManager  # noqa: E402, F401
 from campers.services.portforward import PortForwardManager  # noqa: E402
+from campers.services.ssh import SSHManager  # noqa: E402
+from campers.services.sync import MutagenManager  # noqa: E402
 from campers.templates import CONFIG_TEMPLATE  # noqa: E402
 from campers.tui import CampersTUI  # noqa: E402
-from campers.cli.main import main  # noqa: E402
 from campers.utils import log_and_print_error, truncate_name  # noqa: E402
 
 
@@ -44,6 +35,8 @@ class Campers:
         self,
         compute_provider_factory: Callable[[str], ComputeProvider] | None = None,
         ssh_manager_factory: type | None = None,
+        boto3_client_factory: Any = None,
+        boto3_resource_factory: Any = None,
     ) -> None:
         """Initialize Campers CLI with optional dependency injection."""
         self._config_loader = ConfigLoader()
@@ -54,9 +47,8 @@ class Campers:
         self._resources: dict[str, Any] = {}
         self._update_queue: queue.Queue | None = None
 
-        aws_client_factory = create_aws_client_factory()
-        self._boto3_client_factory = aws_client_factory.get_client
-        self._boto3_resource_factory = aws_client_factory.get_resource
+        self._boto3_client_factory = boto3_client_factory
+        self._boto3_resource_factory = boto3_resource_factory
 
         self._compute_provider_factory_override = compute_provider_factory
 
@@ -75,13 +67,10 @@ class Campers:
 
         self._lifecycle_manager: LifecycleManager | None = None
 
-        self._setup_manager = SetupManager(
-            config_loader=self._config_loader,
-            boto3_client_factory=self._boto3_client_factory,
-        )
-
         self._run_executor: RunExecutor | None = None
+        self._setup_manager: Any = None
 
+        setup_signal_handlers()
         set_cleanup_instance(self)
 
     @property
@@ -138,6 +127,18 @@ class Campers:
                 truncate_name=truncate_name,
             )
         return self._lifecycle_manager
+
+    @property
+    def setup_manager(self) -> Any:
+        """Get the setup manager instance (lazy-loaded from provider)."""
+        if self._setup_manager is None:
+            from campers.providers.aws.setup import SetupManager
+
+            self._setup_manager = SetupManager(
+                config_loader=self._config_loader,
+                boto3_client_factory=self._boto3_client_factory,
+            )
+        return self._setup_manager
 
     def run(
         self,
@@ -226,10 +227,8 @@ class Campers:
             cleanup_resources_callback=self._cleanup_resources,
         )
 
-    def _get_or_create_instance(
-        self, instance_name: str, config: dict[str, Any]
-    ) -> dict[str, Any]:
-        return self.run_executor._get_or_create_instance(instance_name, config)
+    def _get_or_create_instance(self, instance_name: str, config: dict[str, Any]) -> dict[str, Any]:
+        return self.run_executor.get_or_create_instance(instance_name, config)
 
     def _sync_cleanup_manager_resources(self) -> None:
         """Ensure cleanup manager uses the current resources dictionary."""
@@ -257,14 +256,14 @@ class Campers:
 
         old_harness = os.environ.pop("CAMPERS_HARNESS_MANAGED", None)
         try:
-            return self._cleanup_manager.cleanup_resources(signum=signum, frame=frame)
+            return self._cleanup_manager.cleanup_resources(signum=signum, _frame=frame)
         finally:
             if old_harness is not None:
                 os.environ["CAMPERS_HARNESS_MANAGED"] = old_harness
             self._cleanup_in_progress = self._cleanup_manager.cleanup_in_progress
 
     def _build_command_in_directory(self, working_dir: str, command: str) -> str:
-        return self.run_executor._build_command_in_directory(working_dir, command)
+        return self.run_executor.build_command_in_directory(working_dir, command)
 
     def _truncate_name(self, name: str) -> str:
         return truncate_name(name)
@@ -294,20 +293,20 @@ class Campers:
         return self.lifecycle_manager.destroy(name_or_id=name_or_id, region=region)
 
     def setup(self, region: str | None = None, ec2_client: Any = None) -> None:
-        """Set up AWS environment and validate configuration."""
-        return self._setup_manager.setup(region=region, ec2_client=ec2_client)
+        """Set up cloud environment and validate configuration."""
+        return self.setup_manager.setup(region=region, ec2_client=ec2_client)
 
     def doctor(self, region: str | None = None, ec2_client: Any = None) -> None:
-        """Diagnose AWS environment and configuration issues.
+        """Diagnose cloud environment and configuration issues.
 
         Parameters
         ----------
         region : str | None
-            AWS region to diagnose, or None for default region
+            Cloud region to diagnose, or None for default region
         ec2_client : Any
             Optional boto3 EC2 client (for testing/mocking)
         """
-        return self._setup_manager.doctor(region=region, ec2_client=ec2_client)
+        return self.setup_manager.doctor(region=region, ec2_client=ec2_client)
 
     def init(self, force: bool = False) -> None:
         """Create a default campers.yaml configuration file."""

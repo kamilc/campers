@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import threading
 import traceback
-import sys
 from typing import Any
 
 
@@ -60,9 +60,7 @@ def _gather_docker_info() -> dict[str, Any]:
                     "status": container.status,
                     "image": container.image.tags,
                     "labels": container.attrs.get("Config", {}).get("Labels", {}),
-                    "ports": container.attrs.get("NetworkSettings", {}).get(
-                        "Ports", {}
-                    ),
+                    "ports": container.attrs.get("NetworkSettings", {}).get("Ports", {}),
                 }
             )
         snapshot["containers"] = containers

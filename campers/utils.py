@@ -1,5 +1,6 @@
 """Utility functions for campers."""
 
+import contextlib
 import fcntl
 import logging
 import os
@@ -11,10 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from campers.constants import (
-    SECONDS_PER_MINUTE,
-    SECONDS_PER_HOUR,
-    SECONDS_PER_DAY,
     DEFAULT_NAME_COLUMN_WIDTH,
+    SECONDS_PER_DAY,
+    SECONDS_PER_HOUR,
+    SECONDS_PER_MINUTE,
 )
 
 
@@ -166,6 +167,24 @@ def log_and_print_error(message: str, *args: Any) -> None:
     print(f"Error: {formatted_msg}", file=sys.stderr)
 
 
+def get_aws_credentials_error_message() -> str:
+    """Get standard AWS credentials error message.
+
+    Returns
+    -------
+    str
+        Formatted AWS credentials error message
+    """
+    return (
+        "Cloud credentials not found\n\n"
+        "Configure your credentials:\n"
+        "  aws configure\n\n"
+        "Or set environment variables:\n"
+        "  export AWS_ACCESS_KEY_ID=...\n"
+        "  export AWS_SECRET_ACCESS_KEY=..."
+    )
+
+
 def truncate_name(name: str, max_width: int = DEFAULT_NAME_COLUMN_WIDTH) -> str:
     """Truncate name to fit in column width.
 
@@ -239,7 +258,5 @@ def atomic_file_write(path: Path, content: str) -> None:
             finally:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
     finally:
-        try:
+        with contextlib.suppress(OSError):
             lock_path.unlink()
-        except OSError:
-            pass

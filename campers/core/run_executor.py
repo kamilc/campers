@@ -7,12 +7,14 @@ import queue
 import shlex
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from campers.cli import apply_cli_overrides
 from campers.constants import SYNC_TIMEOUT
+from campers.core.config import ConfigLoader
 from campers.services.ansible import AnsibleManager
 from campers.services.portforward import PortForwardManager
 from campers.services.ssh import get_ssh_connection_info
@@ -28,37 +30,37 @@ class RunExecutor:
 
     Parameters
     ----------
-    config_loader : Any
+    config_loader : ConfigLoader
         Configuration loader instance
-    compute_provider_factory : Any
+    compute_provider_factory : Callable[..., Any]
         Factory function to create compute provider instances
-    ssh_manager_factory : Any
+    ssh_manager_factory : Callable[..., Any]
         Factory function to create SSHManager instances
     resources : dict[str, Any]
         Shared resources dictionary
     resources_lock : threading.Lock
         Lock for thread-safe resource access
-    cleanup_in_progress_getter : Any
+    cleanup_in_progress_getter : Callable[[], bool]
         Callable that returns cleanup in progress status
     update_queue : queue.Queue | None
         Queue for TUI updates (optional)
-    mutagen_manager_factory : Any
+    mutagen_manager_factory : type[MutagenManager] | None
         Factory function to create MutagenManager instances (optional)
-    portforward_manager_factory : Any
+    portforward_manager_factory : type[PortForwardManager] | None
         Factory function to create PortForwardManager instances (optional)
     """
 
     def __init__(
         self,
-        config_loader: Any,
-        compute_provider_factory: Any,
-        ssh_manager_factory: Any,
+        config_loader: ConfigLoader,
+        compute_provider_factory: Callable[..., Any],
+        ssh_manager_factory: Callable[..., Any],
         resources: dict[str, Any],
         resources_lock: threading.Lock,
-        cleanup_in_progress_getter: Any,
-        update_queue: queue.Queue | None = None,
-        mutagen_manager_factory: Any | None = None,
-        portforward_manager_factory: Any | None = None,
+        cleanup_in_progress_getter: Callable[[], bool],
+        update_queue: queue.Queue[Any] | None = None,
+        mutagen_manager_factory: type[MutagenManager] | None = None,
+        portforward_manager_factory: type[PortForwardManager] | None = None,
     ) -> None:
         self.config_loader = config_loader
         self.compute_provider_factory = compute_provider_factory
@@ -68,9 +70,7 @@ class RunExecutor:
         self.cleanup_in_progress_getter = cleanup_in_progress_getter
         self.update_queue = update_queue
         self.mutagen_manager_factory = mutagen_manager_factory or MutagenManager
-        self.portforward_manager_factory = (
-            portforward_manager_factory or PortForwardManager
-        )
+        self.portforward_manager_factory = portforward_manager_factory or PortForwardManager
 
     def execute(
         self,
@@ -154,7 +154,11 @@ class RunExecutor:
 
             skip_ssh = os.environ.get("CAMPERS_SKIP_SSH_CONNECTION") == "1"
             if skip_ssh:
+                max_wait_seconds = 300
+                start_time = time.time()
                 while not self.cleanup_in_progress_getter():
+                    if time.time() - start_time > max_wait_seconds:
+                        raise TimeoutError("Cleanup did not start within timeout period")
                     time.sleep(0.1)
                 return instance_details
 
@@ -166,9 +170,7 @@ class RunExecutor:
                 logging.debug("Cleanup in progress, aborting further operations")
                 return instance_details
 
-            env_vars = ssh_manager.filter_environment_variables(
-                merged_config.get("env_filter")
-            )
+            env_vars = ssh_manager.filter_environment_variables(merged_config.get("env_filter"))
 
             logging.info(f"Forwarding {len(env_vars)} environment variables")
 
@@ -185,20 +187,19 @@ class RunExecutor:
 
             self._phase_ansible_provisioning(merged_config, instance_details, ssh_port)
 
-            self._phase_script_execution(
-                merged_config, instance_details, ssh_manager, env_vars
-            )
+            self._phase_script_execution(merged_config, instance_details, ssh_manager, env_vars)
 
-            self._phase_command_execution(
-                merged_config, instance_details, ssh_manager, env_vars
-            )
+            self._phase_command_execution(merged_config, instance_details, ssh_manager, env_vars)
 
             return self._format_output(instance_details, json_output)
 
         finally:
-            if not tui_mode and not self.cleanup_in_progress_getter():
-                if cleanup_resources_callback:
-                    cleanup_resources_callback()
+            if (
+                not tui_mode
+                and not self.cleanup_in_progress_getter()
+                and cleanup_resources_callback
+            ):
+                cleanup_resources_callback()
 
     def _phase_config_validation(
         self,
@@ -314,7 +315,7 @@ class RunExecutor:
             self.resources["compute_provider"] = compute_provider
 
         instance_name = generate_instance_name()
-        instance_details = self._get_or_create_instance(instance_name, merged_config)
+        instance_details = self.get_or_create_instance(instance_name, merged_config)
 
         with self.resources_lock:
             self.resources["instance_details"] = instance_details
@@ -366,9 +367,7 @@ class RunExecutor:
             ssh_manager.connect(max_retries=10)
             logging.info("SSH connection established")
         except ConnectionError as e:
-            error_msg = (
-                f"Failed to establish SSH connection after 10 attempts: {str(e)}"
-            )
+            error_msg = f"Failed to establish SSH connection after 10 attempts: {str(e)}"
             logging.error(error_msg)
             raise
 
@@ -377,9 +376,7 @@ class RunExecutor:
             return None, None, None
 
         if update_queue is not None:
-            update_queue.put(
-                {"type": "status_update", "payload": {"status": "running"}}
-            )
+            update_queue.put({"type": "status_update", "payload": {"status": "running"}})
 
         with self.resources_lock:
             self.resources["ssh_manager"] = ssh_manager
@@ -435,9 +432,7 @@ class RunExecutor:
             return
 
         if disable_mutagen:
-            logging.info(
-                "Mutagen disabled via CAMPERS_DISABLE_MUTAGEN=1; skipping sync setup."
-            )
+            logging.info("Mutagen disabled via CAMPERS_DISABLE_MUTAGEN=1; skipping sync setup.")
 
             if update_queue is not None:
                 update_queue.put(
@@ -496,9 +491,7 @@ class RunExecutor:
                     }
                 )
 
-            mutagen_mgr.wait_for_initial_sync(
-                mutagen_session_name, timeout=SYNC_TIMEOUT
-            )
+            mutagen_mgr.wait_for_initial_sync(mutagen_session_name, timeout=SYNC_TIMEOUT)
             logging.info("File sync completed")
 
             if update_queue is not None:
@@ -537,9 +530,7 @@ class RunExecutor:
         full_config = self.config_loader.load_config()
 
         if "playbooks" not in full_config:
-            raise ValueError(
-                "ansible_playbook(s) specified but no 'playbooks' section in config"
-            )
+            raise ValueError("ansible_playbook(s) specified but no 'playbooks' section in config")
 
         playbooks_config = full_config.get("playbooks", {})
 
@@ -635,12 +626,10 @@ class RunExecutor:
 
             logging.info("Running startup_script...")
 
-            startup_command = self._build_command_in_directory(
+            startup_command = self.build_command_in_directory(
                 working_dir, merged_config["startup_script"]
             )
-            startup_with_env = ssh_manager.build_command_with_env(
-                startup_command, env_vars
-            )
+            startup_with_env = ssh_manager.build_command_with_env(startup_command, env_vars)
             exit_code = ssh_manager.execute_command_raw(startup_with_env)
 
             if exit_code != 0:
@@ -680,10 +669,8 @@ class RunExecutor:
 
         if merged_config.get("sync_paths"):
             working_dir = merged_config["sync_paths"][0]["remote"]
-            full_command = self._build_command_in_directory(working_dir, cmd)
-            command_with_env = ssh_manager.build_command_with_env(
-                full_command, env_vars
-            )
+            full_command = self.build_command_in_directory(working_dir, cmd)
+            command_with_env = ssh_manager.build_command_with_env(full_command, env_vars)
             exit_code = ssh_manager.execute_command_raw(command_with_env)
         else:
             command_with_env = ssh_manager.build_command_with_env(cmd, env_vars)
@@ -715,9 +702,7 @@ class RunExecutor:
                 return obj.isoformat()
             if isinstance(obj, Path):
                 return str(obj)
-            raise TypeError(
-                f"Object of type {type(obj).__name__} is not JSON serializable"
-            )
+            raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
         if json_output:
             return json.dumps(
@@ -728,9 +713,7 @@ class RunExecutor:
 
         return instance_details
 
-    def _get_or_create_instance(
-        self, instance_name: str, config: dict[str, Any]
-    ) -> dict[str, Any]:
+    def get_or_create_instance(self, instance_name: str, config: dict[str, Any]) -> dict[str, Any]:
         """Get or create instance with smart reuse logic.
 
         Parameters
@@ -850,8 +833,7 @@ class RunExecutor:
 
         if "local" not in sync_config or "remote" not in sync_config:
             raise ValueError(
-                "sync_paths entry must have both 'local' and 'remote' keys. "
-                f"Got: {sync_config}"
+                f"sync_paths entry must have both 'local' and 'remote' keys. Got: {sync_config}"
             )
 
     def _get_playbook_references(self, config: dict[str, Any]) -> list[str]:
@@ -880,7 +862,7 @@ class RunExecutor:
             return playbooks
         return []
 
-    def _build_command_in_directory(self, working_dir: str, command: str) -> str:
+    def build_command_in_directory(self, working_dir: str, command: str) -> str:
         """Build command that executes in specific working directory.
 
         Parameters
@@ -896,9 +878,7 @@ class RunExecutor:
             Full command with directory change and proper escaping
         """
         if working_dir.startswith("~"):
-            if " " in working_dir or any(
-                c in working_dir for c in ["'", '"', "$", "`"]
-            ):
+            if " " in working_dir or any(c in working_dir for c in ["'", '"', "$", "`"]):
                 parts = working_dir.split("/", 1)
                 if len(parts) == 2:
                     quoted_rest = shlex.quote(parts[1])

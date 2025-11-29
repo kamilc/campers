@@ -86,9 +86,7 @@ def step_run_command(context, command: str) -> None:
 
         try:
             ec2_client = boto3.client("ec2", region_name="us-east-1")
-            vpcs = ec2_client.describe_vpcs(
-                Filters=[{"Name": "isDefault", "Values": ["true"]}]
-            )
+            vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
             vpc_exists = bool(vpcs.get("Vpcs", []))
             env["CAMPERS_TEST_VPC_EXISTS"] = "true" if vpc_exists else "false"
         except Exception:
@@ -159,6 +157,4 @@ def step_fire_routes(context) -> None:
     """Verify Fire successfully routes to CLI commands."""
     assert context.exit_code == 0, "Fire routing failed with non-zero exit code"
     combined_output = context.stdout + context.stderr
-    assert "campers" in combined_output.lower(), (
-        "CLI command routing not found in output"
-    )
+    assert "campers" in combined_output.lower(), "CLI command routing not found in output"

@@ -3,10 +3,10 @@
 import importlib.util
 import os
 import sys
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
-from collections.abc import Generator
 
 import pytest
 import yaml
@@ -50,9 +50,7 @@ def campers_module() -> Any:
     Any
         The campers module with Campers class available.
     """
-    campers_script_path = (
-        Path(__file__).parent.parent.parent / "campers" / "__main__.py"
-    )
+    campers_script_path = Path(__file__).parent.parent.parent / "campers" / "__main__.py"
     spec = importlib.util.spec_from_file_location("campers_script", campers_script_path)
     campers_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(campers_module)
@@ -171,15 +169,13 @@ def mock_ec2_manager(campers_module):
         "unique_id": "1234567890",
     }
 
-    with patch.object(campers_module, "EC2Manager") as MockEC2Manager:
+    with patch("campers.providers.aws.compute.EC2Manager") as MockEC2Manager:
         mock_manager = MagicMock()
         mock_manager.find_instances_by_name_or_id.return_value = []
         mock_manager.launch_instance.return_value = mock_instance_details
         MockEC2Manager.return_value = mock_manager
 
-        with patch.object(
-            campers_module, "get_provider", return_value={"compute": MockEC2Manager}
-        ):
+        with patch.object(campers_module, "get_provider", return_value={"compute": MockEC2Manager}):
             yield mock_manager
 
 

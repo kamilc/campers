@@ -106,9 +106,7 @@ def step_defaults_sync_paths_with_paths(
     if "defaults" not in context.config_data:
         context.config_data["defaults"] = {}
 
-    context.config_data["defaults"]["sync_paths"] = [
-        {"local": local_path, "remote": remote_path}
-    ]
+    context.config_data["defaults"]["sync_paths"] = [{"local": local_path, "remote": remote_path}]
 
 
 @given('defaults have startup_script "{script}"')
@@ -367,9 +365,7 @@ def step_mutagen_session_terminated(context: Context) -> None:
 
         session_count = result.stdout.count("campers-")
         if session_count > 0:
-            logger.warning(
-                f"Found {session_count} Mutagen sessions still running after test"
-            )
+            logger.warning(f"Found {session_count} Mutagen sessions still running after test")
     except Exception as e:
         logger.debug(f"Could not verify session termination: {e}")
 
@@ -627,9 +623,7 @@ def step_remote_has_file_then(context: Context, filename: str) -> None:
     sync_path = sync_paths[0]["remote"]
     remote_path = sync_path.replace("~", "/home/user")
 
-    exit_code, output = exec_in_ssh_container(
-        context, ["cat", f"{remote_path}/{filename}"]
-    )
+    exit_code, output = exec_in_ssh_container(context, ["cat", f"{remote_path}/{filename}"])
 
     assert exit_code == 0, f"File {filename} not found in remote: {output.decode()}"
     content = output.decode().strip()
@@ -733,6 +727,4 @@ def step_mutagen_watching_state(context: Context) -> None:
 
         time.sleep(2)
 
-    raise AssertionError(
-        f"Session {session_name} did not reach watching state within {timeout}s"
-    )
+    raise AssertionError(f"Session {session_name} did not reach watching state within {timeout}s")

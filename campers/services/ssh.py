@@ -4,7 +4,6 @@ import logging
 import os
 import re
 import shlex
-import socket
 import time
 
 import paramiko
@@ -74,9 +73,7 @@ class SSHManager:
         SSH client instance (None when not connected)
     """
 
-    def __init__(
-        self, host: str, key_file: str, username: str = "ubuntu", port: int = 22
-    ) -> None:
+    def __init__(self, host: str, key_file: str, username: str = "ubuntu", port: int = 22) -> None:
         """Initialize SSHManager with connection parameters.
 
         Parameters
@@ -120,9 +117,7 @@ class SSHManager:
         """
         ssh_retry_delays = [1, 2, 4, 8, 16, 30, 30, 30, 30, 30]
         timeout_seconds = int(os.environ.get("CAMPERS_SSH_TIMEOUT", "30"))
-        effective_max_retries = int(
-            os.environ.get("CAMPERS_SSH_MAX_RETRIES", str(max_retries))
-        )
+        effective_max_retries = int(os.environ.get("CAMPERS_SSH_MAX_RETRIES", str(max_retries)))
 
         for attempt in range(effective_max_retries):
             try:
@@ -154,7 +149,6 @@ class SSHManager:
                 TimeoutError,
                 ConnectionRefusedError,
                 ConnectionResetError,
-                socket.timeout,
             ) as e:
                 if attempt < effective_max_retries - 1:
                     delay_index = min(attempt, len(ssh_retry_delays) - 1)
@@ -284,9 +278,11 @@ class SSHManager:
             raise ValueError("Command cannot be empty")
 
         if len(command) > MAX_COMMAND_LENGTH:
-            raise ValueError(
-                f"Command length ({len(command)}) exceeds maximum of {MAX_COMMAND_LENGTH} characters"
+            msg = (
+                f"Command length ({len(command)}) exceeds maximum of "
+                f"{MAX_COMMAND_LENGTH} characters"
             )
+            raise ValueError(msg)
 
         shell_command = f"cd ~ && bash -c {shlex.quote(command)}"
         return self._execute_with_streaming(shell_command)
@@ -319,9 +315,11 @@ class SSHManager:
             raise ValueError("Command cannot be empty")
 
         if len(command) > MAX_COMMAND_LENGTH:
-            raise ValueError(
-                f"Command length ({len(command)}) exceeds maximum of {MAX_COMMAND_LENGTH} characters"
+            msg = (
+                f"Command length ({len(command)}) exceeds maximum of "
+                f"{MAX_COMMAND_LENGTH} characters"
             )
+            raise ValueError(msg)
 
         return self._execute_with_streaming(command)
 
@@ -360,14 +358,12 @@ class SSHManager:
 
         if filtered_vars:
             var_names = ", ".join(sorted(filtered_vars.keys()))
-            logger.info(
-                "Forwarding %s environment variables: %s", len(filtered_vars), var_names
-            )
+            logger.info("Forwarding %s environment variables: %s", len(filtered_vars), var_names)
 
             sensitive_patterns = ["SECRET", "PASSWORD", "TOKEN", "KEY"]
             sensitive_vars = [
                 name
-                for name in filtered_vars.keys()
+                for name in filtered_vars
                 if any(pattern in name.upper() for pattern in sensitive_patterns)
             ]
 
@@ -416,11 +412,13 @@ class SSHManager:
         full_command = f"{export_prefix} && {command}"
 
         if len(full_command) > MAX_COMMAND_LENGTH:
-            raise ValueError(
+            msg = (
                 f"Command with environment variables ({len(full_command)} chars) "
                 f"exceeds maximum of {MAX_COMMAND_LENGTH} characters. "
-                f"Consider: 1) reducing environment variables, 2) using shorter values, or 3) simplifying the command."
+                f"Consider: 1) reducing environment variables, "
+                f"2) using shorter values, or 3) simplifying the command."
             )
+            raise ValueError(msg)
 
         return full_command
 

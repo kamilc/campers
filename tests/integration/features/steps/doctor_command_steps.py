@@ -136,9 +136,7 @@ def step_region_has_default_vpc(context: Context, region: str) -> None:
                 vpc_response = ec2_client.create_vpc(CidrBlock="10.0.0.0/16")
                 vpc_id = vpc_response["Vpc"]["VpcId"]
     else:
-        vpc_id = next(
-            vpc["VpcId"] for vpc in vpcs.get("Vpcs", []) if vpc.get("IsDefault")
-        )
+        vpc_id = next(vpc["VpcId"] for vpc in vpcs.get("Vpcs", []) if vpc.get("IsDefault"))
 
     context.default_vpc_id = vpc_id
 
@@ -190,8 +188,7 @@ def step_no_aws_resources_created(context: Context) -> None:
 
     instances = ec2_client.describe_instances()
     instance_count = sum(
-        len(reservation["Instances"])
-        for reservation in instances.get("Reservations", [])
+        len(reservation["Instances"]) for reservation in instances.get("Reservations", [])
     )
 
     vpcs_before = getattr(context, "vpcs_before_doctor", None)

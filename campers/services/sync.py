@@ -37,10 +37,6 @@ class MutagenManager:
         Terminate and remove sync session
     """
 
-    def __init__(self) -> None:
-        """Initialize MutagenManager."""
-        pass
-
     def check_mutagen_installed(self) -> None:
         """Check if mutagen is installed locally.
 
@@ -77,12 +73,12 @@ class MutagenManager:
                     "Visit: https://github.com/mutagen-io/mutagen"
                 )
 
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             raise RuntimeError(
                 "Mutagen is not installed locally.\n"
                 "Please install Mutagen to use campers file synchronization.\n"
                 "Visit: https://github.com/mutagen-io/mutagen"
-            )
+            ) from e
 
     def cleanup_orphaned_session(self, session_name: str) -> None:
         """Clean up orphaned session if it exists from previous crashed run.
@@ -194,9 +190,9 @@ class MutagenManager:
         key_path = str(Path(key_file).expanduser().resolve())
 
         try:
-            with open(key_path, "r") as f:
+            with open(key_path) as f:
                 key_content = f.read()
-        except (IOError, FileNotFoundError, PermissionError) as e:
+        except (OSError, FileNotFoundError, PermissionError) as e:
             logger.error("Failed to read SSH key file: %s", e)
             raise RuntimeError(f"Failed to read SSH key file {key_path}: {e}") from e
 
@@ -229,7 +225,7 @@ Host {host}
 """
 
         if campers_config_path.exists():
-            with open(campers_config_path, "r") as f:
+            with open(campers_config_path) as f:
                 existing_config = f.read()
 
             if f"Host {host}" not in existing_config:
@@ -250,7 +246,7 @@ Host {host}
 
         try:
             if user_ssh_config.exists():
-                with open(user_ssh_config, "r") as f:
+                with open(user_ssh_config) as f:
                     user_config_content = f.read()
             else:
                 user_config_content = ""
@@ -259,19 +255,15 @@ Host {host}
                 new_content = f"{include_line}\n\n{user_config_content}"
                 atomic_file_write(user_ssh_config, new_content)
                 logger.debug("Added Include to %s", user_ssh_config)
-        except (IOError, PermissionError, OSError) as e:
+        except (PermissionError, OSError) as e:
             logger.error("Failed to update SSH config: %s", e)
-            raise RuntimeError(
-                f"Failed to update SSH config at {user_ssh_config}: {e}"
-            ) from e
+            raise RuntimeError(f"Failed to update SSH config at {user_ssh_config}: {e}") from e
 
         logger.debug("SSH config for host %s:\n%s", host, host_config.strip())
 
         ssh_path = shutil.which("ssh")
         if not ssh_path:
-            raise RuntimeError(
-                "ssh not found. Please install OpenSSH or add it to your PATH."
-            )
+            raise RuntimeError("ssh not found. Please install OpenSSH or add it to your PATH.")
 
         add_host_cmd = [
             ssh_path,
@@ -292,7 +284,7 @@ Host {host}
         ssh_env["MUTAGEN_SSH_CONFIG"] = str(campers_config_path)
         ssh_env["MUTAGEN_SSH_ARGS"] = (
             "-oIdentitiesOnly=yes "
-            "-oStrictHostKeyChecking=no "
+            "-oStrictHostKeyChecking=accept-new "
             "-oUserKnownHostsFile=/dev/null "
             f"-i {str(temp_key_path.resolve())}"
         )
@@ -339,7 +331,7 @@ Host {host}
             raise RuntimeError(
                 "Mutagen sync create timed out after 120 seconds. "
                 "The remote instance may not be ready or there may be network issues."
-            )
+            ) from e
 
         logger.debug("Mutagen create exit code: %d", result.returncode)
         if result.stdout:
@@ -348,9 +340,7 @@ Host {host}
             logger.debug("Mutagen stderr: %s", result.stderr)
 
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Failed to create Mutagen sync session: {result.stderr}"
-            )
+            raise RuntimeError(f"Failed to create Mutagen sync session: {result.stderr}")
 
     def wait_for_initial_sync(self, session_name: str, timeout: int = 300) -> None:
         """Wait for Mutagen initial sync to complete.
@@ -386,8 +376,7 @@ Host {host}
             time.sleep(SYNC_STATUS_POLL_INTERVAL_SECONDS)
 
         raise RuntimeError(
-            f"Mutagen sync timed out after {timeout} seconds. "
-            "Initial sync did not complete."
+            f"Mutagen sync timed out after {timeout} seconds. Initial sync did not complete."
         )
 
     def terminate_session(
@@ -435,7 +424,7 @@ Host {host}
 
         if host and campers_config_path.exists():
             try:
-                with open(campers_config_path, "r") as f:
+                with open(campers_config_path) as f:
                     config_content = f.read()
 
                 if f"Host {host}" in config_content:

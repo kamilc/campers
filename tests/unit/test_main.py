@@ -2,7 +2,7 @@
 
 import logging
 import signal
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 
@@ -28,8 +28,7 @@ class TestCleanupLogging:
             campers._stop_instance_cleanup()
 
         assert any(
-            "Shutdown requested - stopping instance and preserving resources..."
-            in record.message
+            "Shutdown requested - stopping instance and preserving resources..." in record.message
             for record in caplog.records
         )
 
@@ -78,10 +77,7 @@ class TestCleanupLogging:
         with caplog.at_level(logging.INFO):
             campers._stop_instance_cleanup()
 
-        assert any(
-            "Cleanup completed successfully" in record.message
-            for record in caplog.records
-        )
+        assert any("Cleanup completed successfully" in record.message for record in caplog.records)
 
     def test_cleanup_logs_completion_message_with_errors(self, campers, caplog):
         """Verify cleanup logs error count when errors occur.
@@ -104,10 +100,7 @@ class TestCleanupLogging:
         with caplog.at_level(logging.INFO):
             campers._stop_instance_cleanup()
 
-        assert any(
-            "Cleanup completed with 1 errors" in record.message
-            for record in caplog.records
-        )
+        assert any("Cleanup completed with 1 errors" in record.message for record in caplog.records)
 
 
 class TestPartialInitializationHandling:
@@ -178,8 +171,7 @@ class TestPartialInitializationHandling:
             campers._stop_instance_cleanup()
 
         assert any(
-            "Skipping SSH cleanup - not initialized" in record.message
-            for record in caplog.records
+            "Skipping SSH cleanup - not initialized" in record.message for record in caplog.records
         )
 
     def test_handles_empty_resources_gracefully(self, campers, caplog):
@@ -197,9 +189,7 @@ class TestPartialInitializationHandling:
         with caplog.at_level(logging.INFO):
             campers._stop_instance_cleanup()
 
-        assert any(
-            "No resources to clean up" in record.message for record in caplog.records
-        )
+        assert any("No resources to clean up" in record.message for record in caplog.records)
 
     def test_skips_instance_cleanup_when_not_initialized(self, campers, caplog):
         """Verify instance cleanup is skipped when instance not initialized.
@@ -216,9 +206,7 @@ class TestPartialInitializationHandling:
         with caplog.at_level(logging.DEBUG):
             campers._stop_instance_cleanup()
 
-        assert any(
-            "No resources to clean up" in record.message for record in caplog.records
-        )
+        assert any("No resources to clean up" in record.message for record in caplog.records)
 
 
 class TestCleanupOrder:
@@ -241,9 +229,7 @@ class TestCleanupOrder:
 
         mock_mutagen = MagicMock()
         mock_mutagen.terminate_session.side_effect = (
-            lambda name, ssh_wrapper_dir=None, host=None: cleanup_sequence.append(
-                "mutagen"
-            )
+            lambda name, ssh_wrapper_dir=None, host=None: cleanup_sequence.append("mutagen")
         )
 
         mock_ssh = MagicMock()
@@ -283,18 +269,14 @@ class TestCleanupOrder:
 
         mock_mutagen = MagicMock()
         mock_mutagen.terminate_session.side_effect = (
-            lambda name, ssh_wrapper_dir=None, host=None: cleanup_sequence.append(
-                "mutagen"
-            )
+            lambda name, ssh_wrapper_dir=None, host=None: cleanup_sequence.append("mutagen")
         )
 
         mock_ssh = MagicMock()
         mock_ssh.close.side_effect = lambda: cleanup_sequence.append("ssh")
 
         mock_ec2 = MagicMock()
-        mock_ec2.terminate_instance.side_effect = lambda id: cleanup_sequence.append(
-            "ec2"
-        )
+        mock_ec2.terminate_instance.side_effect = lambda id: cleanup_sequence.append("ec2")
 
         campers._resources = {
             "portforward_mgr": mock_portforward,
@@ -324,15 +306,11 @@ class TestErrorResilience:
         cleanup_sequence = []
 
         mock_portforward = MagicMock()
-        mock_portforward.stop_all_tunnels.side_effect = RuntimeError(
-            "Port forward error"
-        )
+        mock_portforward.stop_all_tunnels.side_effect = RuntimeError("Port forward error")
 
         mock_mutagen = MagicMock()
         mock_mutagen.terminate_session.side_effect = (
-            lambda name, ssh_wrapper_dir=None, host=None: cleanup_sequence.append(
-                "mutagen"
-            )
+            lambda name, ssh_wrapper_dir=None, host=None: cleanup_sequence.append("mutagen")
         )
 
         mock_ssh = MagicMock()
@@ -414,9 +392,7 @@ class TestErrorResilience:
 
         mock_mutagen = MagicMock()
         mock_mutagen.terminate_session.side_effect = (
-            lambda name, ssh_wrapper_dir=None, host=None: cleanup_sequence.append(
-                "mutagen"
-            )
+            lambda name, ssh_wrapper_dir=None, host=None: cleanup_sequence.append("mutagen")
         )
 
         mock_ssh = MagicMock()
@@ -452,9 +428,7 @@ class TestErrorResilience:
             Pytest log capture fixture
         """
         mock_portforward = MagicMock()
-        mock_portforward.stop_all_tunnels.side_effect = RuntimeError(
-            "Port forward error"
-        )
+        mock_portforward.stop_all_tunnels.side_effect = RuntimeError("Port forward error")
 
         mock_mutagen = MagicMock()
         mock_mutagen.terminate_session.side_effect = RuntimeError("Mutagen error")
@@ -478,10 +452,7 @@ class TestErrorResilience:
         with caplog.at_level(logging.INFO):
             campers._stop_instance_cleanup()
 
-        assert any(
-            "Cleanup completed with 4 errors" in record.message
-            for record in caplog.records
-        )
+        assert any("Cleanup completed with 4 errors" in record.message for record in caplog.records)
 
 
 class TestDuplicateCleanupPrevention:
@@ -507,9 +478,7 @@ class TestDuplicateCleanupPrevention:
         with caplog.at_level(logging.INFO):
             campers._cleanup_resources(signum=signal.SIGINT, frame=None)
 
-        assert any(
-            "Cleanup already in progress" in record.message for record in caplog.records
-        )
+        assert any("Cleanup already in progress" in record.message for record in caplog.records)
 
 
 class TestExitCodes:
@@ -583,7 +552,7 @@ class TestUptimeCalculation:
         campers_tui : CampersTUI
             CampersTUI instance
         """
-        future_time = datetime.now(timezone.utc) + timedelta(hours=1)
+        future_time = datetime.now(UTC) + timedelta(hours=1)
         campers_tui.instance_start_time = future_time.replace(tzinfo=None)
 
         campers_tui.update_uptime()
@@ -600,9 +569,7 @@ class TestUptimeCalculation:
         campers_tui : CampersTUI
             CampersTUI instance
         """
-        past_time = datetime.now(timezone.utc) - timedelta(
-            hours=3, minutes=45, seconds=30
-        )
+        past_time = datetime.now(UTC) - timedelta(hours=3, minutes=45, seconds=30)
         campers_tui.instance_start_time = past_time.replace(tzinfo=None)
 
         campers_tui.update_uptime()

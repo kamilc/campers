@@ -2,15 +2,16 @@
 
 import logging
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import patch
 
 from behave.runner import Context
 
-from tests.integration.features.steps.docker_helpers import create_synced_directories
 from campers.services.portforward import PortForwardManager
+from tests.integration.features.steps.docker_helpers import create_synced_directories
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,7 @@ def apply_timeout_mock_if_needed(context: Context) -> list:
     ):
         logger.info("CAMPERS_SYNC_TIMEOUT=1 detected - applying timeout mock")
 
-        def mock_wait_for_initial_sync(
-            self, instance_id: str, timeout: int | None = None
-        ) -> None:
+        def mock_wait_for_initial_sync(self, instance_id: str, timeout: int | None = None) -> None:
             raise RuntimeError("Mutagen sync timed out after 1 seconds")
 
         try:
@@ -92,12 +91,8 @@ def apply_timeout_mock_if_needed(context: Context) -> list:
             patcher = patch.object(
                 MutagenManager, "wait_for_initial_sync", mock_wait_for_initial_sync
             )
-            create_patcher = patch.object(
-                MutagenManager, "create_sync_session", mock_create
-            )
-            terminate_patcher = patch.object(
-                MutagenManager, "terminate_session", mock_terminate
-            )
+            create_patcher = patch.object(MutagenManager, "create_sync_session", mock_create)
+            terminate_patcher = patch.object(MutagenManager, "terminate_session", mock_terminate)
 
             patcher.start()
             create_patcher.start()
@@ -105,9 +100,7 @@ def apply_timeout_mock_if_needed(context: Context) -> list:
 
             if not hasattr(context, "mutagen_patchers"):
                 context.mutagen_patchers = []
-            context.mutagen_patchers.extend(
-                [patcher, create_patcher, terminate_patcher]
-            )
+            context.mutagen_patchers.extend([patcher, create_patcher, terminate_patcher])
 
             logger.debug("Timeout mock applied successfully")
             return [patcher, create_patcher, terminate_patcher]
@@ -145,9 +138,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
     is_localstack = "localstack" in context.tags
 
     if is_localstack:
-        scenario_name = (
-            context.scenario.name.replace(" ", "_").replace("/", "_").replace("'", "")
-        )
+        scenario_name = context.scenario.name.replace(" ", "_").replace("/", "_").replace("'", "")
         test_dir = Path(f"tmp/test-campers/{scenario_name}")
         test_dir.mkdir(parents=True, exist_ok=True)
 
@@ -244,12 +235,8 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                             exc,
                         )
 
-                create_patcher = patch.object(
-                    MutagenManager, "create_sync_session", wrapped_create
-                )
-                wait_patcher = patch.object(
-                    MutagenManager, "wait_for_initial_sync", wrapped_wait
-                )
+                create_patcher = patch.object(MutagenManager, "create_sync_session", wrapped_create)
+                wait_patcher = patch.object(MutagenManager, "wait_for_initial_sync", wrapped_wait)
                 terminate_patcher = patch.object(
                     MutagenManager, "terminate_session", wrapped_terminate
                 )
@@ -260,9 +247,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
 
                 if not hasattr(context, "mutagen_patchers"):
                     context.mutagen_patchers = []
-                context.mutagen_patchers.extend(
-                    [create_patcher, wait_patcher, terminate_patcher]
-                )
+                context.mutagen_patchers.extend([create_patcher, wait_patcher, terminate_patcher])
             except ImportError as exc:  # pragma: no cover
                 logger.warning("Failed to import MutagenManager: %s", exc)
             except Exception as exc:  # pragma: no cover
@@ -276,9 +261,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 logger.debug("Stopped timeout patcher")
 
             if original_campers_dir:
-                context.harness.services.configuration_env.set(
-                    "CAMPERS_DIR", original_campers_dir
-                )
+                context.harness.services.configuration_env.set("CAMPERS_DIR", original_campers_dir)
             else:
                 context.harness.services.configuration_env.delete("CAMPERS_DIR")
             logger.debug("Restored original CAMPERS_DIR")
@@ -306,34 +289,26 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
             ssh_port = kwargs.get("ssh_port", 22)
             ssh_username = kwargs.get("username", "ubuntu")
             logger.debug(
-                f"Mock create_sync_session called with ssh_port={ssh_port}, "
-                f"username={ssh_username}"
+                f"Mock create_sync_session called with ssh_port={ssh_port}, username={ssh_username}"
             )
             if not hasattr(context, "instance_id") or context.instance_id is None:
                 target_ids = os.environ.get("CAMPERS_TARGET_INSTANCE_IDS", "")
                 if target_ids:
-                    instance_ids = [
-                        id.strip() for id in target_ids.split(",") if id.strip()
-                    ]
+                    instance_ids = [id.strip() for id in target_ids.split(",") if id.strip()]
                     if instance_ids:
                         context.instance_id = instance_ids[-1]
-                        logger.debug(
-                            f"Set context.instance_id from env: {context.instance_id}"
-                        )
+                        logger.debug(f"Set context.instance_id from env: {context.instance_id}")
 
             context.ssh_username = ssh_username
 
-            harness_available = (
-                hasattr(context, "harness") and context.harness is not None
-            )
+            harness_available = hasattr(context, "harness") and context.harness is not None
             instance_known = getattr(context, "instance_id", None) is not None
 
             if harness_available and instance_known:
                 create_synced_directories(context)
             else:
                 logger.debug(
-                    "Skipping synced directory creation: "
-                    "harness_available=%s instance_known=%s",
+                    "Skipping synced directory creation: harness_available=%s instance_known=%s",
                     harness_available,
                     instance_known,
                 )
@@ -365,34 +340,20 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
             ) -> None:
                 for port in ports:
                     logging.info("Creating SSH tunnel for port %s...", port)
-                    logging.info(
-                        "SSH tunnel established: localhost:%s -> remote:%s", port, port
-                    )
+                    logging.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
 
             def mock_stop_all_tunnels(self) -> None:
                 for port in getattr(self, "ports", []):
                     logging.info("Stopping SSH tunnel for port %s...", port)
 
             with (
-                patch.object(
-                    MutagenManager, "check_mutagen_installed", mock_check_mutagen
-                ),
-                patch.object(
-                    MutagenManager, "create_sync_session", mock_create_sync_session
-                ),
-                patch.object(
-                    MutagenManager, "terminate_session", mock_terminate_session
-                ),
-                patch.object(
-                    MutagenManager, "wait_for_initial_sync", mock_wait_for_sync
-                ),
-                patch.object(
-                    PortForwardManager, "validate_key_file", mock_validate_key_file
-                ),
+                patch.object(MutagenManager, "check_mutagen_installed", mock_check_mutagen),
+                patch.object(MutagenManager, "create_sync_session", mock_create_sync_session),
+                patch.object(MutagenManager, "terminate_session", mock_terminate_session),
+                patch.object(MutagenManager, "wait_for_initial_sync", mock_wait_for_sync),
+                patch.object(PortForwardManager, "validate_key_file", mock_validate_key_file),
                 patch.object(PortForwardManager, "create_tunnels", mock_create_tunnels),
-                patch.object(
-                    PortForwardManager, "stop_all_tunnels", mock_stop_all_tunnels
-                ),
+                patch.object(PortForwardManager, "stop_all_tunnels", mock_stop_all_tunnels),
             ):
                 yield
         except ImportError as e:

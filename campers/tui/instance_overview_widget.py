@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from textual.widgets import Static
 
@@ -46,12 +46,12 @@ class InstanceOverviewWidget(Static):
             campers_instance._compute_provider_factory_override
             or campers_instance._create_compute_provider
         )
-        self.ec2_manager: Optional[EC2Manager] = None
-        self.pricing_service: Optional[PricingService] = None
+        self.ec2_manager: EC2Manager | None = None
+        self.pricing_service: PricingService | None = None
         self.running_count = 0
         self.stopped_count = 0
-        self.daily_cost: Optional[float] = None
-        self.last_update: Optional[datetime] = None
+        self.daily_cost: float | None = None
+        self.last_update: datetime | None = None
         self._interval_timer = None
         self._initialized = False
 
@@ -81,9 +81,7 @@ class InstanceOverviewWidget(Static):
 
     def _start_refresh_timer(self) -> None:
         """Start the refresh timer and do initial refresh after initialization."""
-        self._interval_timer = self.set_interval(
-            STATS_REFRESH_INTERVAL_SECONDS, self.refresh_stats
-        )
+        self._interval_timer = self.set_interval(STATS_REFRESH_INTERVAL_SECONDS, self.refresh_stats)
         self.run_worker(self._refresh_stats_sync, thread=True)
 
     def _show_init_error(self) -> None:
@@ -148,6 +146,5 @@ class InstanceOverviewWidget(Static):
         """
         cost_str = f"${self.daily_cost:.2f}/day" if self.daily_cost else "N/A"
         return (
-            f"Instances - Running: {self.running_count}  "
-            f"Stopped: {self.stopped_count}  {cost_str}"
+            f"Instances - Running: {self.running_count}  Stopped: {self.stopped_count}  {cost_str}"
         )

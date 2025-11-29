@@ -4,7 +4,6 @@ import os
 from unittest.mock import MagicMock
 
 import pytest
-
 from behave.model import Scenario
 from behave.runner import Context
 
@@ -423,15 +422,11 @@ class TestDryRunHarnessIntegration:
         captured_env_during_cleanup = {}
 
         def capture_env_during_resource_cleanup():
-            captured_env_during_cleanup["AWS_ACCESS_KEY_ID"] = os.environ.get(
-                "AWS_ACCESS_KEY_ID"
-            )
+            captured_env_during_cleanup["AWS_ACCESS_KEY_ID"] = os.environ.get("AWS_ACCESS_KEY_ID")
             captured_env_during_cleanup["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
                 "AWS_SECRET_ACCESS_KEY"
             )
-            captured_env_during_cleanup["AWS_DEFAULT_REGION"] = os.environ.get(
-                "AWS_DEFAULT_REGION"
-            )
+            captured_env_during_cleanup["AWS_DEFAULT_REGION"] = os.environ.get("AWS_DEFAULT_REGION")
             captured_env_during_cleanup["CAMPERS_DIR"] = os.environ.get("CAMPERS_DIR")
 
         original_aws_key = os.environ.get("AWS_ACCESS_KEY_ID")

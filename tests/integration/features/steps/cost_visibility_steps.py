@@ -1,40 +1,29 @@
 """BDD step definitions for cost visibility feature."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 from behave import given, then, when
 from behave.runner import Context
 
-
 SAMPLE_EC2_PRICING_T3_MEDIUM = {
     "terms": {
         "OnDemand": {
-            "OFFER123": {
-                "priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}
-            }
+            "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}}
         }
     }
 }
 
 SAMPLE_EC2_PRICING_G5_2XLARGE = {
     "terms": {
-        "OnDemand": {
-            "OFFER789": {
-                "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "1.21"}}}
-            }
-        }
+        "OnDemand": {"OFFER789": {"priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "1.21"}}}}}
     }
 }
 
 SAMPLE_EBS_PRICING_GP3 = {
     "terms": {
-        "OnDemand": {
-            "OFFER456": {
-                "priceDimensions": {"DIM789": {"pricePerUnit": {"USD": "0.08"}}}
-            }
-        }
+        "OnDemand": {"OFFER456": {"priceDimensions": {"DIM789": {"pricePerUnit": {"USD": "0.08"}}}}}
     }
 }
 
@@ -205,7 +194,7 @@ def step_running_instance_with_type(context: Context, instance_type: str) -> Non
         "state": "running",
         "region": region,
         "instance_type": instance_type,
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": f"test-{instance_type}",
         "volume_size": 50,
     }
@@ -243,7 +232,7 @@ def step_stopped_instance_with_type(context: Context, instance_type: str) -> Non
         "state": "stopped",
         "region": region,
         "instance_type": instance_type,
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": f"test-{instance_type}",
         "volume_size": 40,
     }
@@ -254,9 +243,7 @@ def step_stopped_instance_with_type(context: Context, instance_type: str) -> Non
     context.test_instances.append(instance_id)
 
 
-@given(
-    'I have a running instance of type "{instance_type}" with {volume_size:d}GB volume'
-)
+@given('I have a running instance of type "{instance_type}" with {volume_size:d}GB volume')
 def step_running_instance_with_type_and_volume(
     context: Context, instance_type: str, volume_size: int
 ) -> None:
@@ -288,7 +275,7 @@ def step_running_instance_with_type_and_volume(
         "state": "running",
         "region": region,
         "instance_type": instance_type,
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": instance_name,
         "volume_size": volume_size,
     }
@@ -301,9 +288,7 @@ def step_running_instance_with_type_and_volume(
     context.instance = instance_name
 
 
-@given(
-    'I have a stopped instance of type "{instance_type}" with {volume_size:d}GB volume'
-)
+@given('I have a stopped instance of type "{instance_type}" with {volume_size:d}GB volume')
 def step_stopped_instance_with_type_and_volume(
     context: Context, instance_type: str, volume_size: int
 ) -> None:
@@ -335,7 +320,7 @@ def step_stopped_instance_with_type_and_volume(
         "state": "stopped",
         "region": region,
         "instance_type": instance_type,
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": instance_name,
         "volume_size": volume_size,
     }
@@ -375,7 +360,7 @@ def step_instance_in_unsupported_region(context: Context, region: str) -> None:
         "name": "campers-test-unsupported",
         "state": "running",
         "instance_type": "t3.medium",
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": "test-unsupported",
         "region": region,
     }
@@ -412,7 +397,7 @@ def step_running_instance_generic(context: Context) -> None:
         "state": "running",
         "region": region,
         "instance_type": "t3.medium",
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": "test-generic",
         "volume_size": 50,
     }
@@ -456,7 +441,7 @@ def step_stopped_instance_generic(context: Context) -> None:
         "state": "stopped",
         "region": region,
         "instance_type": "t3.medium",
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": "test-generic",
         "volume_size": 50,
     }
@@ -490,16 +475,12 @@ def step_run_list_twice(context: Context) -> None:
 
 
 @then('cost column shows "{cost}" for {instance_type}')
-def step_cost_column_shows_value(
-    context: Context, cost: str, instance_type: str
-) -> None:
+def step_cost_column_shows_value(context: Context, cost: str, instance_type: str) -> None:
     """Verify cost column displays expected value for instance type."""
     output = context.stdout
 
     if instance_type not in output:
-        raise AssertionError(
-            f"Instance type {instance_type} not found in output:\n{output}"
-        )
+        raise AssertionError(f"Instance type {instance_type} not found in output:\n{output}")
 
     if cost not in output:
         raise AssertionError(f"Cost '{cost}' not found in output:\n{output}")
@@ -523,9 +504,7 @@ def step_see_total_estimated_cost(context: Context, total_cost: str) -> None:
         raise AssertionError(f"'Total estimated cost:' not found in output:\n{output}")
 
     if total_cost not in output:
-        raise AssertionError(
-            f"Total cost '{total_cost}' not found in output:\n{output}"
-        )
+        raise AssertionError(f"Total cost '{total_cost}' not found in output:\n{output}")
 
 
 @then('I see "{text}" at top')
@@ -563,8 +542,7 @@ def step_api_called_once_per_type(context: Context) -> None:
     for instance_type, count in call_count.items():
         if count != 1:
             raise AssertionError(
-                f"Expected 1 API call for {instance_type}, got {count}. "
-                f"All calls: {call_count}"
+                f"Expected 1 API call for {instance_type}, got {count}. All calls: {call_count}"
             )
 
 
@@ -595,9 +573,7 @@ def step_start_operation_completes(context: Context) -> None:
     output = context.stdout
 
     if "successfully started" not in output:
-        raise AssertionError(
-            f"Start operation did not complete successfully:\n{output}"
-        )
+        raise AssertionError(f"Start operation did not complete successfully:\n{output}")
 
 
 @then('that instance shows "{text}" in cost column')

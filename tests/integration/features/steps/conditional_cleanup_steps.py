@@ -32,7 +32,5 @@ def step_user_interrupts_with_ctrlc(context: Context) -> None:
     cleanup messages would be shown when resources exist. The actual interrupt
     handling is tested through integration tests.
     """
-    context.stdout = (
-        "Shutdown requested - beginning cleanup...\nCleanup completed successfully"
-    )
+    context.stdout = "Shutdown requested - beginning cleanup...\nCleanup completed successfully"
     context.exit_code = 130

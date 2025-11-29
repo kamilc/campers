@@ -3,7 +3,6 @@
 import logging
 from dataclasses import dataclass
 
-
 from tests.harness.base import ScenarioHarness
 from tests.harness.services.artifacts import ArtifactManager
 from tests.harness.services.configuration_env import ConfigurationEnv
@@ -133,9 +132,7 @@ class DryRunHarness(ScenarioHarness):
             errors.append(f"Environment restoration failed: {e}")
 
         if errors:
-            logger.warning(
-                f"Cleanup completed with {len(errors)} errors: {'; '.join(errors)}"
-            )
+            logger.warning(f"Cleanup completed with {len(errors)} errors: {'; '.join(errors)}")
         self.services.diagnostics.record_system_snapshot(
             "cleanup-complete", include_thread_stacks=False
         )

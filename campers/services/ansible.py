@@ -4,9 +4,10 @@ import logging
 import shutil
 import subprocess
 import tempfile
-import yaml
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from campers.constants import ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS
 
@@ -78,8 +79,7 @@ class AnsibleManager:
             if name not in playbooks_config:
                 available = list(playbooks_config.keys())
                 raise ValueError(
-                    f"Playbook '{name}' not found in config. "
-                    f"Available playbooks: {available}"
+                    f"Playbook '{name}' not found in config. Available playbooks: {available}"
                 )
 
         inventory_file = self._generate_inventory(
@@ -136,7 +136,7 @@ class AnsibleManager:
             f"ansible_user={user} "
             f"ansible_ssh_private_key_file={key_file} "
             f"ansible_port={port} "
-            "ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n"
+            "ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'\n"
         )
 
         with tempfile.NamedTemporaryFile(
@@ -221,18 +221,16 @@ class AnsibleManager:
             for line in process.stdout:
                 logger.info(line.rstrip())
             process.wait(timeout=ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             process.kill()
             process.wait()
-            raise RuntimeError("Ansible playbook execution timed out after 1 hour")
+            raise RuntimeError("Ansible playbook execution timed out after 1 hour") from e
         finally:
             if process.stdout and hasattr(process.stdout, "close"):
                 process.stdout.close()
 
         if process.returncode != 0:
-            raise RuntimeError(
-                f"Ansible playbook failed with exit code {process.returncode}"
-            )
+            raise RuntimeError(f"Ansible playbook failed with exit code {process.returncode}")
 
     def _cleanup_temp_files(self) -> None:
         """Clean up temporary inventory and playbook files.

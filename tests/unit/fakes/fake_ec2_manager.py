@@ -115,9 +115,7 @@ class FakeEC2Manager:
         key_name, key_file = self.create_key_pair(unique_id)
         sg_id = self.create_security_group(unique_id)
 
-        public_ip = (
-            None if os.environ.get("CAMPERS_NO_PUBLIC_IP") == "1" else "203.0.113.1"
-        )
+        public_ip = None if os.environ.get("CAMPERS_NO_PUBLIC_IP") == "1" else "203.0.113.1"
 
         instance = {
             "instance_id": instance_id,
@@ -153,15 +151,11 @@ class FakeEC2Manager:
                     instances_list.append(
                         {
                             "instance_id": instance["instance_id"],
-                            "name": instance.get(
-                                "name", f"campers-{instance['unique_id']}"
-                            ),
+                            "name": instance.get("name", f"campers-{instance['unique_id']}"),
                             "state": instance["state"],
                             "region": instance.get("region", manager.region),
                             "instance_type": instance.get("instance_type", "t3.medium"),
-                            "launch_time": instance.get(
-                                "launch_time", "2024-01-01T00:00:00+00:00"
-                            ),
+                            "launch_time": instance.get("launch_time", "2024-01-01T00:00:00+00:00"),
                             "camp_config": instance.get("camp_config", "test"),
                             "volume_size": instance.get("volume_size", 30),
                             "unique_id": instance.get("unique_id"),
@@ -172,15 +166,11 @@ class FakeEC2Manager:
                 instances_list.append(
                     {
                         "instance_id": instance["instance_id"],
-                        "name": instance.get(
-                            "name", f"campers-{instance['unique_id']}"
-                        ),
+                        "name": instance.get("name", f"campers-{instance['unique_id']}"),
                         "state": instance["state"],
                         "region": instance.get("region", self.region),
                         "instance_type": instance.get("instance_type", "t3.medium"),
-                        "launch_time": instance.get(
-                            "launch_time", "2024-01-01T00:00:00+00:00"
-                        ),
+                        "launch_time": instance.get("launch_time", "2024-01-01T00:00:00+00:00"),
                         "camp_config": instance.get("camp_config", "test"),
                         "volume_size": instance.get("volume_size", 30),
                         "unique_id": instance.get("unique_id"),

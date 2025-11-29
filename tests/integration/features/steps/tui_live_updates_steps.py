@@ -112,9 +112,7 @@ def step_uptime_widget_displays_elapsed(context: Context) -> None:
 
 
 @when('mutagen status event with state "{state}" and {file_count:d} files is received')
-def step_mutagen_status_with_files_received(
-    context: Context, state: str, file_count: int
-) -> None:
+def step_mutagen_status_with_files_received(context: Context, state: str, file_count: int) -> None:
     """Send mutagen status event with file count to queue.
 
     Parameters
@@ -347,8 +345,6 @@ def step_application_exits_immediately(context: Context) -> None:
             start_time = time.time()
             await pilot.press("ctrl+c")
             elapsed = time.time() - start_time
-            assert elapsed < 2.0, (
-                f"Expected immediate exit on double Ctrl+C, took {elapsed}s"
-            )
+            assert elapsed < 2.0, f"Expected immediate exit on double Ctrl+C, took {elapsed}s"
 
     asyncio.run(verify_immediate_exit())

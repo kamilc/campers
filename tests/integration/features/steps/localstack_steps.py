@@ -183,9 +183,7 @@ def step_localstack_is_healthy(context: Context) -> None:
     context : Context
         Behave context object
     """
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
     if not is_localstack:
         return
@@ -250,12 +248,8 @@ def step_localstack_is_healthy(context: Context) -> None:
     logger.info("LocalStackHarness monitor controller active; legacy monitor disabled")
 
 
-@then(
-    'an EC2 instance was created in LocalStack with tag "{tag_key}" equal to "{tag_value}"'
-)
-def step_ec2_instance_created_with_tag(
-    context: Context, tag_key: str, tag_value: str
-) -> None:
+@then('an EC2 instance was created in LocalStack with tag "{tag_key}" equal to "{tag_value}"')
+def step_ec2_instance_created_with_tag(context: Context, tag_key: str, tag_value: str) -> None:
     """Verify that an EC2 instance was created with a specific tag.
 
     Parameters
@@ -286,9 +280,7 @@ def step_ec2_instance_created_with_tag(
         )
 
     context.localstack_instance_id = instances[0]["InstanceId"]
-    logger.info(
-        f"Found instance {context.localstack_instance_id} with tag {tag_key}={tag_value}"
-    )
+    logger.info(f"Found instance {context.localstack_instance_id} with tag {tag_key}={tag_value}")
 
 
 @then('that instance has tag "{tag_key}" equal to "{tag_value}"')
@@ -311,9 +303,7 @@ def step_instance_has_tag(context: Context, tag_key: str, tag_value: str) -> Non
 
     ec2_client = create_localstack_ec2_client()
 
-    response = ec2_client.describe_instances(
-        InstanceIds=[context.localstack_instance_id]
-    )
+    response = ec2_client.describe_instances(InstanceIds=[context.localstack_instance_id])
 
     instances = []
     for reservation in response.get("Reservations", []):
@@ -343,9 +333,7 @@ def step_instance_has_tag(context: Context, tag_key: str, tag_value: str) -> Non
             f"expected {tag_value}"
         )
 
-    logger.info(
-        f"Instance {context.localstack_instance_id} has tag {tag_key}={tag_value}"
-    )
+    logger.info(f"Instance {context.localstack_instance_id} has tag {tag_key}={tag_value}")
 
 
 @then('that instance is in "{expected_state}" state')
@@ -366,18 +354,14 @@ def step_instance_is_in_state(context: Context, expected_state: str) -> None:
 
     ec2_client = create_localstack_ec2_client()
 
-    response = ec2_client.describe_instances(
-        InstanceIds=[context.localstack_instance_id]
-    )
+    response = ec2_client.describe_instances(InstanceIds=[context.localstack_instance_id])
 
     instances = []
     for reservation in response.get("Reservations", []):
         instances.extend(reservation.get("Instances", []))
 
     if not instances:
-        raise AssertionError(
-            f"Instance {context.localstack_instance_id} not found in LocalStack"
-        )
+        raise AssertionError(f"Instance {context.localstack_instance_id} not found in LocalStack")
 
     instance = instances[0]
     actual_state = instance["State"]["Name"]
@@ -387,6 +371,4 @@ def step_instance_is_in_state(context: Context, expected_state: str) -> None:
             f"Instance {context.localstack_instance_id} is in state '{actual_state}', expected '{expected_state}'"
         )
 
-    logger.info(
-        f"Instance {context.localstack_instance_id} is in state '{actual_state}'"
-    )
+    logger.info(f"Instance {context.localstack_instance_id} is in state '{actual_state}'")

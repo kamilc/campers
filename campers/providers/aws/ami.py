@@ -131,9 +131,7 @@ class AMIResolver:
         if not response["Images"]:
             owner_msg = f"owner={owner}, " if owner else ""
             arch_msg = f"architecture={architecture}, " if architecture else ""
-            raise ValueError(
-                f"No AMI found for {owner_msg}{arch_msg}name={name_pattern}"
-            )
+            raise ValueError(f"No AMI found for {owner_msg}{arch_msg}name={name_pattern}")
 
         images = sorted(
             response["Images"],

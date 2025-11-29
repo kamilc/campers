@@ -36,9 +36,7 @@ def temp_ssh_setup(tmp_path):
     """
 
     temp_key = tmp_path / "test.pem"
-    temp_key.write_text(
-        "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n"
-    )
+    temp_key.write_text("-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n")
     temp_key.chmod(0o600)
 
     temp_ssh_dir = tmp_path / "ssh"
@@ -158,9 +156,7 @@ def test_create_sync_session_minimal(mutagen_manager, temp_ssh_setup) -> None:
         assert ".gitignore" in mutagen_cmd
 
 
-def test_create_sync_session_with_ignore_patterns(
-    mutagen_manager, temp_ssh_setup
-) -> None:
+def test_create_sync_session_with_ignore_patterns(mutagen_manager, temp_ssh_setup) -> None:
     """Test creating sync session with ignore patterns."""
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
@@ -209,9 +205,7 @@ def test_create_sync_session_with_include_vcs(mutagen_manager, temp_ssh_setup) -
 def test_create_sync_session_failure(mutagen_manager, temp_ssh_setup) -> None:
     """Test creating sync session failure."""
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(
-            returncode=1, stderr="sync session creation failed"
-        )
+        mock_run.return_value = MagicMock(returncode=1, stderr="sync session creation failed")
 
         with pytest.raises(RuntimeError, match="Failed to create Mutagen sync session"):
             mutagen_manager.create_sync_session(
@@ -228,9 +222,7 @@ def test_create_sync_session_failure(mutagen_manager, temp_ssh_setup) -> None:
 def test_wait_for_initial_sync_success(mutagen_manager) -> None:
     """Test waiting for initial sync completion."""
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout="Status: Watching for changes"
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="Status: Watching for changes")
 
         mutagen_manager.wait_for_initial_sync("campers-123", timeout=10)
 
@@ -255,9 +247,7 @@ def test_wait_for_initial_sync_timeout(mutagen_manager) -> None:
 def test_wait_for_initial_sync_check_failure(mutagen_manager) -> None:
     """Test waiting for initial sync when status check fails."""
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(
-            returncode=1, stderr="session not found", text=True
-        )
+        mock_run.return_value = MagicMock(returncode=1, stderr="session not found", text=True)
 
         with pytest.raises(RuntimeError, match="Failed to check sync status"):
             mutagen_manager.wait_for_initial_sync("campers-123", timeout=10)

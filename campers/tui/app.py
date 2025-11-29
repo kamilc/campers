@@ -6,7 +6,7 @@ import logging
 import queue
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -19,11 +19,12 @@ from campers.constants import (
     CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS,
     UPTIME_UPDATE_INTERVAL_SECONDS,
 )
-from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.logging import StreamFormatter, TuiLogHandler, TuiLogMessage
+from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.tui.styling import TUI_CSS
 from campers.tui.terminal import detect_terminal_background
 from campers.tui.widgets import WidgetID
+from campers.utils import get_aws_credentials_error_message
 
 if TYPE_CHECKING:
     from campers import Campers
@@ -143,9 +144,7 @@ class CampersTUI(App):
 
         self.instance_start_time = datetime.now()
         self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
-        self.set_interval(
-            UPTIME_UPDATE_INTERVAL_SECONDS, self.update_uptime, name="uptime-timer"
-        )
+        self.set_interval(UPTIME_UPDATE_INTERVAL_SECONDS, self.update_uptime, name="uptime-timer")
 
         if self._start_worker:
             self.run_worker(self.run_campers_logic, exit_on_error=False, thread=True)
@@ -193,7 +192,7 @@ class CampersTUI(App):
         if self.instance_start_time is None:
             return
 
-        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+        now_utc = datetime.now(UTC).replace(tzinfo=None)
         elapsed = now_utc - self.instance_start_time
         total_seconds = int(elapsed.total_seconds())
 
@@ -285,9 +284,7 @@ class CampersTUI(App):
 
         if "region" in config:
             try:
-                self.query_one(f"#{WidgetID.REGION}").update(
-                    f"Region: {config['region']}"
-                )
+                self.query_one(f"#{WidgetID.REGION}").update(f"Region: {config['region']}")
             except Exception as e:
                 logging.error("Failed to update region widget: %s", e)
 
@@ -300,9 +297,7 @@ class CampersTUI(App):
 
         if "command" in config:
             try:
-                self.query_one(f"#{WidgetID.COMMAND}").update(
-                    f"Command: {config['command']}"
-                )
+                self.query_one(f"#{WidgetID.COMMAND}").update(f"Command: {config['command']}")
             except Exception as e:
                 logging.error("Failed to update command widget: %s", e)
 
@@ -316,9 +311,7 @@ class CampersTUI(App):
         """
         if "state" in details:
             try:
-                self.query_one(f"#{WidgetID.STATUS}").update(
-                    f"Status: {details['state']}"
-                )
+                self.query_one(f"#{WidgetID.STATUS}").update(f"Status: {details['state']}")
             except Exception as e:
                 logging.error("Failed to update status widget: %s", e)
 
@@ -331,7 +324,9 @@ class CampersTUI(App):
         if "public_ip" in details and details["public_ip"]:
             try:
                 ssh_username = details.get("ssh_username", "ubuntu")
-                ssh_string = f"ssh -o IdentitiesOnly=yes -i {details.get('key_file', 'key.pem')} {ssh_username}@{details['public_ip']}"
+                key_file = details.get("key_file", "key.pem")
+                public_ip = details["public_ip"]
+                ssh_string = f"ssh -o IdentitiesOnly=yes -i {key_file} {ssh_username}@{public_ip}"
                 self.query_one(f"#{WidgetID.SSH}").update(f"SSH: {ssh_string}")
             except Exception as e:
                 logging.error("Failed to update SSH widget: %s", e)
@@ -369,14 +364,7 @@ class CampersTUI(App):
             logging.info("Operation cancelled by user")
             self.worker_exit_code = 130
         except NoCredentialsError:
-            error_message = (
-                "AWS credentials not found\n\n"
-                "Configure your credentials:\n"
-                "  aws configure\n\n"
-                "Or set environment variables:\n"
-                "  export AWS_ACCESS_KEY_ID=...\n"
-                "  export AWS_SECRET_ACCESS_KEY=..."
-            )
+            error_message = get_aws_credentials_error_message()
             logging.error("AWS credentials not found")
             self.worker_exit_code = 1
         except ClientError as e:
@@ -458,16 +446,13 @@ class CampersTUI(App):
 
             if (
                 self.last_ctrl_c_time > 0
-                and (current_time - self.last_ctrl_c_time)
-                < CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS
+                and (current_time - self.last_ctrl_c_time) < CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS
             ):
                 try:
                     log_widget = self.query_one(Log)
                     log_widget.write_line("Force exit - skipping cleanup!")
                 except Exception as e:
-                    logger.debug(
-                        "Failed to write to log widget during force exit: %s", e
-                    )
+                    logger.debug("Failed to write to log widget during force exit: %s", e)
 
                 if hasattr(self, "_driver") and self._driver is not None:
                     self.exit(130)
@@ -488,9 +473,7 @@ class CampersTUI(App):
 
         try:
             log_widget = self.query_one(Log)
-            log_widget.write_line(
-                "Graceful shutdown initiated (press Ctrl+C again to force exit)"
-            )
+            log_widget.write_line("Graceful shutdown initiated (press Ctrl+C again to force exit)")
         except Exception as e:
             logger.debug("Failed to write shutdown message to log widget: %s", e)
 
@@ -500,10 +483,7 @@ class CampersTUI(App):
 
     def _run_cleanup(self) -> None:
         """Run cleanup in worker thread to keep TUI responsive."""
-        if (
-            hasattr(self.campers, "_resources")
-            and "ssh_manager" in self.campers._resources
-        ):
+        if hasattr(self.campers, "_resources") and "ssh_manager" in self.campers._resources:
             self.campers._resources["ssh_manager"].abort_active_command()
 
         if not self.campers._cleanup_in_progress:

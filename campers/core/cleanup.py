@@ -90,7 +90,7 @@ class CleanupManager:
         return 0.0
 
     def cleanup_resources(
-        self, signum: int | None = None, frame: types.FrameType | None = None
+        self, signum: int | None = None, _frame: types.FrameType | None = None
     ) -> None:
         """Perform graceful cleanup of all resources.
 
@@ -98,7 +98,7 @@ class CleanupManager:
         ----------
         signum : int | None
             Signal number if triggered by signal handler (e.g., signal.SIGINT)
-        frame : types.FrameType | None
+        _frame : types.FrameType | None
             Current stack frame (unused but required by signal handler signature).
             Python's signal.signal() requires handlers to accept (signum, frame).
 
@@ -136,9 +136,7 @@ class CleanupManager:
 
             if signum is not None:
                 exit_code = (
-                    130
-                    if signum == signal.SIGINT
-                    else (143 if signum == signal.SIGTERM else 1)
+                    130 if signum == signal.SIGINT else (143 if signum == signal.SIGTERM else 1)
                 )
                 if os.environ.get("CAMPERS_FORCE_SIGNAL_EXIT") == "1":
                     logging.info(
@@ -152,9 +150,7 @@ class CleanupManager:
         if force_exit and exit_code is not None:
             sys.exit(exit_code)
 
-    def cleanup_ssh_connections(
-        self, resources: dict[str, Any], errors: list[Exception]
-    ) -> None:
+    def cleanup_ssh_connections(self, resources: dict[str, Any], errors: list[Exception]) -> None:
         """Close SSH connections and abort any running commands.
 
         Parameters
@@ -175,9 +171,7 @@ class CleanupManager:
             return
 
         if os.environ.get("CAMPERS_HARNESS_MANAGED") == "1":
-            logging.info(
-                "Skipping SSH connection closure - harness will manage SSH lifecycle"
-            )
+            logging.info("Skipping SSH connection closure - harness will manage SSH lifecycle")
             return
 
         resources["ssh_manager"].abort_active_command()
@@ -197,9 +191,7 @@ class CleanupManager:
 
             self._emit_cleanup_event("close_ssh", "failed")
 
-    def cleanup_port_forwarding(
-        self, resources: dict[str, Any], errors: list[Exception]
-    ) -> None:
+    def cleanup_port_forwarding(self, resources: dict[str, Any], errors: list[Exception]) -> None:
         """Stop SSH port forwarding tunnels.
 
         Parameters
@@ -220,9 +212,7 @@ class CleanupManager:
             return
 
         if os.environ.get("CAMPERS_HARNESS_MANAGED") == "1":
-            logging.info(
-                "Skipping port forwarding cleanup - harness will manage tunnel lifecycle"
-            )
+            logging.info("Skipping port forwarding cleanup - harness will manage tunnel lifecycle")
             return
 
         logging.info("Stopping port forwarding...")
@@ -240,9 +230,7 @@ class CleanupManager:
 
             self._emit_cleanup_event("stop_tunnels", "failed")
 
-    def cleanup_mutagen_session(
-        self, resources: dict[str, Any], errors: list[Exception]
-    ) -> None:
+    def cleanup_mutagen_session(self, resources: dict[str, Any], errors: list[Exception]) -> None:
         """Terminate Mutagen sync session.
 
         Parameters
@@ -308,15 +296,11 @@ class CleanupManager:
             if action == "stop":
                 logging.debug("No instance to stop - launch may not have completed")
             else:
-                logging.debug(
-                    "No instance to terminate - launch may not have completed"
-                )
+                logging.debug("No instance to terminate - launch may not have completed")
             return
 
         instance_details = resources_to_clean["instance_details"]
-        instance_id = instance_details.get("InstanceId") or instance_details.get(
-            "instance_id"
-        )
+        instance_id = instance_details.get("InstanceId") or instance_details.get("instance_id")
 
         if instance_id is None:
             logging.warning("Cannot %s instance: instance_id is None", action)
@@ -329,9 +313,7 @@ class CleanupManager:
         logging.info("Cleaning up cloud instance %s...", instance_id)
 
         if self.update_queue is not None:
-            self.update_queue.put(
-                {"type": "status_update", "payload": {"status": status_value}}
-            )
+            self.update_queue.put({"type": "status_update", "payload": {"status": status_value}})
             time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
 
         self._emit_cleanup_event(event_action, "in_progress")
@@ -345,9 +327,7 @@ class CleanupManager:
                     volume_size = compute_provider.get_volume_size(instance_id)
                     storage_rate = self._get_storage_rate(compute_provider.region)
                     storage_cost = (
-                        float(volume_size) * storage_rate
-                        if volume_size is not None
-                        else 0.0
+                        float(volume_size) * storage_rate if volume_size is not None else 0.0
                     )
 
                     print("\nInstance stopped successfully")
@@ -395,9 +375,7 @@ class CleanupManager:
                 logging.info("No resources to clean up")
                 return
 
-            logging.info(
-                "Shutdown requested - stopping instance and preserving resources..."
-            )
+            logging.info("Shutdown requested - stopping instance and preserving resources...")
 
             if "ssh_manager" in resources_to_clean:
                 resources_to_clean["ssh_manager"].abort_active_command()

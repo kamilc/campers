@@ -5,8 +5,8 @@ import logging
 from behave import given, then, when
 from behave.runner import Context
 
-from tests.integration.features.steps.config_steps import _write_temp_config
 from tests.integration.features.steps.common_steps import execute_command_direct
+from tests.integration.features.steps.config_steps import _write_temp_config
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +88,7 @@ def step_config_with_multiple_playbooks_defined(
 
 
 @given('camp "{camp_name}" has ansible_playbook "{playbook_name}"')
-def step_camp_with_ansible_playbook(
-    context: Context, camp_name: str, playbook_name: str
-) -> None:
+def step_camp_with_ansible_playbook(context: Context, camp_name: str, playbook_name: str) -> None:
     """Configure camp with single ansible_playbook reference.
 
     Parameters
@@ -121,9 +119,7 @@ def step_camp_with_ansible_playbook(
 
 
 @given('camp "{camp_name}" has ansible_playbooks [{playbooks}]')
-def step_camp_with_ansible_playbooks(
-    context: Context, camp_name: str, playbooks: str
-) -> None:
+def step_camp_with_ansible_playbooks(context: Context, camp_name: str, playbooks: str) -> None:
     """Configure camp with multiple ansible_playbooks references.
 
     Parameters
@@ -181,9 +177,7 @@ def step_ansible_not_installed(context: Context) -> None:
     if not hasattr(context, "patches"):
         context.patches = []
 
-    patch = unittest.mock.patch(
-        "campers.services.ansible.shutil.which", side_effect=mock_which
-    )
+    patch = unittest.mock.patch("campers.services.ansible.shutil.which", side_effect=mock_which)
     patch.start()
     context.patches.append(patch)
 
@@ -233,9 +227,7 @@ def step_ansible_installed(context: Context) -> None:
 
 
 @given('config has ansible_playbook "{playbook_name}" defined')
-def step_config_has_ansible_playbook_defined(
-    context: Context, playbook_name: str
-) -> None:
+def step_config_has_ansible_playbook_defined(context: Context, playbook_name: str) -> None:
     """Configure camp with ansible_playbook and create playbook definition.
 
     Parameters
@@ -748,14 +740,10 @@ def step_playbook_executed_second(context: Context, playbook_name: str) -> None:
 
     context.execution_order.append(playbook_name)
 
-    if len(context.execution_order) == 2:
-        if (
-            context.execution_order[0] != "base"
-            or context.execution_order[1] != "webapp"
-        ):
-            raise AssertionError(
-                f"Playbook execution order incorrect: {context.execution_order}"
-            )
+    if len(context.execution_order) == 2 and (
+        context.execution_order[0] != "base" or context.execution_order[1] != "webapp"
+    ):
+        raise AssertionError(f"Playbook execution order incorrect: {context.execution_order}")
 
     logger.info(f"Recorded second playbook execution: {playbook_name}")
 
@@ -810,9 +798,7 @@ def step_error_message_contains(context: Context, text: str) -> None:
 
     else:
         available_attrs = [
-            attr
-            for attr in dir(context)
-            if not attr.startswith("_") and "error" in attr.lower()
+            attr for attr in dir(context) if not attr.startswith("_") and "error" in attr.lower()
         ]
         logger.warning(
             f"No error found in expected locations. Available error-related attrs: {available_attrs}"
@@ -921,10 +907,7 @@ def step_error_message_explains_mutual_exclusivity(context: Context) -> None:
     else:
         error_msg = ""
 
-    if (
-        "mutually exclusive" not in error_msg.lower()
-        and "both" not in error_msg.lower()
-    ):
+    if "mutually exclusive" not in error_msg.lower() and "both" not in error_msg.lower():
         raise AssertionError(
             f"Expected mutual exclusivity mentioned in error message, got: {error_msg}"
         )
@@ -972,11 +955,10 @@ def step_ansible_would_connect_as(context: Context, username: str) -> None:
     username : str
         Expected username
     """
-    if hasattr(context, "ssh_username"):
-        if context.ssh_username != username:
-            raise AssertionError(
-                f"Expected Ansible to connect as {username}, got {context.ssh_username}"
-            )
+    if hasattr(context, "ssh_username") and context.ssh_username != username:
+        raise AssertionError(
+            f"Expected Ansible to connect as {username}, got {context.ssh_username}"
+        )
 
     logger.info(f"Verified Ansible would connect as: {username}")
 

@@ -114,9 +114,7 @@ class DiagnosticsCollector:
         """Update the on-disk log path used for streaming diagnostics."""
         self._log_path = Path(log_path) if log_path else None
 
-    def record_system_snapshot(
-        self, description: str, include_thread_stacks: bool = False
-    ) -> None:
+    def record_system_snapshot(self, description: str, include_thread_stacks: bool = False) -> None:
         """Capture and record a holistic system snapshot."""
         from tests.harness.utils.system_snapshot import gather_system_snapshot
 

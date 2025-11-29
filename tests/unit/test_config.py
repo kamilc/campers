@@ -504,9 +504,7 @@ class TestConfigLoader:
 
         loader = ConfigLoader()
 
-        with pytest.raises(
-            ValueError, match="ports entries must be between 1 and 65535"
-        ):
+        with pytest.raises(ValueError, match="ports entries must be between 1 and 65535"):
             loader.validate_config(config)
 
     def test_validate_config_ports_empty_list(self) -> None:
@@ -678,10 +676,7 @@ class TestConfigLoaderVariableSubstitution:
         assert "vars" in config
         assert config["vars"]["project_name"] == "ml-training"
         assert config["vars"]["base_path"] == "/home/ubuntu"
-        assert (
-            config["camps"]["dev"]["command"]
-            == "cd /home/ubuntu/ml-training && python train.py"
-        )
+        assert config["camps"]["dev"]["command"] == "cd /home/ubuntu/ml-training && python train.py"
 
     def test_nested_variable_expansion(self, tmp_path: Path) -> None:
         config_file = tmp_path / "campers.yaml"
@@ -820,8 +815,7 @@ class TestConfigLoaderVariableSubstitution:
             loader.load_config(str(config_file))
 
         assert (
-            "undefined_variable" in str(exc_info.value)
-            or "missing" in str(exc_info.value).lower()
+            "undefined_variable" in str(exc_info.value) or "missing" in str(exc_info.value).lower()
         )
 
     def test_circular_reference_handling(self, tmp_path: Path) -> None:
@@ -1273,9 +1267,7 @@ class TestConfigLoaderVariableSubstitution:
 
         assert "Invalid ssh_username" in str(exc_info.value)
 
-    def test_ssh_username_validation_invalid_special_chars(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ssh_username_validation_invalid_special_chars(self, tmp_path: Path) -> None:
         config = {
             "defaults": {
                 "region": "us-east-1",
@@ -1291,9 +1283,7 @@ class TestConfigLoaderVariableSubstitution:
 
         assert "Invalid ssh_username" in str(exc_info.value)
 
-    def test_ssh_username_validation_valid_underscore_start(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ssh_username_validation_valid_underscore_start(self, tmp_path: Path) -> None:
         config = {
             "defaults": {
                 "region": "us-east-1",

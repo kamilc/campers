@@ -12,9 +12,7 @@ import docker
 
 logger = logging.getLogger(__name__)
 
-SSH_CONTAINER_BOOT_BASE_TIMEOUT = int(
-    os.environ.get("CAMPERS_SSH_CONTAINER_BOOT_TIMEOUT", "20")
-)
+SSH_CONTAINER_BOOT_BASE_TIMEOUT = int(os.environ.get("CAMPERS_SSH_CONTAINER_BOOT_TIMEOUT", "20"))
 
 SSH_CONTAINER_IMAGE = os.environ.get("CAMPERS_SSH_IMAGE", "campers/python-ssh:latest")
 
@@ -86,9 +84,7 @@ class EC2ContainerManager:
                 sock.close()
 
                 if result == 0:
-                    logger.debug(
-                        f"SSH server ready on port {port} (attempt {attempt + 1})"
-                    )
+                    logger.debug(f"SSH server ready on port {port} (attempt {attempt + 1})")
                     return True
             except Exception as e:
                 logger.debug(f"SSH health check failed (attempt {attempt + 1}): {e}")
@@ -116,9 +112,7 @@ class EC2ContainerManager:
                     f"Found existing container {container_name}, removing it (attempt {attempt + 1}/{max_retries})"
                 )
                 existing_container.remove(force=True)
-                logger.debug(
-                    f"Successfully removed existing container {container_name}"
-                )
+                logger.debug(f"Successfully removed existing container {container_name}")
                 return
             except docker.errors.NotFound:
                 logger.debug(f"No existing container found with name {container_name}")
@@ -215,9 +209,7 @@ class EC2ContainerManager:
                 logger.error(f"Failed to set permissions on key file {key_file}: {e}")
                 raise RuntimeError(f"Failed to set key file permissions: {e}") from e
 
-            logger.info(
-                f"SSH key generation completed: {key_file} (exists: {key_file.exists()})"
-            )
+            logger.info(f"SSH key generation completed: {key_file} (exists: {key_file.exists()})")
             return key_file
 
     def create_instance_container(
@@ -259,15 +251,11 @@ class EC2ContainerManager:
 
         if block_ssh:
             ports = {}
-            logger.info(
-                f"Creating SSH container for {instance_id} WITHOUT port mapping (blocked)"
-            )
+            logger.info(f"Creating SSH container for {instance_id} WITHOUT port mapping (blocked)")
         else:
             if host_port is not None:
                 port = host_port
-                logger.info(
-                    f"Creating SSH container for {instance_id} using provided port {port}"
-                )
+                logger.info(f"Creating SSH container for {instance_id} using provided port {port}")
             else:
                 port = self.next_port
                 self.next_port += 1
@@ -294,9 +282,7 @@ exec /init
 """
             logger.info(f"SSH container will delay startup by {ssh_delay} seconds")
             try:
-                logger.debug(
-                    f"About to call containers.run() for {instance_id} with delay"
-                )
+                logger.debug(f"About to call containers.run() for {instance_id} with delay")
                 container = self.client.containers.run(
                     SSH_CONTAINER_IMAGE,
                     name=container_name,
@@ -307,9 +293,7 @@ exec /init
                     entrypoint="/bin/bash",
                     command=["-c", delay_script],
                 )
-                logger.debug(
-                    f"Successfully created container {container.id} for {instance_id}"
-                )
+                logger.debug(f"Successfully created container {container.id} for {instance_id}")
             except docker.errors.APIError as e:
                 if "already in use" in str(e) or "Conflict" in str(e):
                     logger.warning(
@@ -328,14 +312,10 @@ exec /init
                         command=["-c", delay_script],
                     )
                 else:
-                    logger.error(
-                        f"Docker API call failed for {instance_id}: {e}", exc_info=True
-                    )
+                    logger.error(f"Docker API call failed for {instance_id}: {e}", exc_info=True)
                     raise
             except Exception as e:
-                logger.error(
-                    f"Docker API call failed for {instance_id}: {e}", exc_info=True
-                )
+                logger.error(f"Docker API call failed for {instance_id}: {e}", exc_info=True)
                 raise
         else:
             try:
@@ -348,9 +328,7 @@ exec /init
                     environment=environment,
                     ports=ports,
                 )
-                logger.debug(
-                    f"Successfully created container {container.id} for {instance_id}"
-                )
+                logger.debug(f"Successfully created container {container.id} for {instance_id}")
             except docker.errors.APIError as e:
                 if "already in use" in str(e) or "Conflict" in str(e):
                     logger.warning(
@@ -367,14 +345,10 @@ exec /init
                         ports=ports,
                     )
                 else:
-                    logger.error(
-                        f"Docker API call failed for {instance_id}: {e}", exc_info=True
-                    )
+                    logger.error(f"Docker API call failed for {instance_id}: {e}", exc_info=True)
                     raise
             except Exception as e:
-                logger.error(
-                    f"Docker API call failed for {instance_id}: {e}", exc_info=True
-                )
+                logger.error(f"Docker API call failed for {instance_id}: {e}", exc_info=True)
                 raise
 
         if not block_ssh:
@@ -384,9 +358,7 @@ exec /init
 
         timeout = get_ssh_container_boot_timeout()
         ssh_delay = int(os.environ.get("CAMPERS_SSH_DELAY_SECONDS", "0"))
-        logger.info(
-            f"Polling container status for up to {timeout}s (delay={ssh_delay}s)..."
-        )
+        logger.info(f"Polling container status for up to {timeout}s (delay={ssh_delay}s)...")
         start_time = time.time()
 
         container_ready = False
@@ -421,17 +393,13 @@ exec /init
                         f"SSH server ready on port {port} after {ssh_ready_elapsed:.1f}s (total: {total_elapsed:.1f}s)"
                     )
 
-                    logger.info(
-                        "Waiting for SSH authentication subsystem to initialize..."
-                    )
+                    logger.info("Waiting for SSH authentication subsystem to initialize...")
                     time.sleep(2)
 
                     break
                 time.sleep(0.5)
             else:
-                raise TimeoutError(
-                    f"SSH server not responding on port {port} after {timeout}s"
-                )
+                raise TimeoutError(f"SSH server not responding on port {port} after {timeout}s")
 
         if not block_ssh:
             logger.info(
@@ -518,18 +486,14 @@ exec /init
             self.terminate_instance_container(instance_id)
 
         try:
-            orphaned_containers = self.client.containers.list(
-                all=True, filters={"name": "ssh-"}
-            )
+            orphaned_containers = self.client.containers.list(all=True, filters={"name": "ssh-"})
 
             for container in orphaned_containers:
                 try:
                     logger.info(f"Removing orphaned container: {container.name}")
                     container.remove(force=True)
                 except Exception as e:
-                    logger.debug(
-                        f"Error removing orphaned container {container.name}: {e}"
-                    )
+                    logger.debug(f"Error removing orphaned container {container.name}: {e}")
         except Exception as e:
             logger.debug(f"Error listing orphaned containers: {e}")
 

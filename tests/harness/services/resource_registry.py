@@ -1,7 +1,8 @@
 """Registry for managing resource lifecycle with cleanup ordering."""
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,4 @@ class ResourceRegistry:
                 entry["dispose_fn"](entry["handle"])
                 logger.debug(f"Cleaned up {entry['kind']}: {entry['label']}")
             except Exception as e:
-                logger.warning(
-                    f"Cleanup failed for {entry['kind']} '{entry['label']}': {e}"
-                )
+                logger.warning(f"Cleanup failed for {entry['kind']} '{entry['label']}': {e}")

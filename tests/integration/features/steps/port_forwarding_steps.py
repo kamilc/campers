@@ -7,10 +7,11 @@ import os
 import tarfile
 import time
 
-import docker
 import requests
 from behave import given, then, when
 from behave.runner import Context
+
+import docker
 
 logger = logging.getLogger(__name__)
 
@@ -178,9 +179,7 @@ def step_command_executing(context: Context) -> None:
 @given("port {port:d} tunnel creation fails")
 def step_port_tunnel_fails(context: Context, port: int) -> None:
     """Mark that tunnel creation will fail for specific port."""
-    context.harness.services.configuration_env.set(
-        "CAMPERS_TUNNEL_FAIL_PORT", str(port)
-    )
+    context.harness.services.configuration_env.set("CAMPERS_TUNNEL_FAIL_PORT", str(port))
 
 
 @given("local port {port:d} is already in use")
@@ -235,9 +234,7 @@ def step_status_messages_all_ports(context: Context) -> None:
 def step_no_tunnels_created(context: Context) -> None:
     """Verify no SSH tunnels were created."""
     output = get_output_text(context)
-    assert "Creating SSH tunnel" not in output, (
-        f"Found 'Creating SSH tunnel' in output:\n{output}"
-    )
+    assert "Creating SSH tunnel" not in output, f"Found 'Creating SSH tunnel' in output:\n{output}"
 
 
 @then("no port forwarding log messages appear")
@@ -396,9 +393,7 @@ def start_http_server_in_container(context: Context, port: int) -> None:
     try:
         container = docker_client.containers.get(container_name)
 
-        logger.info(
-            f"Starting HTTP server on port {port} in container {container_name}"
-        )
+        logger.info(f"Starting HTTP server on port {port} in container {container_name}")
 
         check_python = container.exec_run(["sh", "-c", "command -v python3"])
 
@@ -427,15 +422,15 @@ def start_http_server_in_container(context: Context, port: int) -> None:
                     if hasattr(install_result.output, "decode")
                     else str(install_result.output)
                 )
-                error_msg = f"Failed to install Python3 in container {container_name}: {error_output}"
+                error_msg = (
+                    f"Failed to install Python3 in container {container_name}: {error_output}"
+                )
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
 
             logger.info(f"Python3 installed successfully in container {container_name}")
 
-        script_path = os.path.join(
-            os.path.dirname(__file__), "..", "support", "http_server.py"
-        )
+        script_path = os.path.join(os.path.dirname(__file__), "..", "support", "http_server.py")
 
         with open(script_path, "rb") as f:
             script_content = f.read()
@@ -450,9 +445,7 @@ def start_http_server_in_container(context: Context, port: int) -> None:
 
         try:
             container.put_archive("/tmp", tar_buffer)
-            logger.debug(
-                f"HTTP server script copied to /tmp in container {container_name}"
-            )
+            logger.debug(f"HTTP server script copied to /tmp in container {container_name}")
         except (docker.errors.APIError, docker.errors.ContainerError) as e:
             logger.warning(f"Failed to copy HTTP server script to container: {e}")
             return
@@ -478,9 +471,7 @@ def start_http_server_in_container(context: Context, port: int) -> None:
             if attempt < 9:
                 time.sleep(0.5)
             else:
-                log_cmd = (
-                    f"cat /tmp/http_server_{port}.log 2>/dev/null || echo 'No log file'"
-                )
+                log_cmd = f"cat /tmp/http_server_{port}.log 2>/dev/null || echo 'No log file'"
                 log_result = container.exec_run(["sh", "-c", log_cmd])
                 log_output = (
                     log_result.output.decode()
@@ -541,17 +532,11 @@ def step_http_request_succeeds(context: Context, port: int) -> None:
 
     for attempt in range(max_attempts):
         try:
-            logger.debug(
-                f"HTTP request attempt {attempt + 1}/{max_attempts} to localhost:{port}"
-            )
-            response = requests.get(
-                f"http://localhost:{port}", timeout=3, allow_redirects=False
-            )
+            logger.debug(f"HTTP request attempt {attempt + 1}/{max_attempts} to localhost:{port}")
+            response = requests.get(f"http://localhost:{port}", timeout=3, allow_redirects=False)
 
             if response.status_code == 200:
-                logger.info(
-                    f"HTTP request to localhost:{port} succeeded (attempt {attempt + 1})"
-                )
+                logger.info(f"HTTP request to localhost:{port} succeeded (attempt {attempt + 1})")
                 return
 
             last_error = f"HTTP {response.status_code}"
@@ -575,9 +560,7 @@ def step_http_request_succeeds(context: Context, port: int) -> None:
                 time.sleep(1)
                 continue
 
-            logger.error(
-                f"Failed to connect to localhost:{port} after {max_attempts} attempts"
-            )
+            logger.error(f"Failed to connect to localhost:{port} after {max_attempts} attempts")
 
             output = get_output_text(context)
             logger.error(f"Tunnel status check - Full output: {output}")
@@ -674,9 +657,7 @@ def start_http_servers_for_all_configured_ports(context: Context) -> None:
         logger.debug("No config_data available, skipping HTTP server setup")
         return
 
-    unique_ports = extract_ports_from_config(
-        context, include_defaults=True, include_camps=True
-    )
+    unique_ports = extract_ports_from_config(context, include_defaults=True, include_camps=True)
 
     if unique_ports:
         logger.info(f"Starting HTTP servers for all configured ports: {unique_ports}")

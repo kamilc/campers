@@ -1,5 +1,6 @@
 """BDD step definitions for instance lifecycle management."""
 
+import contextlib
 import re
 import subprocess
 from typing import Any
@@ -10,11 +11,11 @@ from behave.runner import Context
 from moto import mock_aws
 
 from campers.providers.aws.compute import EC2Manager
-from campers.utils import (
-    generate_instance_name,
-)
 from campers.providers.aws.utils import (
     sanitize_instance_name,
+)
+from campers.utils import (
+    generate_instance_name,
 )
 
 
@@ -123,11 +124,10 @@ def setup_ec2_manager(context: Context, region: str = "us-east-1") -> EC2Manager
         Configured EC2Manager instance
     """
     import boto3
+
     from tests.unit.fakes.fake_ec2_manager import FakeEC2Manager
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
     use_direct = getattr(context, "use_direct_instantiation", False)
 
     if is_localstack and not use_direct:
@@ -178,9 +178,7 @@ def step_create_running_instance(context: Context, instance_name: str) -> None:
         "camp_name": "test-machine",
     }
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
     is_mock = hasattr(context, "scenario") and "mock" in context.scenario.tags
     if is_localstack or is_mock:
         config["ami"] = {"image_id": "ami-03cf127a"}
@@ -207,9 +205,7 @@ def step_create_stopped_instance(context: Context, instance_name: str) -> None:
         "camp_name": "test-machine",
     }
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
     is_mock = hasattr(context, "scenario") and "mock" in context.scenario.tags
     if is_localstack or is_mock:
         config["ami"] = {"image_id": "ami-03cf127a"}
@@ -257,9 +253,7 @@ def step_verify_stopped_instance_no_public_ip(context: Context) -> None:
 def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
     """Stop an instance using campers stop command."""
     if getattr(context, "missing_permissions", False):
-        context.command_error = getattr(
-            context, "permission_error", "Insufficient AWS permissions"
-        )
+        context.command_error = getattr(context, "permission_error", "Insufficient AWS permissions")
         context.command_failed = True
         return
 
@@ -276,9 +270,7 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
         )
 
         try:
-            execute_command_direct(
-                context, "stop", args={"name_or_id": actual_instance_id}
-            )
+            execute_command_direct(context, "stop", args={"name_or_id": actual_instance_id})
             context.command_failed = context.exit_code != 0
         except Exception as e:
             context.command_error = str(e)
@@ -312,13 +304,12 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
             if result.returncode != 0:
                 context.command_error = result.stderr
 
-            if result.returncode == 0:
-                if ec2_manager is not None:
-                    matches = ec2_manager.find_instances_by_name_or_id(
-                        actual_instance_id, region_filter=ec2_manager.region
-                    )
-                    if matches:
-                        context.stopped_instance_id = matches[0]["instance_id"]
+            if result.returncode == 0 and ec2_manager is not None:
+                matches = ec2_manager.find_instances_by_name_or_id(
+                    actual_instance_id, region_filter=ec2_manager.region
+                )
+                if matches:
+                    context.stopped_instance_id = matches[0]["instance_id"]
         except Exception as e:
             context.command_error = str(e)
             context.command_failed = True
@@ -331,9 +322,7 @@ def step_stop_instance(context: Context, instance_id_or_name: str) -> None:
 def step_start_instance(context: Context, instance_id_or_name: str) -> None:
     """Start an instance using campers start command."""
     if getattr(context, "missing_permissions", False):
-        context.command_error = getattr(
-            context, "permission_error", "Insufficient AWS permissions"
-        )
+        context.command_error = getattr(context, "permission_error", "Insufficient AWS permissions")
         context.command_failed = True
         return
 
@@ -348,9 +337,7 @@ def step_start_instance(context: Context, instance_id_or_name: str) -> None:
         )
 
         try:
-            execute_command_direct(
-                context, "start", args={"name_or_id": actual_instance_id}
-            )
+            execute_command_direct(context, "start", args={"name_or_id": actual_instance_id})
             context.command_failed = context.exit_code != 0
         except Exception as e:
             context.command_error = str(e)
@@ -429,9 +416,7 @@ def step_check_instance_state(context: Context, expected_state: str) -> None:
             f"Expected state to be one of {allowed_states}, got '{state}'"
         )
     else:
-        assert state == expected_state, (
-            f"Expected state '{expected_state}', got '{state}'"
-        )
+        assert state == expected_state, f"Expected state '{expected_state}', got '{state}'"
 
 
 @then("the command succeeds")
@@ -453,15 +438,11 @@ def step_check_message(context: Context, message: str) -> None:
     """Verify command message."""
     expected = message.strip('"')
     actual = getattr(context, "command_message", "")
-    assert expected in actual, (
-        f"Expected message containing '{expected}', got '{actual}'"
-    )
+    assert expected in actual, f"Expected message containing '{expected}', got '{actual}'"
 
 
 @then('error message includes "{error_text}"')
-def step_check_error_message_in_command_error(
-    context: Context, error_text: str
-) -> None:
+def step_check_error_message_in_command_error(context: Context, error_text: str) -> None:
     """Verify error message contains text in command_error or stderr attribute."""
     command_error = getattr(context, "command_error", "")
     stderr = getattr(context, "stderr", "")
@@ -478,7 +459,7 @@ def step_check_error_message_in_command_error(
         error_msg.append(f"stderr: {stderr}")
 
     actual = " | ".join(error_msg) if error_msg else "no error message found"
-    assert False, f"Expected error containing '{error_text}', got: {actual}"
+    raise AssertionError(f"Expected error containing '{error_text}', got: {actual}")
 
 
 @then("the instance public IP is None")
@@ -578,9 +559,7 @@ def step_create_instance_with_resources(context: Context) -> None:
         "camp_name": "test-machine",
     }
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
     if is_localstack:
         config["ami"] = {"image_id": "ami-03cf127a"}
 
@@ -595,9 +574,7 @@ def step_create_instance_with_resources(context: Context) -> None:
         context.created_instance_ids = []
     context.created_instance_ids.append(instance_details["instance_id"])
 
-    response = ec2_manager.ec2_client.describe_instances(
-        InstanceIds=[context.test_instance_id]
-    )
+    response = ec2_manager.ec2_client.describe_instances(InstanceIds=[context.test_instance_id])
     instance = response["Reservations"][0]["Instances"][0]
     if instance.get("SecurityGroups"):
         context.security_group_id = instance["SecurityGroups"][0]["GroupId"]
@@ -685,9 +662,7 @@ def step_check_sg_deleted(context: Context) -> None:
 
     try:
         ec2_manager.ec2_client.describe_security_groups(GroupIds=[security_group_id])
-        raise AssertionError(
-            f"Security group {security_group_id} still exists, should be deleted"
-        )
+        raise AssertionError(f"Security group {security_group_id} still exists, should be deleted")
     except ec2_manager.ec2_client.exceptions.ClientError as e:
         if e.response["Error"]["Code"] == "InvalidGroup.NotFound":
             pass
@@ -703,9 +678,7 @@ def step_check_key_pair_deleted(context: Context) -> None:
 
     try:
         ec2_manager.ec2_client.describe_key_pairs(KeyNames=[key_pair_name])
-        raise AssertionError(
-            f"Key pair {key_pair_name} still exists, should be deleted"
-        )
+        raise AssertionError(f"Key pair {key_pair_name} still exists, should be deleted")
     except ec2_manager.ec2_client.exceptions.ClientError as e:
         if e.response["Error"]["Code"] == "InvalidKeyPair.NotFound":
             pass
@@ -752,9 +725,7 @@ def step_create_file_on_instance(context: Context, file_path: str) -> None:
     )
     assert instance_id, "No instance_id found in context"
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
     if not is_localstack:
         if not hasattr(context, "instance_files"):
@@ -768,15 +739,11 @@ def step_create_file_on_instance(context: Context, file_path: str) -> None:
     try:
         context.harness.wait_for_event("ssh-ready", instance_id, timeout_sec=30)
     except Exception as e:
-        raise AssertionError(
-            f"SSH not ready for instance {instance_id} within 30 seconds: {e}"
-        )
+        raise AssertionError(f"SSH not ready for instance {instance_id} within 30 seconds: {e}")
 
     host, port, key_file = context.harness.get_ssh_details(instance_id)
 
-    assert host and port and key_file, (
-        f"SSH details not available for instance {instance_id}"
-    )
+    assert host and port and key_file, f"SSH details not available for instance {instance_id}"
 
     from campers.services.ssh import SSHManager
 
@@ -788,9 +755,7 @@ def step_create_file_on_instance(context: Context, file_path: str) -> None:
         touch_command = f"touch {file_path}"
         exit_code = ssh_manager.execute_command(touch_command)
 
-        assert exit_code == 0, (
-            f"Failed to create file {file_path}, exit code: {exit_code}"
-        )
+        assert exit_code == 0, f"Failed to create file {file_path}, exit code: {exit_code}"
 
         if not hasattr(context, "instance_files"):
             context.instance_files = []
@@ -822,9 +787,7 @@ def step_check_file_exists_on_instance(context: Context, file_path: str) -> None
     )
     assert instance_id, "No instance_id found in context"
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
     if not is_localstack:
         instance_files = getattr(context, "instance_files", [])
@@ -840,13 +803,9 @@ def step_check_file_exists_on_instance(context: Context, file_path: str) -> None
             context.harness.wait_for_event("ssh-ready", instance_id, timeout_sec=30)
             host, port, key_file = context.harness.get_ssh_details(instance_id)
         except Exception as e:
-            raise AssertionError(
-                f"SSH not ready for instance {instance_id} within 30 seconds: {e}"
-            )
+            raise AssertionError(f"SSH not ready for instance {instance_id} within 30 seconds: {e}")
 
-    assert host and port and key_file, (
-        f"SSH details not available for instance {instance_id}"
-    )
+    assert host and port and key_file, f"SSH details not available for instance {instance_id}"
 
     from campers.services.ssh import SSHManager
 
@@ -869,9 +828,7 @@ def step_check_file_exists_on_instance(context: Context, file_path: str) -> None
 @then("warning is logged about invalid on_exit value")
 def step_check_invalid_on_exit_warning(context: Context) -> None:
     """Verify warning logged for invalid on_exit value."""
-    assert getattr(context, "invalid_on_exit", False), (
-        "Should have invalid on_exit flag set"
-    )
+    assert getattr(context, "invalid_on_exit", False), "Should have invalid on_exit flag set"
 
 
 @given('no instance with name "{instance_name}" exists')
@@ -972,9 +929,7 @@ def step_check_instance_remains_stopped(context: Context, instance_name: str) ->
     assert len(matches) > 0, f"Instance {instance_name} not found"
 
     instance = matches[0]
-    assert instance["state"] == "stopped", (
-        f"Expected stopped state, got {instance['state']}"
-    )
+    assert instance["state"] == "stopped", f"Expected stopped state, got {instance['state']}"
 
 
 @then('an error occurs with message "{error_message}"')
@@ -991,16 +946,13 @@ def step_check_error_message_exact(context: Context, error_message: str) -> None
 def step_check_error_suggests_action(context: Context) -> None:
     """Verify error message suggests stopping or destroying instance."""
     actual_error = getattr(context, "command_error", "")
-    assert any(
-        text in actual_error.lower()
-        for text in ["stop", "destroy", "terminate", "kill"]
-    ), f"Error should suggest action, got '{actual_error}'"
+    assert any(text in actual_error.lower() for text in ["stop", "destroy", "terminate", "kill"]), (
+        f"Error should suggest action, got '{actual_error}'"
+    )
 
 
 @given('an instance in "{state}" state with name "{instance_name}"')
-def step_create_instance_in_state(
-    context: Context, state: str, instance_name: str
-) -> None:
+def step_create_instance_in_state(context: Context, state: str, instance_name: str) -> None:
     """Create an instance in a specific state."""
     if state == "pending":
         context.use_direct_instantiation = True
@@ -1013,9 +965,7 @@ def step_create_instance_in_state(
         "camp_name": "test-machine",
     }
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
     use_direct = getattr(context, "use_direct_instantiation", False)
     if is_localstack and not use_direct:
         config["ami"] = {"image_id": "ami-03cf127a"}
@@ -1075,9 +1025,7 @@ def step_check_command_returns_details(context: Context) -> None:
 
 
 @given('a running instance with name "{instance_name}"')
-def step_create_running_instance_without_exists(
-    context: Context, instance_name: str
-) -> None:
+def step_create_running_instance_without_exists(context: Context, instance_name: str) -> None:
     """Create a running instance for testing (alias without 'exists' suffix)."""
     step_create_running_instance(context, instance_name)
 
@@ -1158,9 +1106,7 @@ def step_run_stop_with_timeout(context: Context, instance_id_or_name: str) -> No
 
 
 @given('a stopped instance with name "{instance_name}"')
-def step_create_stopped_instance_without_exists(
-    context: Context, instance_name: str
-) -> None:
+def step_create_stopped_instance_without_exists(context: Context, instance_name: str) -> None:
     """Create a stopped instance for testing (alias without 'exists' suffix).
 
     This step creates an instance with default 20GB volume and stops it.
@@ -1184,9 +1130,7 @@ def step_create_stopped_instance_without_exists(
         "camp_name": "test-machine",
     }
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
     is_mock = hasattr(context, "scenario") and "mock" in context.scenario.tags
     if is_localstack or is_mock:
         config["ami"] = {"image_id": "ami-03cf127a"}
@@ -1282,14 +1226,10 @@ def step_check_volume_size_exact(context: Context, expected_size: str) -> None:
     retrieved = getattr(context, "retrieved_volume_size", 0)
     try:
         expected = int(expected_size)
-        assert retrieved == expected, (
-            f"Expected volume size {expected}, got {retrieved}"
-        )
+        assert retrieved == expected, f"Expected volume size {expected}, got {retrieved}"
     except ValueError:
         if expected_size == "0 or None returned":
-            assert retrieved is None or retrieved == 0, (
-                f"Expected None or 0, got {retrieved}"
-            )
+            assert retrieved is None or retrieved == 0, f"Expected None or 0, got {retrieved}"
         else:
             raise
 
@@ -1305,9 +1245,7 @@ def step_create_instance_generic(context: Context, instance_name: str) -> None:
         "camp_name": "test-machine",
     }
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
     if is_localstack:
         config["ami"] = {"image_id": "ami-03cf127a"}
 
@@ -1346,19 +1284,15 @@ def step_set_no_volume_mapping(context: Context) -> None:
         for bd in block_devices:
             volume_id = bd.get("Ebs", {}).get("VolumeId")
             if volume_id:
-                try:
+                with contextlib.suppress(Exception):
                     ec2_manager.ec2_client.detach_volume(
                         VolumeId=volume_id, InstanceId=instance_id, Force=True
                     )
-                except Exception:
-                    pass
 
         import time
 
         for _ in range(10):
-            response = ec2_manager.ec2_client.describe_instances(
-                InstanceIds=[instance_id]
-            )
+            response = ec2_manager.ec2_client.describe_instances(InstanceIds=[instance_id])
             instance = response["Reservations"][0]["Instances"][0]
             if not instance.get("BlockDeviceMappings", []):
                 break
@@ -1383,12 +1317,8 @@ def step_create_multiple_instances(context: Context) -> None:
         "camp_name": "test-machine",
     }
 
-    instance_details_1 = ec2_manager.launch_instance(
-        config, instance_name="campers-test-12345"
-    )
-    instance_details_2 = ec2_manager.launch_instance(
-        config, instance_name="campers-test-12345"
-    )
+    instance_details_1 = ec2_manager.launch_instance(config, instance_name="campers-test-12345")
+    instance_details_2 = ec2_manager.launch_instance(config, instance_name="campers-test-12345")
 
     context.multiple_instance_ids = [
         instance_details_1["instance_id"],
@@ -1418,9 +1348,7 @@ def step_create_instance_with_id(context: Context, instance_id: str) -> None:
             "camp_name": "test-machine",
         }
 
-        instance_details = ec2_manager.launch_instance(
-            config, instance_name="campers-test-sample"
-        )
+        instance_details = ec2_manager.launch_instance(config, instance_name="campers-test-sample")
         context.test_instance_id = instance_details["instance_id"]
         context.specific_instance_id = instance_id
 
@@ -1452,9 +1380,7 @@ def step_check_other_instances_unaffected(context: Context) -> None:
 
     if hasattr(context, "multiple_instance_ids"):
         for instance_id in context.multiple_instance_ids:
-            response = ec2_manager.ec2_client.describe_instances(
-                InstanceIds=[instance_id]
-            )
+            response = ec2_manager.ec2_client.describe_instances(InstanceIds=[instance_id])
             instance = response["Reservations"][0]["Instances"][0]
             state = instance["State"]["Name"]
 
@@ -1499,9 +1425,7 @@ def step_run_campers_run(context: Context, camp_name: str) -> None:
                 "camp_name": camp_name,
             }
 
-            is_localstack = (
-                hasattr(context, "scenario") and "localstack" in context.scenario.tags
-            )
+            is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
             is_mock = hasattr(context, "scenario") and "mock" in context.scenario.tags
             if is_localstack or is_mock:
                 config["ami"] = {"image_id": "ami-03cf127a"}
@@ -1552,9 +1476,7 @@ def step_then_run_campers_start_named(context: Context, instance_name: str) -> N
     """
     step_start_instance(context, instance_name)
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
     if is_localstack and hasattr(context, "started_instance_id"):
         instance_id = context.started_instance_id
@@ -1562,10 +1484,8 @@ def step_then_run_campers_start_named(context: Context, instance_name: str) -> N
 
         import time
 
-        for attempt in range(30):
-            response = ec2_manager.ec2_client.describe_instances(
-                InstanceIds=[instance_id]
-            )
+        for _attempt in range(30):
+            response = ec2_manager.ec2_client.describe_instances(InstanceIds=[instance_id])
             instance = response["Reservations"][0]["Instances"][0]
             state = instance["State"]["Name"]
 

@@ -146,10 +146,7 @@ def step_validate_configuration(context) -> None:
     context.validation_passed = True
 
     try:
-        if (
-            hasattr(context, "config_to_validate")
-            and context.config_to_validate is not None
-        ):
+        if hasattr(context, "config_to_validate") and context.config_to_validate is not None:
             loader.validate_config(context.config_to_validate)
         elif hasattr(context, "config_data") and context.config_data is not None:
             from tests.integration.features.steps.ansible_steps import (
@@ -272,9 +269,7 @@ def step_load_configuration_without_path(context) -> None:
     harness_services = getattr(getattr(context, "harness", None), "services", None)
 
     if harness_services is not None:
-        harness_services.configuration_env.set(
-            "CAMPERS_CONFIG", context.env_config_path
-        )
+        harness_services.configuration_env.set("CAMPERS_CONFIG", context.env_config_path)
     else:
         os.environ["CAMPERS_CONFIG"] = context.env_config_path
 

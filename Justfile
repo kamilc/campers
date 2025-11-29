@@ -1,6 +1,17 @@
 set dotenv-load := true
 
 
+lint:
+  uv run ruff check campers tests
+
+format:
+  uv run ruff format campers tests
+
+format-check:
+  uv run ruff format campers tests --check
+
+check: lint format-check test-fast
+
 unit-test options="":
   uv run pytest tests/unit {{options}}
 

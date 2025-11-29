@@ -49,9 +49,7 @@ def parse_include_vcs(include_vcs: str | bool) -> bool:
         vcs_lower = include_vcs.lower()
 
         if vcs_lower not in ("true", "false"):
-            raise ValueError(
-                f"include_vcs must be 'true' or 'false', got: {include_vcs}"
-            )
+            raise ValueError(f"include_vcs must be 'true' or 'false', got: {include_vcs}")
 
         return vcs_lower == "true"
 

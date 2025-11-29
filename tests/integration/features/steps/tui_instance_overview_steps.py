@@ -61,6 +61,7 @@ def step_have_zero_instances(context: Context, count: int) -> None:
         Expected number of instances (must be 0)
     """
     import logging
+
     from tests.integration.features.steps.instance_lifecycle_steps import (
         setup_ec2_manager,
     )
@@ -78,9 +79,7 @@ def step_have_zero_instances(context: Context, count: int) -> None:
                 ec2_manager.terminate_instance(instance["instance_id"])
                 logger.debug(f"Terminated instance {instance['instance_id']}")
             except Exception as e:
-                logger.debug(
-                    f"Failed to terminate instance {instance['instance_id']}: {e}"
-                )
+                logger.debug(f"Failed to terminate instance {instance['instance_id']}: {e}")
     except Exception as e:
         logger.debug(f"Error cleaning up instances: {e}")
 
@@ -94,26 +93,20 @@ def step_have_zero_instances(context: Context, count: int) -> None:
 
 
 @given("I have {count:d} running instance in {region}")
-def step_create_running_instance_in_region(
-    context: Context, count: int, region: str
-) -> None:
+def step_create_running_instance_in_region(context: Context, count: int, region: str) -> None:
     """Create running instance in specified region."""
     step_create_running_instances(context, count)
 
 
 @given("I have {count:d} stopped instances in {region}")
-def step_create_stopped_instances_in_region(
-    context: Context, count: int, region: str
-) -> None:
+def step_create_stopped_instances_in_region(context: Context, count: int, region: str) -> None:
     """Create stopped instances in specified region."""
     step_create_stopped_instances(context, count)
 
 
 @given("I have {count:d} running {instance_type} instance")
 @given("I have {count:d} running {instance_type} instances")
-def step_create_running_instances_of_type(
-    context: Context, count: int, instance_type: str
-) -> None:
+def step_create_running_instances_of_type(context: Context, count: int, instance_type: str) -> None:
     """Create running instances of specified type."""
     from tests.integration.features.steps.instance_lifecycle_steps import (
         step_create_running_instance,
@@ -141,11 +134,10 @@ def step_create_running_instances_of_type(
 def step_view_tui(context: Context) -> None:
     """Launch TUI and verify widget is visible."""
     import boto3
+
     from campers.providers.aws.compute import EC2Manager
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
     if is_localstack:
 
@@ -153,16 +145,12 @@ def step_view_tui(context: Context) -> None:
             kwargs.setdefault("endpoint_url", "http://localhost:4566")
             return boto3.client(service, **kwargs)
 
-        def localstack_ec2_factory(
-            region: str = "us-east-1", **kwargs: Any
-        ) -> EC2Manager:
+        def localstack_ec2_factory(region: str = "us-east-1", **kwargs: Any) -> EC2Manager:
             return EC2Manager(
                 region=region, boto3_client_factory=localstack_client_factory, **kwargs
             )
 
-        campers = context.campers_module.Campers(
-            compute_provider_factory=localstack_ec2_factory
-        )
+        campers = context.campers_module.Campers(compute_provider_factory=localstack_ec2_factory)
     else:
         campers = context.campers_module.Campers()
 
@@ -243,9 +231,7 @@ def step_overview_widget_shows_text(context: Context, expected_text: str) -> Non
 
 
 @then("overview widget daily cost is approximately ${expected_cost:f}")
-def step_overview_widget_shows_approximate_cost(
-    context: Context, expected_cost: float
-) -> None:
+def step_overview_widget_shows_approximate_cost(context: Context, expected_cost: float) -> None:
     """Verify overview widget displays approximate cost."""
     import re
 

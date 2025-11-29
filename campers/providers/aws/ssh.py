@@ -34,9 +34,7 @@ def get_aws_ssh_connection_info(
     ValueError
         If instance does not have a public IP address
     """
-    logger.info(
-        f"get_aws_ssh_connection_info: instance_id={instance_id}, public_ip={public_ip!r}"
-    )
+    logger.info(f"get_aws_ssh_connection_info: instance_id={instance_id}, public_ip={public_ip!r}")
 
     if public_ip:
         return public_ip, 22, key_file

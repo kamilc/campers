@@ -128,9 +128,7 @@ class PortForwardManager:
                 logger.info(f"Creating SSH tunnel for port {port}...")
 
             for port in ports:
-                logger.info(
-                    f"SSH tunnel established: localhost:{port} -> remote:{port}"
-                )
+                logger.info(f"SSH tunnel established: localhost:{port} -> remote:{port}")
 
             self.ports = ports
             return
@@ -157,9 +155,7 @@ class PortForwardManager:
             self.ports = ports
 
             for port in ports:
-                logger.info(
-                    f"SSH tunnel established: localhost:{port} -> remote:{port}"
-                )
+                logger.info(f"SSH tunnel established: localhost:{port} -> remote:{port}")
 
         except (
             BaseSSHTunnelForwarderError,

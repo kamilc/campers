@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import logging
 import sys
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
-from campers.providers.exceptions import ProviderAPIError, ProviderCredentialsError
+from campers.core.config import ConfigLoader
 from campers.providers.aws.pricing import (
     PricingService,
     calculate_monthly_cost,
     format_cost,
 )
+from campers.providers.exceptions import ProviderAPIError, ProviderCredentialsError
 from campers.utils import format_time_ago
 
 
@@ -19,22 +21,22 @@ class LifecycleManager:
 
     Parameters
     ----------
-    config_loader : Any
+    config_loader : ConfigLoader
         Configuration loader instance
-    compute_provider_factory : Any
+    compute_provider_factory : Callable[..., Any]
         Factory function to create compute provider instances
-    log_and_print_error : Any
+    log_and_print_error : Callable[[str, *Any], None]
         Function to log and print errors to stderr
-    truncate_name : Any
+    truncate_name : Callable[[str, int], str]
         Function to truncate instance names for display
     """
 
     def __init__(
         self,
-        config_loader: Any,
-        compute_provider_factory: Any,
-        log_and_print_error: Any,
-        truncate_name: Any,
+        config_loader: ConfigLoader,
+        compute_provider_factory: Callable[..., Any],
+        log_and_print_error: Callable[..., None],
+        truncate_name: Callable[[str, int], str],
     ) -> None:
         self.config_loader = config_loader
         self.compute_provider_factory = compute_provider_factory
@@ -84,9 +86,7 @@ class LifecycleManager:
         )
 
         if not matches:
-            self.log_and_print_error(
-                "No campers-managed instances matched '%s'.", name_or_id
-            )
+            self.log_and_print_error("No campers-managed instances matched '%s'.", name_or_id)
             sys.exit(1)
 
         if len(matches) > 1:
@@ -129,9 +129,7 @@ class LifecycleManager:
             self._validate_region(region)
 
         try:
-            compute_provider = self.compute_provider_factory(
-                region=region or default_region
-            )
+            compute_provider = self.compute_provider_factory(region=region or default_region)
             instances = compute_provider.list_instances(region_filter=region)
 
             if not instances:
@@ -170,45 +168,50 @@ class LifecycleManager:
 
             if region:
                 print(f"Instances in {region}:")
-                print(
-                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
+                header = (
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} "
+                    f"{'LAUNCHED':<12} {'COST/MONTH':<21}"
                 )
+                print(header)
                 print("-" * 100)
 
                 for inst in instances:
                     name = self.truncate_name(inst["camp_config"])
                     launched = format_time_ago(inst["launch_time"])
                     cost_str = format_cost(inst["monthly_cost"])
-                    print(
-                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
+                    row = (
+                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
+                        f"{inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
                     )
+                    print(row)
             else:
-                print(
-                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} {'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
+                header = (
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} "
+                    f"{'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
                 )
+                print(header)
                 print("-" * 115)
 
                 for inst in instances:
                     name = self.truncate_name(inst["camp_config"])
                     launched = format_time_ago(inst["launch_time"])
                     cost_str = format_cost(inst["monthly_cost"])
-                    print(
-                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} {inst['region']:<15} {inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
+                    row = (
+                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
+                        f"{inst['region']:<15} {inst['instance_type']:<15} {launched:<12} "
+                        f"{cost_str:<21}"
                     )
+                    print(row)
 
             if costs_available:
                 print(f"\nTotal estimated cost: {format_cost(total_monthly_cost)}")
 
         except ProviderCredentialsError:
-            print(
-                "Error: Cloud provider credentials not found. Please configure credentials."
-            )
+            print("Error: Cloud provider credentials not found. Please configure credentials.")
             raise
         except ProviderAPIError as e:
             if e.error_code == "UnauthorizedOperation":
-                print(
-                    "Error: Insufficient cloud provider permissions to list instances."
-                )
+                print("Error: Insufficient cloud provider permissions to list instances.")
                 raise
 
             raise
@@ -309,9 +312,7 @@ class LifecycleManager:
                 print("\n💰 Cost Impact:")
                 print(f"  Previous: {format_cost(running_cost)}")
                 print(f"  New: {format_cost(stopped_cost)}")
-                print(
-                    f"  Savings: {format_cost(savings)} (~{savings_pct:.0f}% reduction)"
-                )
+                print(f"  Savings: {format_cost(savings)} (~{savings_pct:.0f}% reduction)")
             else:
                 print("\n(Cost information unavailable)")
 
@@ -377,7 +378,11 @@ class LifecycleManager:
 
             if state == "pending":
                 self.log_and_print_error(
-                    "Instance is not in stopped state (Instance ID: %s, Current state: %s). Please wait for instance to reach stopped state.",
+                    (
+                        "Instance is not in stopped state (Instance ID: %s, "
+                        "Current state: %s). Please wait for instance to reach "
+                        "stopped state."
+                    ),
                     instance_id,
                     state,
                 )
@@ -516,19 +521,17 @@ class LifecycleManager:
             launch_time = target.get("launch_time")
             if isinstance(launch_time, str):
                 try:
-                    launch_time = datetime.fromisoformat(
-                        launch_time.replace("Z", "+00:00")
-                    )
+                    launch_time = datetime.fromisoformat(launch_time.replace("Z", "+00:00"))
                 except (ValueError, AttributeError):
                     launch_time = None
 
             launch_time_str = launch_time.isoformat() if launch_time else "Unknown"
 
-            now_utc = datetime.now(timezone.utc)
+            now_utc = datetime.now(UTC)
             if launch_time:
                 try:
                     if launch_time.tzinfo is None:
-                        launch_time = launch_time.replace(tzinfo=timezone.utc)
+                        launch_time = launch_time.replace(tzinfo=UTC)
                     elapsed = now_utc - launch_time
                     total_seconds = int(elapsed.total_seconds())
                     if total_seconds < 0:
@@ -537,10 +540,7 @@ class LifecycleManager:
                     hours = total_seconds // 3600
                     minutes = (total_seconds % 3600) // 60
 
-                    if hours > 0:
-                        uptime_str = f"{hours}h {minutes}m"
-                    else:
-                        uptime_str = f"{minutes}m"
+                    uptime_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
                 except (TypeError, ValueError):
                     uptime_str = "Unknown"
             else:

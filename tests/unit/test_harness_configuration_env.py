@@ -65,10 +65,9 @@ class TestConfigurationEnvContextManager:
         try:
             env = ConfigurationEnv()
 
-            with pytest.raises(ValueError):
-                with env:
-                    env.set("TEST_VAR", "modified")
-                    raise ValueError("test error")
+            with pytest.raises(ValueError), env:
+                env.set("TEST_VAR", "modified")
+                raise ValueError("test error")
 
             assert os.environ["TEST_VAR"] == original_value
         finally:

@@ -60,3 +60,13 @@ campers = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
 norecursedirs = ["tmp", ".git", ".venv", "__pycache__"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

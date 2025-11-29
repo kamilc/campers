@@ -7,7 +7,7 @@ with in-memory caching to minimize API calls.
 import logging
 import threading
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 import boto3
 
@@ -36,7 +36,7 @@ class PricingCache:
         self._ttl = timedelta(hours=ttl_hours)
         self._lock = threading.Lock()
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """Retrieve value from cache if not expired.
 
         Parameters
@@ -134,7 +134,7 @@ class PricingService:
         instance_type: str,
         region: str,
         operating_system: str = "Linux",
-    ) -> Optional[float]:
+    ) -> float | None:
         """Fetch EC2 on-demand hourly rate from AWS Pricing API.
 
         Parameters
@@ -168,9 +168,7 @@ class PricingService:
                 return cached
 
         try:
-            rate = self._fetch_ec2_rate_from_api(
-                instance_type, region, operating_system
-            )
+            rate = self._fetch_ec2_rate_from_api(instance_type, region, operating_system)
 
             if self.cache and rate is not None:
                 self.cache.set(cache_key, rate)
@@ -185,7 +183,7 @@ class PricingService:
         instance_type: str,
         region: str,
         operating_system: str,
-    ) -> Optional[float]:
+    ) -> float | None:
         """Query AWS Pricing API for EC2 instance pricing.
 
         Parameters
@@ -236,7 +234,7 @@ class PricingService:
         self,
         region: str,
         volume_type: str = "gp3",
-    ) -> Optional[float]:
+    ) -> float | None:
         """Fetch EBS storage rate per GB-month from AWS Pricing API.
 
         Parameters
@@ -282,7 +280,7 @@ class PricingService:
         self,
         region: str,
         volume_type: str,
-    ) -> Optional[float]:
+    ) -> float | None:
         """Query AWS Pricing API for EBS storage pricing.
 
         Parameters
@@ -320,7 +318,7 @@ class PricingService:
 
         return parse_ebs_pricing(response["PriceList"][0])
 
-    def get_instance_price(self, instance_type: str, region: str) -> Optional[float]:
+    def get_instance_price(self, instance_type: str, region: str) -> float | None:
         """Get hourly price for an instance type in a region.
 
         This method implements the PricingProvider protocol interface.
@@ -363,8 +361,8 @@ def calculate_monthly_cost(
     region: str,
     state: str,
     volume_size_gb: int,
-    pricing_service: Optional[PricingService] = None,
-) -> Optional[float]:
+    pricing_service: PricingService | None = None,
+) -> float | None:
     """Calculate estimated monthly cost for an EC2 instance.
 
     Parameters
@@ -412,7 +410,7 @@ def calculate_monthly_cost(
     return None
 
 
-def format_cost(cost: Optional[float]) -> str:
+def format_cost(cost: float | None) -> str:
     """Format cost value for display.
 
     Parameters

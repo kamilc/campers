@@ -23,11 +23,7 @@ class TestPricingParsers:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER123": {
-                        "priceDimensions": {
-                            "DIM456": {"pricePerUnit": {"USD": "0.0416"}}
-                        }
-                    }
+                    "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}}
                 }
             }
         }
@@ -58,9 +54,7 @@ class TestPricingParsers:
         """Test parsing EC2 response without USD price."""
         price_data = {
             "terms": {
-                "OnDemand": {
-                    "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {}}}}
-                }
+                "OnDemand": {"OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {}}}}}
             }
         }
         price_json = json.dumps(price_data)
@@ -72,9 +66,7 @@ class TestPricingParsers:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER789": {
-                        "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}
-                    }
+                    "OFFER789": {"priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}}
                 }
             }
         }
@@ -168,11 +160,7 @@ class TestPricingService:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER123": {
-                        "priceDimensions": {
-                            "DIM456": {"pricePerUnit": {"USD": "0.0416"}}
-                        }
-                    }
+                    "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}}
                 }
             }
         }
@@ -193,9 +181,7 @@ class TestPricingService:
         assert filters["operatingSystem"] == "Linux"
 
     @patch("boto3.client")
-    def test_get_ec2_hourly_rate_unsupported_region(
-        self, mock_boto_client: Mock
-    ) -> None:
+    def test_get_ec2_hourly_rate_unsupported_region(self, mock_boto_client: Mock) -> None:
         """Test EC2 pricing returns None for unsupported region."""
         mock_pricing = Mock()
         mock_boto_client.return_value = mock_pricing
@@ -213,11 +199,7 @@ class TestPricingService:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER123": {
-                        "priceDimensions": {
-                            "DIM456": {"pricePerUnit": {"USD": "0.0416"}}
-                        }
-                    }
+                    "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}}
                 }
             }
         }
@@ -252,9 +234,7 @@ class TestPricingService:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER789": {
-                        "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}
-                    }
+                    "OFFER789": {"priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}}
                 }
             }
         }
@@ -274,9 +254,7 @@ class TestPricingService:
         assert filters["volumeApiName"] == "gp3"
 
     @patch("boto3.client")
-    def test_get_ebs_storage_rate_when_unavailable(
-        self, mock_boto_client: Mock
-    ) -> None:
+    def test_get_ebs_storage_rate_when_unavailable(self, mock_boto_client: Mock) -> None:
         """Test EBS pricing returns None when API unavailable."""
         mock_boto_client.side_effect = Exception("API not available")
 
@@ -292,9 +270,7 @@ class TestPricingService:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER789": {
-                        "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}
-                    }
+                    "OFFER789": {"priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}}
                 }
             }
         }
@@ -347,9 +323,7 @@ class TestCalculateMonthlyCost:
         assert cost == pytest.approx(50 * 0.08)
 
     @patch("campers.providers.aws.pricing.PricingService")
-    def test_returns_none_when_ec2_pricing_unavailable(
-        self, mock_service_class: Mock
-    ) -> None:
+    def test_returns_none_when_ec2_pricing_unavailable(self, mock_service_class: Mock) -> None:
         """Test returns None when EC2 pricing unavailable."""
         mock_service = Mock()
         mock_service.get_ec2_hourly_rate.return_value = None
@@ -365,9 +339,7 @@ class TestCalculateMonthlyCost:
         assert cost is None
 
     @patch("campers.providers.aws.pricing.PricingService")
-    def test_returns_none_when_ebs_pricing_unavailable(
-        self, mock_service_class: Mock
-    ) -> None:
+    def test_returns_none_when_ebs_pricing_unavailable(self, mock_service_class: Mock) -> None:
         """Test returns None when EBS pricing unavailable."""
         mock_service = Mock()
         mock_service.get_ebs_storage_rate.return_value = None

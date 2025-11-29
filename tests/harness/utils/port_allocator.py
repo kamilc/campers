@@ -77,9 +77,7 @@ class PortAllocator:
                     logger.debug(f"Allocated port {port}")
                     return port
 
-            raise RuntimeError(
-                f"No available ports in range {self.start_port}-{self.end_port}"
-            )
+            raise RuntimeError(f"No available ports in range {self.start_port}-{self.end_port}")
 
     def deallocate(self, port: int) -> None:
         """Return a port to the available pool.

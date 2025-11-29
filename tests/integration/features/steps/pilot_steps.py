@@ -8,7 +8,7 @@ import queue
 import tempfile
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +18,9 @@ from behave.runner import Context
 from textual.css.query import NoMatches
 from textual.widgets import Log
 
-from tests.integration.features.steps.utils import run_async_test
-from tests.harness.utils.system_snapshot import gather_system_snapshot
 from campers.__main__ import Campers, CampersTUI
+from tests.harness.utils.system_snapshot import gather_system_snapshot
+from tests.integration.features.steps.utils import run_async_test
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +141,7 @@ def step_simulate_running_machine_in_tui(context: Context, camp_name: str) -> No
     max_wait = derive_timeout_from_scenario(context)
     logger.info(f"=== STARTING TUI TEST FOR MACHINE: {camp_name} ===")
     logger.info(f"TUI timeout derived from scenario: {max_wait} seconds")
-    result = run_tui_test_with_machine(
-        camp_name, context.config_path, max_wait, context
-    )
+    result = run_tui_test_with_machine(camp_name, context.config_path, max_wait, context)
     context.tui_result = result
 
     if hasattr(context, "harness") and hasattr(context.harness, "current_instance_id"):
@@ -219,9 +217,7 @@ def setup_test_environment(
     }
 
     behave_context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "0")
-    behave_context.harness.services.configuration_env.set(
-        "CAMPERS_HARNESS_MANAGED", "1"
-    )
+    behave_context.harness.services.configuration_env.set("CAMPERS_HARNESS_MANAGED", "1")
     behave_context.harness.services.configuration_env.set("CAMPERS_CONFIG", config_path)
 
     for key in [
@@ -231,24 +227,16 @@ def setup_test_environment(
         "AWS_DEFAULT_REGION",
     ]:
         if original_values[key]:
-            behave_context.harness.services.configuration_env.set(
-                key, original_values[key]
-            )
+            behave_context.harness.services.configuration_env.set(key, original_values[key])
         else:
             fallback_values = {
-                "AWS_ENDPOINT_URL": os.environ.get(
-                    "AWS_ENDPOINT_URL", "http://localhost:4566"
-                ),
+                "AWS_ENDPOINT_URL": os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566"),
                 "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", "testing"),
-                "AWS_SECRET_ACCESS_KEY": os.environ.get(
-                    "AWS_SECRET_ACCESS_KEY", "testing"
-                ),
+                "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY", "testing"),
                 "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
             }
 
-            behave_context.harness.services.configuration_env.set(
-                key, fallback_values[key]
-            )
+            behave_context.harness.services.configuration_env.set(key, fallback_values[key])
 
     return original_values
 
@@ -306,11 +294,9 @@ async def poll_tui_with_unified_timeout(
             behave_context is not None
             and getattr(behave_context, "monitor_error", None) is not None
         ):
-            error_message = getattr(behave_context, "monitor_error")
+            error_message = behave_context.monitor_error
             logger.error("Monitor reported error during TUI polling: %s", error_message)
-            raise AssertionError(
-                f"Monitor error detected while waiting for TUI: {error_message}"
-            )
+            raise AssertionError(f"Monitor error detected while waiting for TUI: {error_message}")
 
         try:
             status_widget = app.query_one("#status-widget")
@@ -330,19 +316,15 @@ async def poll_tui_with_unified_timeout(
                 )
                 last_log_time = time.time()
 
-            if (
-                "terminating" in status_text.lower()
-                or "stopping" in status_text.lower()
-            ):
+            if "terminating" in status_text.lower() or "stopping" in status_text.lower():
                 if not terminating_found:
                     logger.info("Found 'terminating' or 'stopping' status")
                 terminating_found = True
 
-            if "error" in status_text.lower():
-                if not error_found:
-                    logger.info("Found 'error' status")
-                    error_found = True
-                    error_detection_time = time.time()
+            if "error" in status_text.lower() and not error_found:
+                logger.info("Found 'error' status")
+                error_found = True
+                error_detection_time = time.time()
         except NoMatches:
             logger.debug("Status widget not found")
         except Exception as e:
@@ -373,17 +355,13 @@ async def poll_tui_with_unified_timeout(
                     "Extended post-error pause completed - performing final polling iterations"
                 )
                 for iteration in range(5):
-                    logger.info(
-                        f"Final polling iteration {iteration + 1}/5 after error detection"
-                    )
+                    logger.info(f"Final polling iteration {iteration + 1}/5 after error detection")
                     await pilot.pause(1.0)
                     try:
                         status_widget = app.query_one("#status-widget")
                         status_text = str(status_widget.render())
                         if status_text != last_status:
-                            logger.info(
-                                f"Status updated during final iteration: {status_text}"
-                            )
+                            logger.info(f"Status updated during final iteration: {status_text}")
                             last_status = status_text
                     except Exception:
                         pass
@@ -471,9 +449,7 @@ def run_tui_test_with_machine(
 
     def timeout_handler():
         timeout_triggered.set()
-        logger.error(
-            f"[TIMEOUT-ENFORCER] Test exceeded {max_wait}s timeout - marking as failed"
-        )
+        logger.error(f"[TIMEOUT-ENFORCER] Test exceeded {max_wait}s timeout - marking as failed")
         snapshot = gather_system_snapshot(include_thread_stacks=True)
         recorded = False
         harness = None
@@ -492,11 +468,9 @@ def run_tui_test_with_machine(
                 )
         if not recorded:
             try:
-                fallback_dir = (
-                    Path.cwd() / "tmp" / "behave" / "_diagnostics" / "_tui-timeouts"
-                )
+                fallback_dir = Path.cwd() / "tmp" / "behave" / "_diagnostics" / "_tui-timeouts"
                 fallback_dir.mkdir(parents=True, exist_ok=True)
-                timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+                timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
                 fallback_path = fallback_dir / f"{timestamp}.json"
                 fallback_path.write_text(
                     json.dumps(
@@ -534,8 +508,7 @@ def run_tui_test_with_machine(
                         yield
                 else:
                     logger.warning(
-                        "No Behave context provided for Mutagen mocking - "
-                        "real Mutagen will be used"
+                        "No Behave context provided for Mutagen mocking - real Mutagen will be used"
                     )
                     yield
 
@@ -585,21 +558,15 @@ def run_tui_test_with_machine(
                                     "log_lines": log_lines,
                                     "log_text": log_text,
                                 }
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         raise AssertionError(
                             f"TUI test exceeded {max_wait}s timeout. "
                             f"Check logs for container boot delays or SSH issues."
                         )
             except Exception as e:
                 logger.error(f"Exception during TUI result extraction: {e}")
-                log_lines, log_text = (
-                    extract_log_lines(app) if "app" in locals() else ([], "")
-                )
-                exit_code = (
-                    getattr(app, "worker_exit_code", None)
-                    if "app" in locals()
-                    else None
-                )
+                log_lines, log_text = extract_log_lines(app) if "app" in locals() else ([], "")
+                exit_code = getattr(app, "worker_exit_code", None) if "app" in locals() else None
 
                 return {
                     "status": "extraction_failed",
@@ -631,7 +598,7 @@ def run_tui_test_with_machine(
             )
 
         return test_result
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         timeout_triggered.set()
         logger.error(
             f"[TIMEOUT-ENFORCER] wait_for exceeded {max_wait + 30}s - raising AssertionError"
@@ -646,9 +613,7 @@ def run_tui_test_with_machine(
         timer.cancel()
 
         if not test_completed.is_set():
-            logger.warning(
-                "[TIMEOUT-ENFORCER] Test incomplete - worker may still be running"
-            )
+            logger.warning("[TIMEOUT-ENFORCER] Test incomplete - worker may still be running")
 
 
 @then('the TUI status widget shows "{expected_status}" within {timeout:d} seconds')
@@ -677,10 +642,7 @@ def step_tui_status_shows(context: Context, expected_status: str, timeout: int) 
     status_in_widget = expected_status.lower() in status.lower()
 
     equivalent_match = False
-    if (
-        "terminating" in expected_status.lower()
-        or "stopping" in expected_status.lower()
-    ):
+    if "terminating" in expected_status.lower() or "stopping" in expected_status.lower():
         acceptable_states = ("terminating", "stopping")
         equivalent_match = any(state in status.lower() for state in acceptable_states)
 
@@ -719,9 +681,7 @@ def step_tui_log_contains(context: Context, expected_text: str) -> None:
     log_text = context.tui_result.get("log_text", "")
 
     if expected_text not in log_text:
-        raise AssertionError(
-            f"Expected log to contain '{expected_text}', but log was:\n{log_text}"
-        )
+        raise AssertionError(f"Expected log to contain '{expected_text}', but log was:\n{log_text}")
 
     logger.info(f"Log contains: {expected_text}")
 
@@ -745,8 +705,6 @@ def step_tui_log_does_not_contain(context: Context, text: str) -> None:
     log_text = context.tui_result.get("log_text", "")
 
     if text in log_text:
-        raise AssertionError(
-            f"Found '{text}' in log (should not be present):\n{log_text}"
-        )
+        raise AssertionError(f"Found '{text}' in log (should not be present):\n{log_text}")
 
     logger.info(f"Verified log does not contain: {text}")

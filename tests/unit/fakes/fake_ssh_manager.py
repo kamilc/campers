@@ -152,7 +152,7 @@ class FakeSSHManager:
             sensitive_patterns = ["SECRET", "PASSWORD", "TOKEN", "KEY"]
             sensitive_vars = [
                 name
-                for name in filtered_vars.keys()
+                for name in filtered_vars
                 if any(pattern in name.upper() for pattern in sensitive_patterns)
             ]
 

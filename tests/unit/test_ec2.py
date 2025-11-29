@@ -23,16 +23,13 @@ def ec2_manager(aws_credentials):
             modified_kwargs = kwargs.copy()
 
             if "Owners" in modified_kwargs and (
-                "099720109477" in modified_kwargs["Owners"]
-                or "amazon" in modified_kwargs["Owners"]
+                "099720109477" in modified_kwargs["Owners"] or "amazon" in modified_kwargs["Owners"]
             ):
                 del modified_kwargs["Owners"]
 
             if "Filters" in modified_kwargs:
                 modified_kwargs["Filters"] = [
-                    f
-                    for f in modified_kwargs["Filters"]
-                    if f["Name"] in ["name", "state"]
+                    f for f in modified_kwargs["Filters"] if f["Name"] in ["name", "state"]
                 ]
 
             response = original_describe_images(**modified_kwargs)
@@ -161,8 +158,7 @@ def test_create_security_group(ec2_manager):
     assert sg["Description"] == f"Campers security group {unique_id}"
 
     assert any(
-        tag["Key"] == "ManagedBy" and tag["Value"] == "campers"
-        for tag in sg.get("Tags", [])
+        tag["Key"] == "ManagedBy" and tag["Value"] == "campers" for tag in sg.get("Tags", [])
     )
 
     assert len(sg["IpPermissions"]) == 1
@@ -177,9 +173,7 @@ def test_create_security_group_deletes_existing(ec2_manager):
     """Test security group creation deletes existing SG with same name."""
     unique_id = str(int(time.time()))
 
-    vpcs = ec2_manager.ec2_client.describe_vpcs(
-        Filters=[{"Name": "isDefault", "Values": ["true"]}]
-    )
+    vpcs = ec2_manager.ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
     response = ec2_manager.ec2_client.create_security_group(
@@ -208,16 +202,28 @@ def test_launch_instance_success(ec2_manager, cleanup_keys, registered_ami):
         "ami": {"image_id": registered_ami},
     }
 
-    with patch("time.time", return_value=1234567890):
+    test_uuid_str = "39399cc6-abcd-1234-efgh-5678ijkl9012"
+
+    def mock_uuid4():
+        class MockUUID:
+            def __str__(self):
+                return test_uuid_str
+
+            def __getitem__(self, i):
+                return test_uuid_str[i]
+
+        return MockUUID()
+
+    with patch("campers.providers.aws.compute.uuid.uuid4", side_effect=mock_uuid4):
         result = ec2_manager.launch_instance(config)
         cleanup_keys.append(result["key_file"])
 
     campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
-    expected_key_file = str(Path(campers_dir) / "keys" / "1234567890.pem")
+    expected_key_file = str(Path(campers_dir) / "keys" / "39399cc6.pem")
 
     assert result["instance_id"].startswith("i-")
     assert result["state"] == "running"
-    assert result["unique_id"] == "1234567890"
+    assert result["unique_id"] == "39399cc6"
     assert result["key_file"] == expected_key_file
     assert result["security_group_id"].startswith("sg-")
 
@@ -228,11 +234,11 @@ def test_launch_instance_success(ec2_manager, cleanup_keys, registered_ami):
 
     tags = {tag["Key"]: tag["Value"] for tag in instance.tags}
     assert tags["ManagedBy"] == "campers"
-    assert tags["Name"] == "campers-1234567890"
+    assert tags["Name"] == "campers-39399cc6"
     assert tags["MachineConfig"] == "jupyter-lab"
-    assert tags["UniqueId"] == "1234567890"
+    assert tags["UniqueId"] == "39399cc6"
 
-    assert instance.key_name == "campers-1234567890"
+    assert instance.key_name == "campers-39399cc6"
     assert len(instance.security_groups) == 1
 
 
@@ -465,6 +471,7 @@ def test_list_instances_no_credentials_error(ec2_manager) -> None:
     from unittest.mock import MagicMock
 
     from botocore.exceptions import NoCredentialsError
+
     from campers.providers.exceptions import ProviderCredentialsError
 
     def mock_boto3_client(*args, **kwargs):
@@ -525,9 +532,7 @@ def test_resolve_ami_both_image_id_and_query(ec2_manager):
     config = {
         "ami": {
             "image_id": "ami-0abc123def456",
-            "query": {
-                "name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
-            },
+            "query": {"name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"},
         }
     }
     with pytest.raises(ValueError, match="Cannot specify both"):
@@ -667,12 +672,8 @@ def test_find_ami_by_query_returns_newest(ec2_manager):
     )
 
     images = ec2_client.describe_images(ImageIds=[ami1_id, ami2_id])["Images"]
-    ami1_creation = next(img for img in images if img["ImageId"] == ami1_id)[
-        "CreationDate"
-    ]
-    ami2_creation = next(img for img in images if img["ImageId"] == ami2_id)[
-        "CreationDate"
-    ]
+    ami1_creation = next(img for img in images if img["ImageId"] == ami1_id)["CreationDate"]
+    ami2_creation = next(img for img in images if img["ImageId"] == ami2_id)["CreationDate"]
 
     if ami2_creation > ami1_creation:
         assert result_ami_id == ami2_id
@@ -812,9 +813,7 @@ def test_stop_instance_api_error(ec2_manager, cleanup_keys, registered_ami):
             ec2_manager.stop_instance(instance_id)
 
 
-def test_stop_instance_returns_normalized_keys(
-    ec2_manager, cleanup_keys, registered_ami
-):
+def test_stop_instance_returns_normalized_keys(ec2_manager, cleanup_keys, registered_ami):
     """Test stop_instance returns dict with all expected keys."""
     config = {
         "instance_type": "t3.medium",
@@ -925,9 +924,7 @@ def test_start_instance_api_error(ec2_manager, cleanup_keys, registered_ami):
             ec2_manager.start_instance(instance_id)
 
 
-def test_start_instance_returns_normalized_keys(
-    ec2_manager, cleanup_keys, registered_ami
-):
+def test_start_instance_returns_normalized_keys(ec2_manager, cleanup_keys, registered_ami):
     """Test start_instance returns dict with all expected keys."""
     config = {
         "instance_type": "t3.medium",
@@ -1039,9 +1036,7 @@ def test_get_volume_size_api_error(ec2_manager, registered_ami):
     instance = instances[0]
     instance_id = instance.id
 
-    with patch.object(
-        ec2_manager.ec2_client, "describe_volumes"
-    ) as mock_describe_volumes:
+    with patch.object(ec2_manager.ec2_client, "describe_volumes") as mock_describe_volumes:
         mock_describe_volumes.side_effect = ClientError(
             {
                 "Error": {
@@ -1117,9 +1112,7 @@ def test_list_instances_returns_launch_time(ec2_manager, cleanup_keys, registere
         assert isinstance(instance["launch_time"], datetime)
 
 
-def test_start_instance_extracts_unique_id_from_tags(
-    ec2_manager, cleanup_keys, registered_ami
-):
+def test_start_instance_extracts_unique_id_from_tags(ec2_manager, cleanup_keys, registered_ami):
     """Verify unique_id is extracted from instance tags when started."""
     config = {
         "instance_type": "t3.micro",
@@ -1141,9 +1134,7 @@ def test_start_instance_extracts_unique_id_from_tags(
     assert result["unique_id"] == original_unique_id
 
 
-def test_start_instance_calculates_key_file_path(
-    ec2_manager, cleanup_keys, registered_ami
-):
+def test_start_instance_calculates_key_file_path(ec2_manager, cleanup_keys, registered_ami):
     """Verify key_file path is calculated correctly using CAMPERS_DIR."""
     config = {
         "instance_type": "t3.micro",

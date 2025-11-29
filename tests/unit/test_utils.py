@@ -7,16 +7,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from campers.providers.aws.utils import (
+    extract_instance_from_response,
+    sanitize_instance_name,
+)
 from campers.utils import (
     atomic_file_write,
     generate_instance_name,
     get_git_branch,
     get_git_project_name,
     validate_port,
-)
-from campers.providers.aws.utils import (
-    extract_instance_from_response,
-    sanitize_instance_name,
 )
 
 
@@ -354,7 +354,7 @@ class TestAtomicFileWrite:
         with tempfile.TemporaryDirectory() as tmpdir:
             target_path = Path(tmpdir) / "test.txt"
 
-            with patch("builtins.open", side_effect=IOError("Write failed")):
+            with patch("builtins.open", side_effect=OSError("Write failed")):
                 with pytest.raises(IOError):
                     atomic_file_write(target_path, "content")
 
@@ -366,7 +366,7 @@ class TestAtomicFileWrite:
         with tempfile.TemporaryDirectory() as tmpdir:
             target_path = Path(tmpdir) / "test.txt"
 
-            with patch("builtins.open", side_effect=IOError("Write failed")):
+            with patch("builtins.open", side_effect=OSError("Write failed")):
                 with pytest.raises(IOError, match="Write failed"):
                     atomic_file_write(target_path, "content")
 

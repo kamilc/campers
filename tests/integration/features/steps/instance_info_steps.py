@@ -1,9 +1,10 @@
 """BDD step definitions for instance info output."""
 
+import contextlib
 import os
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import boto3
@@ -42,13 +43,9 @@ def step_running_instance_with_camp(context: Context, camp_name: str) -> None:
 
     vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     if not vpcs["Vpcs"]:
-        try:
+        with contextlib.suppress(ClientError):
             ec2_client.create_default_vpc()
-        except ClientError:
-            pass
-        vpcs = ec2_client.describe_vpcs(
-            Filters=[{"Name": "isDefault", "Values": ["true"]}]
-        )
+        vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
     unique_id = str(uuid.uuid4()).replace("-", "")[:12]
@@ -149,7 +146,7 @@ def step_running_instance_launched_ago(context: Context, duration: str) -> None:
     context.expected_uptime_minutes = minutes_ago
 
     time_delta = timedelta(minutes=minutes_ago)
-    launch_time_in_past = datetime.now(timezone.utc) - time_delta
+    launch_time_in_past = datetime.now(UTC) - time_delta
 
     if context.instances and len(context.instances) > 0:
         context.instances[-1]["launch_time"] = launch_time_in_past
@@ -204,7 +201,7 @@ def step_timestamp_is_recent(context: Context) -> None:
 
     timestamp_str = context.found_iso_timestamp
     found_time = datetime.fromisoformat(timestamp_str)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
 
     time_diff = now - found_time
     assert time_diff < timedelta(minutes=5), (
@@ -323,9 +320,7 @@ def step_uptime_is_approximate(context: Context, duration: str) -> None:
 
     uptime_pattern = r"(\d+)\s*m"
     match = re.search(uptime_pattern, combined_output)
-    assert match is not None, (
-        f"Expected uptime in format 'XXm' in output:\n{combined_output}"
-    )
+    assert match is not None, f"Expected uptime in format 'XXm' in output:\n{combined_output}"
 
     actual_minutes = int(match.group(1))
     tolerance = max(2, expected_minutes // 5)

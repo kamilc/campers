@@ -1,7 +1,8 @@
 """Utility functions for BDD step definitions."""
 
 import asyncio
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 
 def run_async_test(async_func: Callable[[], Coroutine[Any, Any, Any]]) -> Any:

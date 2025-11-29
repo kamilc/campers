@@ -106,9 +106,7 @@ class SetupManager:
         bool
             True if default VPC exists, False otherwise
         """
-        vpcs = ec2_client.describe_vpcs(
-            Filters=[{"Name": "isDefault", "Values": ["true"]}]
-        )
+        vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
 
         return bool(vpcs["Vpcs"])
 
@@ -157,9 +155,7 @@ class SetupManager:
             ),
             (
                 "TerminateInstances",
-                lambda: ec2_client.terminate_instances(
-                    InstanceIds=["i-12345678"], DryRun=True
-                ),
+                lambda: ec2_client.terminate_instances(InstanceIds=["i-12345678"], DryRun=True),
             ),
             (
                 "CreateDefaultVpc",
@@ -167,15 +163,11 @@ class SetupManager:
             ),
             (
                 "CreateKeyPair",
-                lambda: ec2_client.create_key_pair(
-                    KeyName="test-key-dry-run", DryRun=True
-                ),
+                lambda: ec2_client.create_key_pair(KeyName="test-key-dry-run", DryRun=True),
             ),
             (
                 "DeleteKeyPair",
-                lambda: ec2_client.delete_key_pair(
-                    KeyName="test-key-dry-run", DryRun=True
-                ),
+                lambda: ec2_client.delete_key_pair(KeyName="test-key-dry-run", DryRun=True),
             ),
         ]
 
@@ -203,9 +195,7 @@ class SetupManager:
             AWS region to check
         """
         try:
-            response = ec2_client.describe_account_attributes(
-                AttributeNames=["max-instances"]
-            )
+            response = ec2_client.describe_account_attributes(AttributeNames=["max-instances"])
 
             for attr in response.get("AccountAttributes", []):
                 if attr["AttributeName"] == "max-instances":
@@ -224,9 +214,7 @@ class SetupManager:
         except ClientError as e:
             logging.warning("Could not check service quotas: %s", e)
 
-    def check_regional_availability(
-        self, ec2_client: Any, effective_region: str
-    ) -> None:
+    def check_regional_availability(self, ec2_client: Any, effective_region: str) -> None:
         """Check if region is available and operational.
 
         Parameters
@@ -296,9 +284,7 @@ class SetupManager:
         if ec2_client is None:
             ec2_client = self._boto3_client_factory("ec2", region_name=effective_region)
 
-        vpc_exists, missing_perms = self.check_infrastructure(
-            ec2_client, effective_region
-        )
+        vpc_exists, missing_perms = self.check_infrastructure(ec2_client, effective_region)
 
         if not vpc_exists:
             print(f"No default VPC found in {effective_region}\n")
@@ -355,9 +341,7 @@ class SetupManager:
         if ec2_client is None:
             ec2_client = self._boto3_client_factory("ec2", region_name=effective_region)
 
-        vpc_exists, missing_perms = self.check_infrastructure(
-            ec2_client, effective_region
-        )
+        vpc_exists, missing_perms = self.check_infrastructure(ec2_client, effective_region)
 
         if not vpc_exists:
             print(f"No default VPC in {effective_region}\n")

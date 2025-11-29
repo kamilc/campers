@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-
 from behave.model import Scenario
 from behave.runner import Context
 

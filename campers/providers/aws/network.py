@@ -48,9 +48,7 @@ class NetworkManager:
 
         return vpcs["Vpcs"][0]["VpcId"]
 
-    def create_security_group(
-        self, unique_id: str, ssh_allowed_cidr: str | None = None
-    ) -> str:
+    def create_security_group(self, unique_id: str, ssh_allowed_cidr: str | None = None) -> str:
         """Create security group with SSH access.
 
         Parameters
@@ -69,22 +67,22 @@ class NetworkManager:
 
         vpc_id = self.get_default_vpc_id()
 
-        try:
-            with handle_aws_errors():
-                existing_sgs = self.ec2_client.describe_security_groups(
-                    Filters=[
-                        {"Name": "group-name", "Values": [sg_name]},
-                        {"Name": "vpc-id", "Values": [vpc_id]},
-                    ]
-                )
+        with handle_aws_errors():
+            existing_sgs = self.ec2_client.describe_security_groups(
+                Filters=[
+                    {"Name": "group-name", "Values": [sg_name]},
+                    {"Name": "vpc-id", "Values": [vpc_id]},
+                ]
+            )
 
-            if existing_sgs["SecurityGroups"]:
+        if existing_sgs["SecurityGroups"]:
+            sg_id = existing_sgs["SecurityGroups"][0]["GroupId"]
+            try:
                 with handle_aws_errors():
-                    self.ec2_client.delete_security_group(
-                        GroupId=existing_sgs["SecurityGroups"][0]["GroupId"]
-                    )
-        except ProviderAPIError as e:
-            logger.debug("Failed to delete existing security group: %s", e)
+                    self.ec2_client.delete_security_group(GroupId=sg_id)
+                logger.debug("Deleted existing security group %s", sg_id)
+            except ProviderAPIError as e:
+                logger.warning("Failed to delete existing security group %s: %s", sg_id, e)
 
         with handle_aws_errors():
             response = self.ec2_client.create_security_group(

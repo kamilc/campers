@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 import os
 import re
-import socket
 import sys
+from collections.abc import Callable
 from typing import Any
 
 import fire
@@ -14,6 +14,7 @@ import paramiko
 
 from campers.logging import StreamFormatter, StreamRoutingFilter
 from campers.providers import ProviderAPIError, ProviderCredentialsError
+from campers.utils import get_aws_credentials_error_message
 
 
 def get_campers_base_class() -> type:
@@ -55,10 +56,10 @@ class CampersCLI:
 
     def __new__(
         cls,
-        compute_provider_factory: Any | None = None,
-        ssh_manager_factory: Any | None = None,
-        boto3_client_factory: Any | None = None,
-        boto3_resource_factory: Any | None = None,
+        compute_provider_factory: Callable[..., Any] | None = None,
+        ssh_manager_factory: Callable[..., Any] | None = None,
+        boto3_client_factory: Callable[..., Any] | None = None,
+        boto3_resource_factory: Callable[..., Any] | None = None,
     ) -> Any:
         """Create CampersCLI instance with dynamic subclassing.
 
@@ -86,10 +87,10 @@ class CampersCLI:
 
                 def __init__(
                     self,
-                    compute_provider_factory: Any | None = None,
-                    ssh_manager_factory: Any | None = None,
-                    boto3_client_factory: Any | None = None,
-                    boto3_resource_factory: Any | None = None,
+                    compute_provider_factory: Callable[..., Any] | None = None,
+                    ssh_manager_factory: Callable[..., Any] | None = None,
+                    boto3_client_factory: Callable[..., Any] | None = None,
+                    boto3_resource_factory: Callable[..., Any] | None = None,
                 ) -> None:
                     """Initialize CampersCLI with optional dependency injection.
 
@@ -153,7 +154,8 @@ class CampersCLI:
                     Returns
                     -------
                     dict[str, Any] | str
-                        Instance metadata dict or JSON string (never returns in TUI mode, exits instead)
+                        Instance metadata dict or JSON string (never returns in TUI
+                        mode, exits instead)
                     """
                     debug_mode = os.environ.get("CAMPERS_DEBUG") == "1"
 
@@ -228,12 +230,7 @@ def main() -> None:
         if debug_mode:
             raise
 
-        print("Cloud credentials not found\n", file=sys.stderr)
-        print("Configure your credentials:", file=sys.stderr)
-        print("  aws configure\n", file=sys.stderr)
-        print("Or set environment variables:", file=sys.stderr)
-        print("  export AWS_ACCESS_KEY_ID=...", file=sys.stderr)
-        print("  export AWS_SECRET_ACCESS_KEY=...", file=sys.stderr)
+        print(get_aws_credentials_error_message(), file=sys.stderr)
         sys.exit(1)
     except ValueError as e:
         if debug_mode:
@@ -255,9 +252,7 @@ def main() -> None:
             sys.exit(1)
         elif "startup_script" in error_msg and "sync_paths" in error_msg:
             print("Configuration error\n", file=sys.stderr)
-            print(
-                "startup_script requires sync_paths to be configured\n", file=sys.stderr
-            )
+            print("startup_script requires sync_paths to be configured\n", file=sys.stderr)
             print("Add sync_paths to your configuration:", file=sys.stderr)
             print("  sync_paths:", file=sys.stderr)
             print("    - local: ./src", file=sys.stderr)
@@ -284,18 +279,13 @@ def main() -> None:
                 "  - Compute permissions (DescribeInstances, RunInstances, TerminateInstances)",
                 file=sys.stderr,
             )
-            print(
-                "  - VPC permissions (DescribeVpcs, CreateDefaultVpc)", file=sys.stderr
-            )
+            print("  - VPC permissions (DescribeVpcs, CreateDefaultVpc)", file=sys.stderr)
             print(
                 "  - Key Pair permissions (CreateKeyPair, DeleteKeyPair, DescribeKeyPairs)",
                 file=sys.stderr,
             )
             print("  - Security Group permissions", file=sys.stderr)
-        elif (
-            error_code == "InvalidParameterValue"
-            and "instance type" in error_msg.lower()
-        ):
+        elif error_code == "InvalidParameterValue" and "instance type" in error_msg.lower():
             print("Invalid instance type\n", file=sys.stderr)
             print("This usually means:", file=sys.stderr)
             print("  - Instance type not available in this region", file=sys.stderr)
@@ -318,15 +308,13 @@ def main() -> None:
             print("  - Your session token needs to be refreshed\n", file=sys.stderr)
             print("Fix it:", file=sys.stderr)
             print("  aws sso login           # If using AWS SSO", file=sys.stderr)
-            print(
-                "  aws configure           # Re-configure credentials", file=sys.stderr
-            )
+            print("  aws configure           # Re-configure credentials", file=sys.stderr)
             print("  # Or refresh your temporary credentials", file=sys.stderr)
         else:
             print(f"Cloud API error: {error_msg}", file=sys.stderr)
 
         sys.exit(1)
-    except (paramiko.SSHException, paramiko.AuthenticationException, socket.error):
+    except (OSError, paramiko.SSHException, paramiko.AuthenticationException):
         if debug_mode:
             raise
 
