@@ -9,6 +9,7 @@ from textual.widgets import Static
 from campers.constants import STATS_REFRESH_INTERVAL_SECONDS
 from campers.core.interfaces import ComputeProvider, PricingProvider
 from campers.providers.aws.pricing import PricingService
+from campers.providers.exceptions import ProviderError
 
 if TYPE_CHECKING:
     from campers import Campers
@@ -74,7 +75,7 @@ class InstanceOverviewWidget(Static):
             self.pricing_service = PricingService()
             self._initialized = True
             self.app.call_from_thread(self._start_refresh_timer)
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.warning("Failed to initialize cloud provider services: %s", e)
             self.app.call_from_thread(self._show_init_error)
 
@@ -123,7 +124,7 @@ class InstanceOverviewWidget(Static):
             self.last_update = datetime.now()
             self.app.call_from_thread(self._update_display)
 
-        except Exception as e:
+        except (ProviderError, KeyError, ValueError, AttributeError) as e:
             logger.warning("Failed to refresh instance stats: %s", e)
 
     def _update_display(self) -> None:

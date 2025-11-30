@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import boto3
+from botocore.config import Config
 
 
 class AWSClientFactory:
@@ -25,6 +26,10 @@ class AWSClientFactory:
         Any
             A boto3 service client
         """
+        if "config" not in kwargs:
+            kwargs["config"] = Config(
+                connect_timeout=5, read_timeout=30, retries={"max_attempts": 3, "mode": "adaptive"}
+            )
         return boto3.client(service_name, **kwargs)
 
     def get_resource(self, service_name: str, **kwargs: Any) -> Any:
@@ -42,6 +47,10 @@ class AWSClientFactory:
         Any
             A boto3 service resource
         """
+        if "config" not in kwargs:
+            kwargs["config"] = Config(
+                connect_timeout=5, read_timeout=30, retries={"max_attempts": 3, "mode": "adaptive"}
+            )
         return boto3.resource(service_name, **kwargs)
 
 

@@ -11,11 +11,14 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from campers.providers.aws.pricing_parsers import parse_ebs_pricing, parse_ec2_pricing
 
 logger = logging.getLogger(__name__)
+
+PRICING_API_REGION = "us-east-1"
 
 
 class PricingCache:
@@ -94,6 +97,8 @@ class PricingService:
     AWS Pricing API is only available in us-east-1 region regardless of
     the region where resources are being priced. The service gracefully
     handles environments where Pricing API is unavailable (e.g., LocalStack).
+    Thread-safe initialization using lock to prevent race conditions when
+    multiple threads access pricing_available during initialization.
     """
 
     REGION_TO_LOCATION = {
@@ -119,17 +124,28 @@ class PricingService:
         "af-south-1": "Africa (Cape Town)",
     }
 
+    _init_lock = threading.Lock()
+
     def __init__(self, use_cache: bool = True) -> None:
         self.cache = PricingCache() if use_cache else None
         self.pricing_available = False
+        self.pricing_client = None
 
-        try:
-            self.pricing_client = boto3.client("pricing", region_name="us-east-1")
-            self.pricing_available = True
-            logger.debug("AWS Pricing API initialized successfully")
-        except (ClientError, NoCredentialsError) as e:
-            logger.debug("Failed to initialize AWS Pricing API: %s", e)
-            self.pricing_client = None
+        with self._init_lock:
+            try:
+                config = Config(
+                    connect_timeout=5,
+                    read_timeout=30,
+                    retries={"max_attempts": 3, "mode": "adaptive"},
+                )
+                self.pricing_client = boto3.client(
+                    "pricing", region_name=PRICING_API_REGION, config=config
+                )
+                self.pricing_available = True
+                logger.debug("AWS Pricing API initialized successfully")
+            except (ClientError, NoCredentialsError) as e:
+                logger.debug("Failed to initialize AWS Pricing API: %s", e)
+                self.pricing_client = None
 
     def get_ec2_hourly_rate(
         self,
@@ -366,7 +382,7 @@ class PricingService:
         if self.pricing_client is not None:
             try:
                 self.pricing_client.close()
-            except Exception as e:
+            except (AttributeError, OSError) as e:
                 logger.debug("Failed to close pricing client: %s", e)
             finally:
                 self.pricing_client = None

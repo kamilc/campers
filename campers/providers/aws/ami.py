@@ -35,18 +35,18 @@ class AMIResolver:
         """
         try:
             endpoint = self.ec2_client._endpoint
-            if hasattr(endpoint, 'host'):
+            if hasattr(endpoint, "host"):
                 host = str(endpoint.host).lower()
-                return 'localstack' in host or 'localhost:4566' in host
-        except (AttributeError, Exception):
+                return "localstack" in host or "localhost:4566" in host
+        except (AttributeError, TypeError):
             pass
 
         try:
             meta = self.ec2_client.meta
-            if hasattr(meta, 'endpoint_url'):
+            if hasattr(meta, "endpoint_url"):
                 url = str(meta.endpoint_url).lower()
-                return 'localstack' in url or 'localhost:4566' in url
-        except (AttributeError, Exception):
+                return "localstack" in url or "localhost:4566" in url
+        except (AttributeError, TypeError):
             pass
 
         return False
@@ -137,11 +137,8 @@ class AMIResolver:
         ValueError
             If architecture is invalid or no AMIs match the filters
         """
-        if architecture:
-            if architecture not in ("x86_64", "arm64"):
-                raise ValueError(
-                    f"Invalid architecture: '{architecture}'. Must be 'x86_64' or 'arm64'"
-                )
+        if architecture and architecture not in ("x86_64", "arm64"):
+            raise ValueError(f"Invalid architecture: '{architecture}'. Must be 'x86_64' or 'arm64'")
 
         is_localstack = self._is_localstack_endpoint()
 

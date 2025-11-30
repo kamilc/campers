@@ -174,7 +174,9 @@ def test_refresh_stats_sets_none_cost_when_pricing_unavailable(
 
 def test_refresh_stats_handles_ec2_api_errors_gracefully(initialized_widget, mock_ec2_manager):
     """Test _refresh_stats_sync maintains last known state when EC2 API fails."""
-    mock_ec2_manager.list_instances.side_effect = Exception("EC2 API error")
+    from campers.providers.exceptions import ProviderAPIError
+
+    mock_ec2_manager.list_instances.side_effect = ProviderAPIError("EC2 API error")
 
     initialized_widget.running_count = 5
     initialized_widget.stopped_count = 3

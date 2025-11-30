@@ -84,7 +84,7 @@ class ConfigLoader:
         except InterpolationResolutionError as e:
             logger.error("Failed to resolve configuration variables: %s", e)
             raise
-        except Exception as e:
+        except (ValueError, KeyError, AttributeError) as e:
             logger.error("Failed to resolve configuration variables: %s", e)
             raise ValueError(f"Configuration variable resolution error: {e}") from e
 

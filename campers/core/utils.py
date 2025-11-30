@@ -1,6 +1,11 @@
 """Utility functions for common patterns across the codebase."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from campers.core.interfaces import ComputeProvider
 
 
 def get_instance_id(instance_details: dict[str, Any]) -> str | None:
@@ -22,7 +27,9 @@ def get_instance_id(instance_details: dict[str, Any]) -> str | None:
     return instance_details.get("InstanceId") or instance_details.get("instance_id")
 
 
-def get_volume_size_or_default(regional_manager: Any, instance_id: str, default: int = 0) -> int:
+def get_volume_size_or_default(
+    regional_manager: ComputeProvider, instance_id: str, default: int = 0
+) -> int:
     """Get volume size with fallback to default value.
 
     Queries the regional manager for instance volume size and returns
@@ -30,7 +37,7 @@ def get_volume_size_or_default(regional_manager: Any, instance_id: str, default:
 
     Parameters
     ----------
-    regional_manager : Any
+    regional_manager : ComputeProvider
         Regional compute provider manager with get_volume_size method
     instance_id : str
         Instance ID to query

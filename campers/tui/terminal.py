@@ -84,7 +84,7 @@ def detect_terminal_background() -> TerminalBackground:
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
-    except Exception as e:
+    except (OSError, ValueError) as e:
         logger.debug("Terminal background detection failed: %s", e)
 
     return TerminalBackground(color_hex="#000000", is_light=False)

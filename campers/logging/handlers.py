@@ -72,5 +72,5 @@ class TuiLogHandler(logging.Handler):
                 return
 
             self.app.post_message(TuiLogMessage(msg))
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             logger.debug("Error emitting log message to TUI: %s", e)

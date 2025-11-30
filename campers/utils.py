@@ -251,7 +251,7 @@ def atomic_file_write(path: Path, content: str) -> None:
                 with open(temp_path, "w") as f:
                     f.write(content)
                 temp_path.rename(path)
-            except Exception:
+            except OSError:
                 if temp_path.exists():
                     temp_path.unlink()
                 raise

@@ -212,7 +212,7 @@ class CampersTUI(App):
 
         try:
             self.query_one(f"#{WidgetID.UPTIME}").update(f"Uptime: {uptime_str}")
-        except Exception as e:
+        except (ValueError, AttributeError) as e:
             logging.error("Failed to update uptime widget: %s", e)
 
     def update_status(self, payload: dict[str, Any]) -> None:
@@ -228,7 +228,7 @@ class CampersTUI(App):
 
             try:
                 self.query_one(f"#{WidgetID.STATUS}").update(f"Status: {status}")
-            except Exception as e:
+            except (ValueError, AttributeError) as e:
                 logging.error("Failed to update status widget: %s", e)
 
     def update_mutagen_status(self, payload: dict[str, Any]) -> None:
@@ -251,7 +251,7 @@ class CampersTUI(App):
 
         try:
             self.query_one(f"#{WidgetID.MUTAGEN}").update(display_text)
-        except Exception as e:
+        except (ValueError, AttributeError) as e:
             logging.error("Failed to update mutagen widget: %s", e)
 
     def handle_cleanup_event(self, payload: dict[str, Any]) -> None:
@@ -279,26 +279,26 @@ class CampersTUI(App):
                 self.query_one(f"#{WidgetID.INSTANCE_TYPE}").update(
                     f"Instance Type: {config['instance_type']}"
                 )
-            except Exception as e:
+            except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update instance type widget: %s", e)
 
         if "region" in config:
             try:
                 self.query_one(f"#{WidgetID.REGION}").update(f"Region: {config['region']}")
-            except Exception as e:
+            except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update region widget: %s", e)
 
         camp_name = config.get("camp_name", "ad-hoc")
 
         try:
             self.query_one(f"#{WidgetID.CAMP_NAME}").update(f"Camp Name: {camp_name}")
-        except Exception as e:
+        except (ValueError, AttributeError, RuntimeError) as e:
             logging.error("Failed to update camp name widget: %s", e)
 
         if "command" in config:
             try:
                 self.query_one(f"#{WidgetID.COMMAND}").update(f"Command: {config['command']}")
-            except Exception as e:
+            except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update command widget: %s", e)
 
     def update_from_instance_details(self, details: dict[str, Any]) -> None:
@@ -312,7 +312,7 @@ class CampersTUI(App):
         if "state" in details:
             try:
                 self.query_one(f"#{WidgetID.STATUS}").update(f"Status: {details['state']}")
-            except Exception as e:
+            except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update status widget: %s", e)
 
         if "launch_time" in details and details["launch_time"]:
@@ -328,7 +328,7 @@ class CampersTUI(App):
                 public_ip = details["public_ip"]
                 ssh_string = f"ssh -o IdentitiesOnly=yes -i {key_file} {ssh_username}@{public_ip}"
                 self.query_one(f"#{WidgetID.SSH}").update(f"SSH: {ssh_string}")
-            except Exception as e:
+            except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update SSH widget: %s", e)
 
     def on_unmount(self) -> None:
@@ -377,7 +377,7 @@ class CampersTUI(App):
             )
             logging.error("Cloud provider credentials not found")
             self.worker_exit_code = 1
-        except Exception as e:
+        except (ValueError, AttributeError, RuntimeError) as e:
             error_code = getattr(e, "error_code", None)
             error_message = str(e)
 
@@ -451,7 +451,7 @@ class CampersTUI(App):
                 try:
                     log_widget = self.query_one(Log)
                     log_widget.write_line("Force exit - skipping cleanup!")
-                except Exception as e:
+                except (ValueError, AttributeError, RuntimeError) as e:
                     logger.debug("Failed to write to log widget during force exit: %s", e)
 
                 if hasattr(self, "_driver") and self._driver is not None:
@@ -468,13 +468,13 @@ class CampersTUI(App):
 
         try:
             self.query_one(f"#{WidgetID.STATUS}").update("Status: shutting down")
-        except Exception as e:
+        except (ValueError, AttributeError, RuntimeError) as e:
             logger.debug("Failed to update status widget during quit: %s", e)
 
         try:
             log_widget = self.query_one(Log)
             log_widget.write_line("Graceful shutdown initiated (press Ctrl+C again to force exit)")
-        except Exception as e:
+        except (ValueError, AttributeError, RuntimeError) as e:
             logger.debug("Failed to write shutdown message to log widget: %s", e)
 
         self.refresh()

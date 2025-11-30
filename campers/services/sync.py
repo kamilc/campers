@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -51,28 +52,23 @@ class MutagenManager:
         include_line : str
             Include directive line to add to config
         """
-        if config_path.exists():
-            with open(config_path, "r+") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-                try:
-                    content = f.read()
+        lock_path = config_path.with_suffix(".lock")
+
+        with open(lock_path, "w") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                if config_path.exists():
+                    content = config_path.read_text()
                     if include_line not in content:
-                        f.seek(0)
-                        f.write(f"{include_line}\n\n{content}")
-                        f.truncate()
+                        config_path.write_text(f"{include_line}\n\n{content}")
                         logger.debug("Added Include to %s", config_path)
                     else:
                         logger.debug("Include line already present in %s", config_path)
-                finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        else:
-            with open(config_path, "w") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-                try:
-                    f.write(f"{include_line}\n")
+                else:
+                    config_path.write_text(f"{include_line}\n")
                     logger.debug("Created SSH config at %s", config_path)
-                finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     def check_mutagen_installed(self) -> None:
         """Check if mutagen is installed locally.
@@ -184,8 +180,6 @@ class MutagenManager:
         RuntimeError
             If session creation fails
         """
-        import tempfile
-
         cmd = [
             "mutagen",
             "sync",
@@ -435,8 +429,6 @@ Host {host}
         host : str | None
             Remote host to remove from SSH config
         """
-        import re
-        import tempfile
 
         try:
             subprocess.run(

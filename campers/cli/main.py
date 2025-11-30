@@ -306,7 +306,7 @@ def main() -> None:
         print("  2. Check security group allows port 22", file=sys.stderr)
         print("  3. Verify instance is running: campers list", file=sys.stderr)
         sys.exit(1)
-    except Exception as e:
+    except RuntimeError as e:
         if debug_mode:
             raise
 

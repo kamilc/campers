@@ -8,11 +8,13 @@ from pathlib import Path
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import (
     ClientError,
     NoCredentialsError,
     WaiterError,
 )
+from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
 from campers.constants import (
     SSH_IP_RETRY_DELAY,
@@ -34,6 +36,8 @@ from campers.providers.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+UUID_SLICE_LENGTH = 8
 
 ACTIVE_INSTANCE_STATES = [
     InstanceState.PENDING.value,
@@ -128,6 +132,53 @@ class EC2Manager:
         self.ami_resolver = AMIResolver(self.ec2_client, region)
         self.keypair_manager = KeyPairManager(self.ec2_client, region)
         self.network_manager = NetworkManager(self.ec2_client, region)
+
+    def __enter__(self) -> "EC2Manager":
+        """Enter context manager.
+
+        Returns
+        -------
+        EC2Manager
+            Self for use in with statement
+        """
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exit context manager and close resources.
+
+        Parameters
+        ----------
+        exc_type : Any
+            Exception type if an exception was raised
+        exc_val : Any
+            Exception value if an exception was raised
+        exc_tb : Any
+            Exception traceback if an exception was raised
+        """
+        self.close()
+
+    def close(self) -> None:
+        """Close boto3 clients and release resources.
+
+        This method safely closes both EC2 client and resource connections.
+        Errors during closing are logged but do not raise exceptions.
+        """
+        try:
+            if hasattr(self, "ec2_client") and self.ec2_client is not None:
+                self.ec2_client.close()
+        except (AttributeError, OSError) as e:
+            logger.debug(f"Error closing EC2 client: {e}")
+
+        try:
+            if (
+                hasattr(self, "ec2_resource")
+                and self.ec2_resource is not None
+                and hasattr(self.ec2_resource, "meta")
+                and hasattr(self.ec2_resource.meta, "client")
+            ):
+                self.ec2_resource.meta.client.close()
+        except (AttributeError, OSError) as e:
+            logger.debug(f"Error closing EC2 resource client: {e}")
 
     def resolve_ami(self, config: dict[str, Any]) -> str:
         """Resolve AMI ID from configuration.
@@ -336,7 +387,7 @@ class EC2Manager:
             ami_id, unique_id, instance_tag_name, instance_type
         """
         ami_id = self.resolve_ami(config)
-        unique_id = str(uuid.uuid4())[:8]
+        unique_id = str(uuid.uuid4())[:UUID_SLICE_LENGTH]
         instance_tag_name = instance_name if instance_name else f"campers-{unique_id}"
 
         key_pair_info = self.create_key_pair(unique_id)
@@ -405,6 +456,9 @@ class EC2Manager:
                 }
             ],
         )
+
+        if not instances:
+            raise RuntimeError("No instances created by AWS")
 
         instance = instances[0]
         resources["instance"] = instance
@@ -476,6 +530,30 @@ class EC2Manager:
             except OSError as cleanup_error:
                 logger.warning("Failed to delete key file during rollback: %s", cleanup_error)
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+    )
+    def describe_regions(self) -> list[str]:
+        """Get list of available AWS regions with retry logic.
+
+        Returns
+        -------
+        list[str]
+            List of region names
+
+        Raises
+        ------
+        Exception
+            If describe_regions API call fails after all retries
+        """
+        ec2_client = self.boto3_client_factory("ec2", region_name=self.region)
+        try:
+            regions_response = ec2_client.describe_regions()
+            return [r["RegionName"] for r in regions_response["Regions"]]
+        finally:
+            ec2_client.close()
+
     def list_instances(self, region_filter: str | None = None) -> list[dict[str, Any]]:
         """List all campers-managed instances across regions.
 
@@ -504,9 +582,7 @@ class EC2Manager:
         else:
             try:
                 with handle_aws_errors():
-                    ec2_client = self.boto3_client_factory("ec2", region_name=self.region)
-                    regions_response = ec2_client.describe_regions()
-                    regions = [r["RegionName"] for r in regions_response["Regions"]]
+                    regions = self.describe_regions()
             except ProviderCredentialsError:
                 raise
             except (ProviderAPIError, ProviderConnectionError) as e:
@@ -514,6 +590,13 @@ class EC2Manager:
                     f"Unable to query all AWS regions ({e.__class__.__name__}), "
                     f"falling back to default region '{self.region}' only. "
                     f"Use --region flag to query specific regions."
+                )
+                regions = [self.region]
+            except RetryError as e:
+                logger.warning(
+                    f"Unable to query all AWS regions (retries exhausted), "
+                    f"falling back to default region '{self.region}' only. "
+                    f"Use --region flag to query specific regions. Error: {e}"
                 )
                 regions = [self.region]
 
@@ -781,7 +864,10 @@ class EC2Manager:
 
         try:
             volumes_response = self.ec2_client.describe_volumes(VolumeIds=[volume_id])
-            volume = volumes_response["Volumes"][0]
+            volumes = volumes_response.get("Volumes", [])
+            if not volumes:
+                raise RuntimeError(f"Volume {volume_id} not found")
+            volume = volumes[0]
             size = volume.get("Size", 0)
             logger.info(f"Instance {instance_id} has root volume size {size}GB")
             return size
@@ -823,38 +909,20 @@ class EC2Manager:
         bool
             True if region is valid, False otherwise
         """
+        ec2 = None
         try:
-            ec2 = boto3.client("ec2", region_name=region)
+            config = Config(
+                connect_timeout=5, read_timeout=30, retries={"max_attempts": 3, "mode": "adaptive"}
+            )
+            ec2 = boto3.client("ec2", region_name=region, config=config)
             ec2.describe_regions(RegionNames=[region])
             return True
         except (ClientError, Exception) as e:
             logger.warning("Unable to validate region %s: %s", region, e)
             return False
-
-    def sanitize_instance_name(self, name: str) -> str:
-        """Sanitize instance name to meet AWS requirements.
-
-        AWS instance names (Name tag) can contain: letters, numbers, spaces, and
-        special characters ._-:/@. Other characters are replaced with hyphens.
-
-        Parameters
-        ----------
-        name : str
-            Original instance name
-
-        Returns
-        -------
-        str
-            Sanitized instance name that meets AWS requirements
-        """
-        allowed_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-:/@")
-        sanitized = "".join(c if c in allowed_chars else "-" for c in name)
-        sanitized = sanitized.strip("-").strip()
-
-        if not sanitized:
-            sanitized = "instance"
-
-        return sanitized[:255]
+        finally:
+            if ec2:
+                ec2.close()
 
     def terminate_instance(self, instance_id: str) -> None:
         """Terminate instance and clean up resources.

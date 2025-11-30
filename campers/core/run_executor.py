@@ -287,7 +287,7 @@ class RunExecutor:
     def _phase_instance_provision(
         self,
         merged_config: dict[str, Any],
-        mutagen_mgr: Any,
+        mutagen_mgr: MutagenManager,
         update_queue: queue.Queue | None,
     ) -> tuple[dict[str, Any], Any]:
         """Phase 2: Provision instance.
@@ -387,7 +387,7 @@ class RunExecutor:
         self,
         merged_config: dict[str, Any],
         instance_details: dict[str, Any],
-        mutagen_mgr: Any,
+        mutagen_mgr: MutagenManager,
         ssh_host: str,
         ssh_port: int,
         disable_mutagen: bool,

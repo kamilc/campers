@@ -15,6 +15,16 @@ from campers.providers.aws.ssh import get_aws_ssh_connection_info
 
 logger = logging.getLogger(__name__)
 
+SSH_RETRY_DELAYS = [1, 2, 4, 8, 16, 30, 30, 30, 30, 30]
+
+SENSITIVE_PATTERNS = [
+    "PASSWORD",
+    "SECRET",
+    "TOKEN",
+    "KEY",
+    "PRIVATE",
+]
+
 
 @dataclass
 class SSHConnectionInfo:
@@ -133,7 +143,6 @@ class SSHManager:
         PermissionError
             If SSH key file has incorrect permissions or cannot be accessed
         """
-        ssh_retry_delays = [1, 2, 4, 8, 16, 30, 30, 30, 30, 30]
         timeout_seconds = int(os.environ.get("CAMPERS_SSH_TIMEOUT", "30"))
         effective_max_retries = int(os.environ.get("CAMPERS_SSH_MAX_RETRIES", str(max_retries)))
 
@@ -175,8 +184,8 @@ class SSHManager:
 
             except (TimeoutError, paramiko.SSHException, OSError) as e:
                 if attempt < effective_max_retries - 1:
-                    delay_index = min(attempt, len(ssh_retry_delays) - 1)
-                    delay = ssh_retry_delays[delay_index]
+                    delay_index = min(attempt, len(SSH_RETRY_DELAYS) - 1)
+                    delay = SSH_RETRY_DELAYS[delay_index]
                     time.sleep(delay)
                     continue
                 else:

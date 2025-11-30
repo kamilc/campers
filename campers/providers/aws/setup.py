@@ -89,6 +89,7 @@ class SetupManager:
         bool
             True if credentials are valid, False otherwise
         """
+        sts_client = None
         try:
             sts_client = boto3.client("sts", region_name=effective_region)
             sts_client.get_caller_identity()
@@ -102,6 +103,9 @@ class SetupManager:
         except ClientError:
             print("AWS credentials found")
             return True
+        finally:
+            if sts_client:
+                sts_client.close()
 
     def check_vpc_status(self, ec2_client: Any, effective_region: str) -> bool:
         """Check if default VPC exists in region.
@@ -293,37 +297,40 @@ class SetupManager:
 
         ec2_client = boto3.client("ec2", region_name=effective_region)
 
-        check_result = self.check_infrastructure(ec2_client, effective_region)
+        try:
+            check_result = self.check_infrastructure(ec2_client, effective_region)
 
-        if not check_result.vpc_exists:
-            print(f"No default VPC found in {effective_region}\n")
+            if not check_result.vpc_exists:
+                print(f"No default VPC found in {effective_region}\n")
 
-            response = input("Create default VPC now? (y/n): ")
+                response = input("Create default VPC now? (y/n): ")
 
-            if response.lower() == "y":
-                try:
-                    ec2_client.create_default_vpc()
-                    print(f"Default VPC created in {effective_region}")
-                except ClientError as e:
-                    print(f"\nFailed to create VPC: {e}")
-                    print("\nManual creation:")
+                if response.lower() == "y":
+                    try:
+                        ec2_client.create_default_vpc()
+                        print(f"Default VPC created in {effective_region}")
+                    except ClientError as e:
+                        print(f"\nFailed to create VPC: {e}")
+                        print("\nManual creation:")
+                        print(f"  aws ec2 create-default-vpc --region {effective_region}")
+                        sys.exit(1)
+                else:
+                    print("\nSkipping VPC creation.")
+                    print("You can create it later with:")
                     print(f"  aws ec2 create-default-vpc --region {effective_region}")
-                    sys.exit(1)
+                    return
             else:
-                print("\nSkipping VPC creation.")
-                print("You can create it later with:")
-                print(f"  aws ec2 create-default-vpc --region {effective_region}")
-                return
-        else:
-            print(f"Default VPC exists in {effective_region}")
+                print(f"Default VPC exists in {effective_region}")
 
-        if check_result.missing_permissions:
-            print(f"Missing IAM permissions: {', '.join(check_result.missing_permissions)}")
-            print("\nSome operations may fail without these permissions.")
-        else:
-            print("IAM permissions verified")
+            if check_result.missing_permissions:
+                print(f"Missing IAM permissions: {', '.join(check_result.missing_permissions)}")
+                print("\nSome operations may fail without these permissions.")
+            else:
+                print("IAM permissions verified")
 
-        print("\nSetup complete! Run: campers run")
+            print("\nSetup complete! Run: campers run")
+        finally:
+            ec2_client.close()
 
     def doctor(self, region: str | None = None) -> None:
         """Diagnose AWS environment and report status.
@@ -347,27 +354,30 @@ class SetupManager:
 
         ec2_client = boto3.client("ec2", region_name=effective_region)
 
-        check_result = self.check_infrastructure(ec2_client, effective_region)
+        try:
+            check_result = self.check_infrastructure(ec2_client, effective_region)
 
-        if not check_result.vpc_exists:
-            print(f"No default VPC in {effective_region}\n")
-            print("Fix it:")
-            print("  campers setup")
-            print("Or manually:")
-            print(f"  aws ec2 create-default-vpc --region {effective_region}")
-        else:
-            print(f"Default VPC exists in {effective_region}")
+            if not check_result.vpc_exists:
+                print(f"No default VPC in {effective_region}\n")
+                print("Fix it:")
+                print("  campers setup")
+                print("Or manually:")
+                print(f"  aws ec2 create-default-vpc --region {effective_region}")
+            else:
+                print(f"Default VPC exists in {effective_region}")
 
-        if check_result.missing_permissions:
-            print(f"Missing IAM permissions: {', '.join(check_result.missing_permissions)}")
-            print("\nRequired permissions:")
-            for perm in check_result.missing_permissions:
-                print(f"  - {perm}")
-        else:
-            print("IAM permissions verified")
+            if check_result.missing_permissions:
+                print(f"Missing IAM permissions: {', '.join(check_result.missing_permissions)}")
+                print("\nRequired permissions:")
+                for perm in check_result.missing_permissions:
+                    print(f"  - {perm}")
+            else:
+                print("IAM permissions verified")
 
-        print()
-        self.check_service_quotas(ec2_client, effective_region)
-        self.check_regional_availability(ec2_client, effective_region)
+            print()
+            self.check_service_quotas(ec2_client, effective_region)
+            self.check_regional_availability(ec2_client, effective_region)
 
-        print("\nDiagnostics complete.")
+            print("\nDiagnostics complete.")
+        finally:
+            ec2_client.close()

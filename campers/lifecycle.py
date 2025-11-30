@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from campers.core.config import ConfigLoader
+from campers.core.interfaces import ComputeProvider
 from campers.core.utils import get_volume_size_or_default
 from campers.providers.aws.pricing import (
     PricingService,
@@ -24,7 +25,7 @@ class LifecycleManager:
     ----------
     config_loader : ConfigLoader
         Configuration loader instance
-    compute_provider_factory : Callable[..., Any]
+    compute_provider_factory : Callable[..., ComputeProvider]
         Factory function to create compute provider instances
     log_and_print_error : Callable[[str, *Any], None]
         Function to log and print errors to stderr
@@ -35,7 +36,7 @@ class LifecycleManager:
     def __init__(
         self,
         config_loader: ConfigLoader,
-        compute_provider_factory: Callable[..., Any],
+        compute_provider_factory: Callable[..., ComputeProvider],
         log_and_print_error: Callable[..., None],
         truncate_name: Callable[[str, int], str],
     ) -> None:

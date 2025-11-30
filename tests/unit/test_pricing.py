@@ -7,6 +7,8 @@ from unittest.mock import Mock, patch
 import pytest
 from botocore.exceptions import ClientError
 
+from botocore.config import Config
+
 from campers.providers.aws.pricing import (
     PricingCache,
     PricingService,
@@ -132,7 +134,11 @@ class TestPricingService:
 
         assert service.pricing_available is True
         assert service.pricing_client is mock_pricing
-        mock_boto_client.assert_called_once_with("pricing", region_name="us-east-1")
+        mock_boto_client.assert_called_once()
+        call_args = mock_boto_client.call_args
+        assert call_args[0][0] == "pricing"
+        assert call_args[1]["region_name"] == "us-east-1"
+        assert isinstance(call_args[1]["config"], Config)
 
     @patch("boto3.client")
     def test_initialization_failure(self, mock_boto_client: Mock) -> None:
