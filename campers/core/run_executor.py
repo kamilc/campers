@@ -331,7 +331,7 @@ class RunExecutor:
         instance_details: dict[str, Any],
         merged_config: dict[str, Any],
         update_queue: queue.Queue | None,
-    ) -> tuple[Any, str, int]:
+    ) -> tuple[Any, str, int] | tuple[None, None, None]:
         """Phase 3: Establish SSH connection.
 
         Parameters
@@ -345,8 +345,8 @@ class RunExecutor:
 
         Returns
         -------
-        tuple[Any, str, int]
-            SSH manager, host, and port
+        tuple[Any, str, int] | tuple[None, None, None]
+            SSH manager, host, and port; or (None, None, None) if cleanup is in progress
         """
         logging.info("Waiting for SSH to be ready...")
 

@@ -464,6 +464,7 @@ class EC2Manager:
         if instance:
             try:
                 instance.terminate()
+                logger.debug("Instance terminated successfully during rollback")
             except ClientError as cleanup_error:
                 logger.warning(
                     "Failed to terminate instance during rollback: %s",
@@ -474,6 +475,7 @@ class EC2Manager:
         if sg_id:
             try:
                 self.ec2_client.delete_security_group(GroupId=sg_id)
+                logger.debug("Security group %s deleted successfully during rollback", sg_id)
             except ClientError as cleanup_error:
                 logger.warning(
                     "Failed to delete security group during rollback: %s",
@@ -484,6 +486,7 @@ class EC2Manager:
         if key_name:
             try:
                 self.ec2_client.delete_key_pair(KeyName=key_name)
+                logger.debug("Key pair %s deleted successfully during rollback", key_name)
             except ClientError as cleanup_error:
                 logger.warning("Failed to delete key pair during rollback: %s", cleanup_error)
 
@@ -491,6 +494,7 @@ class EC2Manager:
         if key_file and key_file.exists():
             try:
                 key_file.unlink()
+                logger.debug("Key file %s deleted successfully during rollback", key_file)
             except OSError as cleanup_error:
                 logger.warning("Failed to delete key file during rollback: %s", cleanup_error)
 

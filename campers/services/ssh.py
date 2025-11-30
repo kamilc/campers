@@ -1,5 +1,6 @@
 """SSH connection and command execution management."""
 
+import contextlib
 import logging
 import os
 import re
@@ -138,6 +139,7 @@ class SSHManager:
         effective_max_retries = int(os.environ.get("CAMPERS_SSH_MAX_RETRIES", str(max_retries)))
 
         for attempt in range(effective_max_retries):
+            old_client = self.client
             try:
                 logger.info(
                     "Attempting SSH connection (attempt %s/%s)...",
@@ -145,10 +147,19 @@ class SSHManager:
                     effective_max_retries,
                 )
 
-                self.client = paramiko.SSHClient()
-                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                if old_client is not None:
+                    with contextlib.suppress(OSError, paramiko.SSHException):
+                        old_client.close()
 
-                key = paramiko.RSAKey.from_private_key_file(self.key_file)
+                self.client = paramiko.SSHClient()
+
+                if os.environ.get("CAMPERS_STRICT_HOST_KEY", "0") == "1":
+                    self.client.load_system_host_keys()
+                    self.client.set_missing_host_key_policy(paramiko.RejectPolicy())
+                else:
+                    self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+                key = paramiko.PKey.from_private_key_file(self.key_file)
 
                 self.client.connect(
                     hostname=self.host,
@@ -161,13 +172,7 @@ class SSHManager:
                 )
                 return
 
-            except (
-                paramiko.ssh_exception.NoValidConnectionsError,
-                paramiko.ssh_exception.SSHException,
-                TimeoutError,
-                ConnectionRefusedError,
-                ConnectionResetError,
-            ) as e:
+            except (TimeoutError, paramiko.SSHException, OSError) as e:
                 if attempt < effective_max_retries - 1:
                     delay_index = min(attempt, len(ssh_retry_delays) - 1)
                     delay = ssh_retry_delays[delay_index]
@@ -191,7 +196,9 @@ class SSHManager:
         for line in stream.readlines():
             logging.info(line.rstrip("\n"))
 
-    def stream_output_realtime(self, stdout: ChannelFile, stderr: ChannelFile) -> None:
+    def stream_output_realtime(
+        self, stdout: ChannelFile, stderr: ChannelFile, timeout: float = 300.0
+    ) -> None:
         """Stream stdout and stderr in real-time until command completes.
 
         Parameters
@@ -200,9 +207,29 @@ class SSHManager:
             SSH channel stdout stream
         stderr : ChannelFile
             SSH channel stderr stream
+        timeout : float, optional
+            Maximum total time in seconds to wait for command completion.
+            Default is 300.0 seconds.
+
+        Raises
+        ------
+        TimeoutError
+            If command does not complete within the timeout period
         """
+        start_time = time.monotonic()
+
         while True:
-            line = stdout.readline()
+            if time.monotonic() - start_time > timeout:
+                raise TimeoutError(f"Stream output timed out after {timeout} seconds")
+
+            stdout.channel.settimeout(1.0)
+
+            try:
+                line = stdout.readline()
+            except TimeoutError:
+                if stdout.channel.exit_status_ready():
+                    break
+                continue
 
             if line:
                 logging.info(line.rstrip("\n"))
@@ -212,7 +239,7 @@ class SSHManager:
                 if err_line:
                     logging.info(err_line.rstrip("\n"))
 
-            if stdout.channel.exit_status_ready():
+            if stdout.channel.exit_status_ready() and not line:
                 break
 
     def _execute_with_streaming(self, command: str) -> int:

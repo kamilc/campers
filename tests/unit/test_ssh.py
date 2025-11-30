@@ -38,21 +38,21 @@ def test_ssh_manager_default_username() -> None:
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_connect_success_first_attempt(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test successful SSH connection on first attempt."""
     mock_client = MagicMock()
     mock_ssh_client.return_value = mock_client
     mock_key = MagicMock()
-    mock_rsa_key.return_value = mock_key
+    mock_pkey.return_value = mock_key
 
     ssh_manager.connect()
 
     mock_ssh_client.assert_called_once()
     mock_client.set_missing_host_key_policy.assert_called_once()
-    mock_rsa_key.assert_called_once_with("/tmp/test.pem")
+    mock_pkey.assert_called_once_with("/tmp/test.pem")
     mock_client.connect.assert_called_once_with(
         hostname="203.0.113.1",
         port=22,
@@ -67,9 +67,9 @@ def test_connect_success_first_attempt(
 
 @patch("campers.services.ssh.time.sleep")
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_connect_retry_with_exponential_backoff(
-    mock_rsa_key: MagicMock,
+    mock_pkey: MagicMock,
     mock_ssh_client: MagicMock,
     mock_sleep: MagicMock,
     ssh_manager: SSHManager,
@@ -78,7 +78,7 @@ def test_connect_retry_with_exponential_backoff(
     mock_client = MagicMock()
     mock_ssh_client.return_value = mock_client
     mock_key = MagicMock()
-    mock_rsa_key.return_value = mock_key
+    mock_pkey.return_value = mock_key
 
     mock_client.connect.side_effect = [
         ConnectionRefusedError("Connection refused"),
@@ -97,9 +97,9 @@ def test_connect_retry_with_exponential_backoff(
 
 @patch("campers.services.ssh.time.sleep")
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_connect_fails_after_max_retries(
-    mock_rsa_key: MagicMock,
+    mock_pkey: MagicMock,
     mock_ssh_client: MagicMock,
     mock_sleep: MagicMock,
     ssh_manager: SSHManager,
@@ -108,7 +108,7 @@ def test_connect_fails_after_max_retries(
     mock_client = MagicMock()
     mock_ssh_client.return_value = mock_client
     mock_key = MagicMock()
-    mock_rsa_key.return_value = mock_key
+    mock_pkey.return_value = mock_key
 
     mock_client.connect.side_effect = ConnectionRefusedError("Connection refused")
 
@@ -121,9 +121,9 @@ def test_connect_fails_after_max_retries(
 
 @patch("campers.services.ssh.time.sleep")
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_connect_handles_various_exceptions(
-    mock_rsa_key: MagicMock,
+    mock_pkey: MagicMock,
     mock_ssh_client: MagicMock,
     mock_sleep: MagicMock,
     ssh_manager: SSHManager,
@@ -132,7 +132,7 @@ def test_connect_handles_various_exceptions(
     mock_client = MagicMock()
     mock_ssh_client.return_value = mock_client
     mock_key = MagicMock()
-    mock_rsa_key.return_value = mock_key
+    mock_pkey.return_value = mock_key
 
     exceptions = [
         paramiko.ssh_exception.NoValidConnectionsError({("203.0.113.1", 22): "Connection refused"}),
@@ -150,9 +150,9 @@ def test_connect_handles_various_exceptions(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_without_connection(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test execute_command raises error when not connected."""
     with pytest.raises(RuntimeError) as exc_info:
@@ -193,9 +193,9 @@ def test_execute_command_exceeds_max_length(ssh_manager: SSHManager) -> None:
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_success(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test successful command execution with output streaming."""
     mock_client = MagicMock()
@@ -222,9 +222,9 @@ def test_execute_command_success(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_with_stderr(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test command execution captures stderr output."""
     mock_client = MagicMock()
@@ -250,9 +250,9 @@ def test_execute_command_with_stderr(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_with_keyboard_interrupt(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test command execution handles Ctrl+C gracefully."""
     mock_client = MagicMock()
@@ -274,9 +274,9 @@ def test_execute_command_with_keyboard_interrupt(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_shell_features(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test command execution supports shell features like pipes."""
     mock_client = MagicMock()
@@ -304,9 +304,9 @@ def test_execute_command_shell_features(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_close_connection(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test close properly cleans up SSH connection."""
     mock_client = MagicMock()
@@ -327,9 +327,9 @@ def test_close_without_connection(ssh_manager: SSHManager) -> None:
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_with_multiline_output(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test command execution handles multi-line output correctly."""
     mock_client = MagicMock()
@@ -355,9 +355,9 @@ def test_execute_command_with_multiline_output(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_remaining_output(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test command execution captures remaining output after exit ready."""
     mock_client = MagicMock()
@@ -385,9 +385,9 @@ def test_execute_command_remaining_output(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_raw_without_connection(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test execute_command_raw raises error when not connected."""
     with pytest.raises(RuntimeError) as exc_info:
@@ -397,9 +397,9 @@ def test_execute_command_raw_without_connection(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_raw_success(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test execute_command_raw executes command without wrapping."""
     mock_client = MagicMock()
@@ -426,9 +426,9 @@ def test_execute_command_raw_success(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_raw_with_keyboard_interrupt(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test execute_command_raw handles Ctrl+C gracefully."""
     mock_client = MagicMock()
@@ -632,9 +632,9 @@ def test_build_command_with_env_exceeds_max_length(ssh_manager: SSHManager) -> N
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_with_env_success(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test executing command with environment variables."""
     mock_client = MagicMock()
@@ -664,9 +664,9 @@ def test_execute_command_with_env_success(
 
 
 @patch("campers.services.ssh.paramiko.SSHClient")
-@patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file")
+@patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
 def test_execute_command_with_env_no_vars(
-    mock_rsa_key: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
+    mock_pkey: MagicMock, mock_ssh_client: MagicMock, ssh_manager: SSHManager
 ) -> None:
     """Test executing command without environment variables."""
     mock_client = MagicMock()
@@ -690,3 +690,17 @@ def test_execute_command_with_env_no_vars(
 
     assert exit_code == 0
     mock_client.exec_command.assert_called_once_with("cd ~ && bash -c 'echo test'", get_pty=True)
+
+
+def test_stream_output_realtime_timeout(ssh_manager: SSHManager) -> None:
+    """Test that stream_output_realtime raises TimeoutError when timeout exceeded."""
+    mock_stdout = MagicMock()
+    mock_stderr = MagicMock()
+
+    mock_stdout.channel.exit_status_ready.return_value = False
+    mock_stdout.readline.return_value = ""
+    mock_stdout.channel.settimeout = MagicMock()
+    mock_stderr.channel.recv_stderr_ready.return_value = False
+
+    with pytest.raises(TimeoutError, match="timed out after"):
+        ssh_manager.stream_output_realtime(mock_stdout, mock_stderr, timeout=0.1)

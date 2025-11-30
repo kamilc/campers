@@ -4,12 +4,16 @@ import logging
 import os
 import queue
 import signal
+import subprocess
 import sys
 import threading
 import time
 import types
 from pathlib import Path
 from typing import Any
+
+import paramiko
+from botocore.exceptions import BotoCoreError, ClientError
 
 from campers.core.utils import get_instance_id, get_volume_size_or_default
 from campers.providers.aws.pricing import PricingService
@@ -85,7 +89,7 @@ class CleanupManager:
 
             if rate > 0:
                 return rate
-        except Exception as e:
+        except (OSError, ConnectionError, TimeoutError) as e:
             logging.debug("Failed to fetch storage pricing: %s", e)
 
         return 0.0
@@ -114,14 +118,14 @@ class CleanupManager:
         - 143: SIGTERM (kill command)
         - 1: Other signals
         """
+        force_exit = False
+        exit_code = None
+
         with self.cleanup_lock:
             if self.cleanup_in_progress:
                 logging.info("Cleanup already in progress, please wait...")
                 return
             self.cleanup_in_progress = True
-
-        force_exit = False
-        exit_code = None
 
         try:
             on_exit_action = self.config_dict.get("on_exit", "stop")
@@ -186,7 +190,7 @@ class CleanupManager:
             logging.info("SSH connection closed successfully")
 
             self._emit_cleanup_event("close_ssh", "completed")
-        except Exception as e:
+        except (OSError, paramiko.SSHException, ConnectionError, RuntimeError) as e:
             logging.error("Error closing SSH: %s", e)
             errors.append(e)
 
@@ -225,7 +229,7 @@ class CleanupManager:
             logging.info("Port forwarding stopped successfully")
 
             self._emit_cleanup_event("stop_tunnels", "completed")
-        except Exception as e:
+        except (OSError, RuntimeError, TimeoutError) as e:
             logging.error("Error stopping port forwarding: %s", e)
             errors.append(e)
 
@@ -265,7 +269,7 @@ class CleanupManager:
             logging.info("Mutagen session stopped successfully")
 
             self._emit_cleanup_event("terminate_mutagen", "completed")
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, RuntimeError, TimeoutError) as e:
             logging.error("Error stopping Mutagen session: %s", e)
             errors.append(e)
 
@@ -339,7 +343,7 @@ class CleanupManager:
                     logging.info("Cloud instance terminated successfully")
 
                 self._emit_cleanup_event(event_action, "completed")
-        except Exception as e:
+        except (ClientError, BotoCoreError, RuntimeError) as e:
             logging.error("Error %sing instance: %s", action, e)
             errors.append(e)
             self._emit_cleanup_event(event_action, "failed")
@@ -391,7 +395,7 @@ class CleanupManager:
             else:
                 logging.info("Cleanup completed successfully")
 
-        except Exception as e:
+        except OSError as e:
             logging.error("Unexpected error during stop cleanup: %s", e)
 
     def terminate_instance_cleanup(self, signum: int | None = None) -> None:
@@ -441,5 +445,5 @@ class CleanupManager:
             else:
                 logging.info("Cleanup completed successfully")
 
-        except Exception as e:
+        except OSError as e:
             logging.error("Unexpected error during terminate cleanup: %s", e)
