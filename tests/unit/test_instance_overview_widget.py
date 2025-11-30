@@ -39,7 +39,7 @@ def initialized_widget(mock_campers, mock_ec2_manager, mock_pricing_service):
 
     with patch.object(InstanceOverviewWidget, "app", new_callable=lambda: Mock()):
         widget = InstanceOverviewWidget(mock_campers)
-        widget.ec2_manager = mock_ec2_manager
+        widget.compute_provider = mock_ec2_manager
         widget.pricing_service = mock_pricing_service
         widget._initialized = True
 
@@ -56,7 +56,7 @@ def test_widget_initialization(mock_campers):
     assert widget.stopped_count == 0
     assert widget.daily_cost is None
     assert widget.last_update is None
-    assert widget.ec2_manager is None
+    assert widget.compute_provider is None
     assert widget.pricing_service is None
     assert widget._initialized is False
 

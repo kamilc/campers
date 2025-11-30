@@ -20,6 +20,7 @@ from campers.constants import (
     WAITER_DELAY_SECONDS,
     WAITER_MAX_ATTEMPTS_LONG,
     WAITER_MAX_ATTEMPTS_SHORT,
+    InstanceState,
 )
 from campers.providers.aws.ami import AMIResolver
 from campers.providers.aws.errors import handle_aws_errors
@@ -34,7 +35,12 @@ from campers.providers.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-ACTIVE_INSTANCE_STATES = ["pending", "running", "stopping", "stopped"]
+ACTIVE_INSTANCE_STATES = [
+    InstanceState.PENDING.value,
+    InstanceState.RUNNING.value,
+    InstanceState.STOPPING.value,
+    InstanceState.STOPPED.value,
+]
 
 
 VALID_INSTANCE_TYPES = frozenset(
@@ -122,41 +128,6 @@ class EC2Manager:
         self.ami_resolver = AMIResolver(self.ec2_client, region)
         self.keypair_manager = KeyPairManager(self.ec2_client, region)
         self.network_manager = NetworkManager(self.ec2_client, region)
-
-    def validate_region(self, region: str) -> None:
-        """Validate that a region string is a valid AWS region.
-
-        Parameters
-        ----------
-        region : str
-            AWS region string to validate
-
-        Raises
-        ------
-        ValueError
-            If region is not a valid AWS region
-        """
-        try:
-            ec2_client = self.boto3_client_factory("ec2", region_name="us-east-1")
-            regions_response = ec2_client.describe_regions()
-            valid_regions = {r["RegionName"] for r in regions_response["Regions"]}
-
-            if region not in valid_regions:
-                raise ValueError(
-                    f"Invalid region: '{region}'. Valid regions: {', '.join(sorted(valid_regions))}"
-                )
-        except NoCredentialsError as e:
-            logger.warning(
-                "Unable to validate region '%s' (%s). Proceeding without validation.",
-                region,
-                e.__class__.__name__,
-            )
-        except ClientError as e:
-            logger.warning(
-                "Unable to validate region '%s' (%s). Proceeding without validation.",
-                region,
-                e.__class__.__name__,
-            )
 
     def resolve_ami(self, config: dict[str, Any]) -> str:
         """Resolve AMI ID from configuration.
@@ -316,9 +287,16 @@ class EC2Manager:
         try:
             instance_details = self._launch_ec2_instance(config, resources)
             return instance_details
-        except Exception as e:
+        except (ClientError, NoCredentialsError, WaiterError) as e:
             self._rollback_resources(resources)
-            raise RuntimeError(f"Failed to launch instance: {e}") from e
+            if isinstance(e, NoCredentialsError):
+                raise ProviderCredentialsError(
+                    "AWS credentials not configured for EC2 instance launch"
+                ) from e
+            raise ProviderAPIError(f"Failed to launch instance: {e}") from e
+        except RuntimeError:
+            self._rollback_resources(resources)
+            raise
 
     def _validate_instance_type(self, instance_type: str) -> None:
         """Validate that instance type is supported.
@@ -831,6 +809,52 @@ class EC2Manager:
         except (ClientError, IndexError, KeyError) as e:
             logger.warning(f"Failed to get tags for instance {instance_id}: {e}")
             return {}
+
+    def validate_region(self, region: str) -> bool:
+        """Validate if a region is available for AWS.
+
+        Parameters
+        ----------
+        region : str
+            Region identifier to validate
+
+        Returns
+        -------
+        bool
+            True if region is valid, False otherwise
+        """
+        try:
+            ec2 = boto3.client("ec2", region_name=region)
+            ec2.describe_regions(RegionNames=[region])
+            return True
+        except (ClientError, Exception) as e:
+            logger.warning("Unable to validate region %s: %s", region, e)
+            return False
+
+    def sanitize_instance_name(self, name: str) -> str:
+        """Sanitize instance name to meet AWS requirements.
+
+        AWS instance names (Name tag) can contain: letters, numbers, spaces, and
+        special characters ._-:/@. Other characters are replaced with hyphens.
+
+        Parameters
+        ----------
+        name : str
+            Original instance name
+
+        Returns
+        -------
+        str
+            Sanitized instance name that meets AWS requirements
+        """
+        allowed_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-:/@")
+        sanitized = "".join(c if c in allowed_chars else "-" for c in name)
+        sanitized = sanitized.strip("-").strip()
+
+        if not sanitized:
+            sanitized = "instance"
+
+        return sanitized[:255]
 
     def terminate_instance(self, instance_id: str) -> None:
         """Terminate instance and clean up resources.

@@ -1,6 +1,5 @@
 """SSH connection and command execution management."""
 
-import contextlib
 import logging
 import os
 import re
@@ -148,8 +147,10 @@ class SSHManager:
                 )
 
                 if old_client is not None:
-                    with contextlib.suppress(OSError, paramiko.SSHException):
+                    try:
                         old_client.close()
+                    except (OSError, paramiko.SSHException) as e:
+                        logger.warning("Failed to close previous SSH connection: %s", e)
 
                 self.client = paramiko.SSHClient()
 
@@ -510,7 +511,7 @@ class SSHManager:
 
         try:
             self._active_channel.close()
-        except (OSError, paramiko.SSHException) as exc:  # pragma: no cover
-            logging.debug("Failed to close active SSH channel: %s", exc)
+        except (OSError, paramiko.SSHException) as exc:
+            logger.warning("Failed to close active SSH channel: %s", exc)
         finally:
             self._active_channel = None

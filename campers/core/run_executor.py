@@ -547,9 +547,12 @@ class RunExecutor:
                 ssh_port=ssh_port if ssh_port else 22,
             )
             logging.info("Ansible playbook(s) completed successfully")
-        except Exception as e:
+        except RuntimeError as e:
             logging.error(f"Ansible execution failed: {e}")
             raise
+        except (OSError, TimeoutError) as e:
+            logging.error(f"Ansible execution failed: {e}")
+            raise RuntimeError(f"Ansible playbook execution failed: {e}") from e
 
     def _phase_script_execution(
         self,
@@ -622,7 +625,11 @@ class RunExecutor:
                 logging.debug("Cleanup in progress, aborting startup_script")
                 return
 
-            working_dir = merged_config["sync_paths"][0]["remote"]
+            sync_paths = merged_config.get("sync_paths", [])
+            if not sync_paths:
+                raise RuntimeError("sync_paths must be configured to use startup_script")
+
+            working_dir = sync_paths[0]["remote"]
 
             logging.info("Running startup_script...")
 

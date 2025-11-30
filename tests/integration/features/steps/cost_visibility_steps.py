@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 from behave import given, then, when
 from behave.runner import Context
+from botocore.exceptions import ClientError
 
 SAMPLE_EC2_PRICING_T3_MEDIUM = {
     "terms": {
@@ -129,7 +130,10 @@ def step_pricing_api_not_accessible(context: Context) -> None:
 
     def client_factory(service_name, region_name=None, **kwargs):
         if service_name == "pricing":
-            raise Exception("Pricing API not available in LocalStack")
+            raise ClientError(
+                {"Error": {"Code": "UnknownEndpoint", "Message": "Pricing API not available in LocalStack"}},
+                "CreateClient"
+            )
         return original_boto3_client(service_name, region_name=region_name, **kwargs)
 
     mock_boto_client.side_effect = client_factory

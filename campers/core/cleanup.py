@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import Any
 
 import paramiko
-from botocore.exceptions import BotoCoreError, ClientError
 
+from campers.constants import TUI_STATUS_UPDATE_PROCESSING_DELAY
 from campers.core.utils import get_instance_id, get_volume_size_or_default
 from campers.providers.aws.pricing import PricingService
-from campers.tui.app import TUI_STATUS_UPDATE_PROCESSING_DELAY
+from campers.providers.exceptions import ProviderAPIError
 
 
 class CleanupManager:
@@ -83,14 +83,16 @@ class CleanupManager:
         float
             Storage rate in USD per GB-month (0.0 if API unavailable)
         """
+        pricing_service = PricingService()
         try:
-            pricing_service = PricingService()
             rate = pricing_service.get_storage_price(region)
 
             if rate > 0:
                 return rate
         except (OSError, ConnectionError, TimeoutError) as e:
             logging.debug("Failed to fetch storage pricing: %s", e)
+        finally:
+            pricing_service.close()
 
         return 0.0
 
@@ -343,7 +345,7 @@ class CleanupManager:
                     logging.info("Cloud instance terminated successfully")
 
                 self._emit_cleanup_event(event_action, "completed")
-        except (ClientError, BotoCoreError, RuntimeError) as e:
+        except (ProviderAPIError, RuntimeError) as e:
             logging.error("Error %sing instance: %s", action, e)
             errors.append(e)
             self._emit_cleanup_event(event_action, "failed")

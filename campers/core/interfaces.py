@@ -140,6 +140,36 @@ class ComputeProvider(Protocol):
         """
         ...
 
+    def validate_region(self, region: str) -> bool:
+        """Validate if a region is available for this provider.
+
+        Parameters
+        ----------
+        region : str
+            Region identifier to validate
+
+        Returns
+        -------
+        bool
+            True if region is valid, False otherwise
+        """
+        ...
+
+    def sanitize_instance_name(self, name: str) -> str:
+        """Sanitize instance name to meet provider requirements.
+
+        Parameters
+        ----------
+        name : str
+            Original instance name
+
+        Returns
+        -------
+        str
+            Sanitized instance name that meets provider requirements
+        """
+        ...
+
 
 class PricingProvider(Protocol):
     """Protocol for cloud pricing information providers.

@@ -357,6 +357,21 @@ class PricingService:
         rate = self.get_ebs_storage_rate(region)
         return rate if rate is not None else 0.0
 
+    def close(self) -> None:
+        """Close the pricing service and clean up boto3 client.
+
+        This method ensures proper cleanup of AWS API client resources
+        when the pricing service is no longer needed.
+        """
+        if self.pricing_client is not None:
+            try:
+                self.pricing_client.close()
+            except Exception as e:
+                logger.debug("Failed to close pricing client: %s", e)
+            finally:
+                self.pricing_client = None
+                self.pricing_available = False
+
 
 def calculate_monthly_cost(
     instance_type: str,

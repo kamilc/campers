@@ -28,9 +28,8 @@ from pathlib import Path
 import paramiko
 from sshtunnel import BaseSSHTunnelForwarderError, SSHTunnelForwarder
 
+from campers.constants import PRIVILEGED_PORT_THRESHOLD
 from campers.utils import validate_port
-
-PRIVILEGED_PORT_THRESHOLD = 1024
 
 logger = logging.getLogger(__name__)
 

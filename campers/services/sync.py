@@ -1,5 +1,6 @@
 """Mutagen bidirectional file synchronization management."""
 
+import fcntl
 import logging
 import os
 import re
@@ -8,12 +9,12 @@ import subprocess
 import time
 from pathlib import Path
 
-from campers.utils import atomic_file_write
+from campers.constants import (
+    SYNC_STATUS_CHECK_TIMEOUT_SECONDS,
+    SYNC_STATUS_POLL_INTERVAL_SECONDS,
+)
 
 logger = logging.getLogger(__name__)
-
-SYNC_STATUS_POLL_INTERVAL_SECONDS = 2
-SYNC_STATUS_CHECK_TIMEOUT_SECONDS = 10
 
 
 class MutagenManager:
@@ -36,6 +37,42 @@ class MutagenManager:
     terminate_session(session_name: str)
         Terminate and remove sync session
     """
+
+    def _update_ssh_config_atomic(self, config_path: Path, include_line: str) -> None:
+        """Atomically update SSH config with file locking.
+
+        Prevents race conditions when multiple processes update SSH config
+        concurrently by using file-level locking.
+
+        Parameters
+        ----------
+        config_path : Path
+            Path to SSH config file to update
+        include_line : str
+            Include directive line to add to config
+        """
+        if config_path.exists():
+            with open(config_path, "r+") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    content = f.read()
+                    if include_line not in content:
+                        f.seek(0)
+                        f.write(f"{include_line}\n\n{content}")
+                        f.truncate()
+                        logger.debug("Added Include to %s", config_path)
+                    else:
+                        logger.debug("Include line already present in %s", config_path)
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        else:
+            with open(config_path, "w") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    f.write(f"{include_line}\n")
+                    logger.debug("Created SSH config at %s", config_path)
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def check_mutagen_installed(self) -> None:
         """Check if mutagen is installed locally.
@@ -256,16 +293,7 @@ Host {host}
         include_line = f"Include {campers_config_path}"
 
         try:
-            if user_ssh_config.exists():
-                with open(user_ssh_config) as f:
-                    user_config_content = f.read()
-            else:
-                user_config_content = ""
-
-            if include_line not in user_config_content:
-                new_content = f"{include_line}\n\n{user_config_content}"
-                atomic_file_write(user_ssh_config, new_content)
-                logger.debug("Added Include to %s", user_ssh_config)
+            self._update_ssh_config_atomic(user_ssh_config, include_line)
         except (PermissionError, OSError) as e:
             logger.error("Failed to update SSH config: %s", e)
             raise RuntimeError(f"Failed to update SSH config at {user_ssh_config}: {e}") from e

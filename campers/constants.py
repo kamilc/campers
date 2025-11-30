@@ -90,6 +90,46 @@ Controls refresh rate of instance uptime display in the terminal
 user interface during active monitoring.
 """
 
+PRIVILEGED_PORT_THRESHOLD = 1024
+"""Port number threshold for privileged ports.
+
+Ports below this value (0-1023) require elevated privileges on Unix systems.
+Used by port forwarding to detect when privilege elevation might be needed.
+"""
+
+SYNC_STATUS_POLL_INTERVAL_SECONDS = 2
+"""Interval in seconds for polling sync status.
+
+Controls how frequently Mutagen sync status is checked during initial sync.
+"""
+
+SYNC_STATUS_CHECK_TIMEOUT_SECONDS = 10
+"""Timeout in seconds for sync status check operations.
+
+Prevents indefinite waits when polling Mutagen sync status.
+"""
+
+TUI_UPDATE_INTERVAL = 0.1
+"""Interval in seconds for TUI update processing.
+
+Controls refresh rate of terminal user interface when processing updates
+from background tasks and monitoring instances.
+"""
+
+MAX_UPDATES_PER_TICK = 10
+"""Maximum number of updates to process per TUI tick.
+
+Limits how many updates are processed in a single event loop iteration
+to prevent UI blocking.
+"""
+
+TUI_STATUS_UPDATE_PROCESSING_DELAY = 1.0
+"""Delay in seconds for status update processing in TUI.
+
+Provides time for status changes to stabilize before updating display
+to reduce unnecessary screen refreshes.
+"""
+
 CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS = 1.5
 """Threshold in seconds for detecting double CTRL+C press.
 
@@ -182,6 +222,7 @@ missing required settings, or configuration validation failures.
 class InstanceState(str, Enum):
     """Instance state values."""
 
+    PENDING = "pending"
     RUNNING = "running"
     STOPPED = "stopped"
     STOPPING = "stopping"

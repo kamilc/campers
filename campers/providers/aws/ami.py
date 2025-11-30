@@ -25,6 +25,32 @@ class AMIResolver:
         self.ec2_client = ec2_client
         self.region = region
 
+    def _is_localstack_endpoint(self) -> bool:
+        """Check if the EC2 client is configured for LocalStack.
+
+        Returns
+        -------
+        bool
+            True if the endpoint URL contains 'localstack' or 'localhost:4566'
+        """
+        try:
+            endpoint = self.ec2_client._endpoint
+            if hasattr(endpoint, 'host'):
+                host = str(endpoint.host).lower()
+                return 'localstack' in host or 'localhost:4566' in host
+        except (AttributeError, Exception):
+            pass
+
+        try:
+            meta = self.ec2_client.meta
+            if hasattr(meta, 'endpoint_url'):
+                url = str(meta.endpoint_url).lower()
+                return 'localstack' in url or 'localhost:4566' in url
+        except (AttributeError, Exception):
+            pass
+
+        return False
+
     def resolve_ami(self, config: dict[str, Any]) -> str:
         """Resolve AMI ID from configuration.
 
@@ -76,9 +102,11 @@ class AMIResolver:
                 architecture=query.get("architecture"),
             )
 
+        is_localstack = self._is_localstack_endpoint()
+        owner = None if is_localstack else "amazon"
         return self.find_ami_by_query(
             name_pattern="*Ubuntu 24*",
-            owner="amazon",
+            owner=owner,
             architecture="x86_64",
         )
 
@@ -109,16 +137,22 @@ class AMIResolver:
         ValueError
             If architecture is invalid or no AMIs match the filters
         """
-        filters = [
-            {"Name": "name", "Values": [name_pattern]},
-            {"Name": "state", "Values": ["available"]},
-        ]
-
         if architecture:
             if architecture not in ("x86_64", "arm64"):
                 raise ValueError(
                     f"Invalid architecture: '{architecture}'. Must be 'x86_64' or 'arm64'"
                 )
+
+        is_localstack = self._is_localstack_endpoint()
+
+        filters = [
+            {"Name": "name", "Values": [name_pattern]},
+        ]
+
+        if not is_localstack:
+            filters.append({"Name": "state", "Values": ["available"]})
+
+        if architecture and not is_localstack:
             filters.append({"Name": "architecture", "Values": [architecture]})
 
         kwargs: dict[str, Any] = {"Filters": filters}

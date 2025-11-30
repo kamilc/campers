@@ -9,11 +9,11 @@ from unittest.mock import MagicMock, patch
 import boto3
 from behave import given, then, when
 from behave.runner import Context
-from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
+from botocore.exceptions import ClientError, WaiterError
 from moto import mock_aws
 
 from campers.providers.aws.compute import EC2Manager
-from campers.providers.exceptions import ProviderCredentialsError
+from campers.providers.exceptions import ProviderAPIError, ProviderCredentialsError
 
 
 def setup_moto_environment(context: Context) -> None:
@@ -112,7 +112,7 @@ def simulate_launch_timeout(context: Context) -> None:
             try:
                 ec2_manager.launch_instance(context.ec2_config)
                 context.exception = None
-            except RuntimeError as e:
+            except ProviderAPIError as e:
                 context.exception = e
 
     context.ec2_client = ec2_manager.ec2_client
@@ -629,7 +629,9 @@ def step_launch_with_same_unique_id(context: Context) -> None:
 
     config = {"instance_type": "t3.medium", "disk_size": 50, "region": "us-east-1"}
 
-    with patch("time.time", return_value=123):
+    mock_uuid = MagicMock()
+    mock_uuid.__str__ = MagicMock(return_value="123")
+    with patch("campers.providers.aws.compute.uuid.uuid4", return_value=mock_uuid):
         context.instance_details = ec2_manager.launch_instance(config)
 
     context.ec2_manager = ec2_manager
@@ -1096,7 +1098,7 @@ def step_verify_client_error(context: Context) -> None:
 
 @then("RuntimeError is raised with timeout message")
 def step_verify_runtime_error_timeout(context: Context) -> None:
-    """Verify RuntimeError with timeout message.
+    """Verify ProviderAPIError with timeout message.
 
     Parameters
     ----------
@@ -1105,8 +1107,8 @@ def step_verify_runtime_error_timeout(context: Context) -> None:
     """
     assert hasattr(context, "exception"), "exception not found in context"
     assert context.exception is not None, "No exception was raised"
-    assert isinstance(context.exception, RuntimeError), (
-        f"Expected RuntimeError, got {type(context.exception).__name__}: {context.exception}"
+    assert isinstance(context.exception, ProviderAPIError), (
+        f"Expected ProviderAPIError, got {type(context.exception).__name__}: {context.exception}"
     )
 
     error_message = str(context.exception).lower()

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from textual.widgets import Static
 
 from campers.constants import STATS_REFRESH_INTERVAL_SECONDS
-from campers.providers.aws.compute import EC2Manager
+from campers.core.interfaces import ComputeProvider, PricingProvider
 from campers.providers.aws.pricing import PricingService
 
 if TYPE_CHECKING:
@@ -46,8 +46,8 @@ class InstanceOverviewWidget(Static):
             campers_instance._compute_provider_factory_override
             or campers_instance._create_compute_provider
         )
-        self.ec2_manager: EC2Manager | None = None
-        self.pricing_service: PricingService | None = None
+        self.compute_provider: ComputeProvider | None = None
+        self.pricing_service: PricingProvider | None = None
         self.running_count = 0
         self.stopped_count = 0
         self.daily_cost: float | None = None
@@ -67,16 +67,15 @@ class InstanceOverviewWidget(Static):
     def _initialize_services(self) -> None:
         """Initialize AWS services in background thread."""
         from campers.core.config import ConfigLoader
-        from campers.providers.aws.pricing import PricingService
 
         try:
             default_region = ConfigLoader.BUILT_IN_DEFAULTS["region"]
-            self.ec2_manager = self._compute_provider_factory(region=default_region)
+            self.compute_provider = self._compute_provider_factory(region=default_region)
             self.pricing_service = PricingService()
             self._initialized = True
             self.app.call_from_thread(self._start_refresh_timer)
         except Exception as e:
-            logger.debug("Failed to initialize AWS services: %s", e)
+            logger.warning("Failed to initialize cloud provider services: %s", e)
             self.app.call_from_thread(self._show_init_error)
 
     def _start_refresh_timer(self) -> None:
@@ -90,11 +89,11 @@ class InstanceOverviewWidget(Static):
 
     def _refresh_stats_sync(self) -> None:
         """Synchronous version of refresh_stats for worker thread."""
-        if not self._initialized or self.ec2_manager is None:
+        if not self._initialized or self.compute_provider is None:
             return
 
         try:
-            all_instances = self.ec2_manager.list_instances(region_filter=None)
+            all_instances = self.compute_provider.list_instances(region_filter=None)
 
             running = [i for i in all_instances if i["state"] == "running"]
             stopped = [i for i in all_instances if i["state"] == "stopped"]
@@ -125,7 +124,7 @@ class InstanceOverviewWidget(Static):
             self.app.call_from_thread(self._update_display)
 
         except Exception as e:
-            logger.debug("Failed to refresh instance stats: %s", e)
+            logger.warning("Failed to refresh instance stats: %s", e)
 
     def _update_display(self) -> None:
         """Update the widget display on the main thread."""

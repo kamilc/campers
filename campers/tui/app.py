@@ -9,7 +9,6 @@ import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from botocore.exceptions import ClientError, NoCredentialsError
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container
@@ -17,21 +16,20 @@ from textual.widgets import Log, Static
 
 from campers.constants import (
     CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS,
+    MAX_UPDATES_PER_TICK,
+    TUI_STATUS_UPDATE_PROCESSING_DELAY,
+    TUI_UPDATE_INTERVAL,
     UPTIME_UPDATE_INTERVAL_SECONDS,
 )
 from campers.logging import StreamFormatter, TuiLogHandler, TuiLogMessage
+from campers.providers.exceptions import ProviderCredentialsError
 from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.tui.styling import TUI_CSS
 from campers.tui.terminal import detect_terminal_background
 from campers.tui.widgets import WidgetID
-from campers.utils import get_aws_credentials_error_message
 
 if TYPE_CHECKING:
     from campers import Campers
-
-TUI_UPDATE_INTERVAL = 0.1
-MAX_UPDATES_PER_TICK = 10
-TUI_STATUS_UPDATE_PROCESSING_DELAY = 1.0
 
 logger = logging.getLogger(__name__)
 
@@ -365,14 +363,23 @@ class CampersTUI(App):
         except KeyboardInterrupt:
             logging.info("Operation cancelled by user")
             self.worker_exit_code = 130
-        except NoCredentialsError:
-            error_message = get_aws_credentials_error_message()
-            logging.error("AWS credentials not found")
+        except ProviderCredentialsError:
+            error_message = (
+                "Cloud provider credentials not found\n\n"
+                "This usually means:\n"
+                "  - AWS credentials are not configured\n"
+                "  - AWS_PROFILE is not set or invalid\n"
+                "  - Credentials have expired\n\n"
+                "Fix it:\n"
+                "  aws sso login           # If using AWS SSO\n"
+                "  aws configure           # Configure credentials\n"
+                "  export AWS_PROFILE=your-profile  # Set profile"
+            )
+            logging.error("Cloud provider credentials not found")
             self.worker_exit_code = 1
-        except ClientError as e:
-            error_response = e.response.get("Error") if e.response else None
-            error_code = error_response.get("Code", "") if error_response else ""
-            error_msg = error_response.get("Message", str(e)) if error_response else str(e)
+        except Exception as e:
+            error_code = getattr(e, "error_code", None)
+            error_message = str(e)
 
             if error_code in [
                 "ExpiredToken",
@@ -380,7 +387,7 @@ class CampersTUI(App):
                 "ExpiredTokenException",
             ]:
                 error_message = (
-                    "AWS credentials have expired\n\n"
+                    "Cloud provider credentials have expired\n\n"
                     "This usually means:\n"
                     "  - Your temporary credentials (STS) have expired\n"
                     "  - Your session token needs to be refreshed\n\n"
@@ -389,33 +396,23 @@ class CampersTUI(App):
                     "  aws configure           # Re-configure credentials\n"
                     "  # Or refresh your temporary credentials"
                 )
-                logging.error("AWS credentials have expired")
+                logging.error("Cloud provider credentials have expired")
             elif error_code == "UnauthorizedOperation":
                 error_message = (
-                    "Insufficient IAM permissions\n\n"
-                    "Your AWS credentials don't have the required permissions.\n"
-                    "Contact your AWS administrator to grant:\n"
-                    "  - EC2 permissions (DescribeInstances, RunInstances, TerminateInstances)\n"
-                    "  - VPC permissions (DescribeVpcs, CreateDefaultVpc)\n"
-                    "  - Key Pair permissions (CreateKeyPair, DeleteKeyPair, DescribeKeyPairs)\n"
+                    "Insufficient cloud provider permissions\n\n"
+                    "Your cloud provider credentials don't have the required "
+                    "permissions.\n"
+                    "Contact your administrator to grant:\n"
+                    "  - Compute permissions (DescribeInstances, RunInstances,\n"
+                    "    TerminateInstances)\n"
+                    "  - Network permissions (DescribeVpcs, CreateDefaultVpc)\n"
+                    "  - Key Pair permissions (CreateKeyPair, DeleteKeyPair,\n"
+                    "    DescribeKeyPairs)\n"
                     "  - Security Group permissions"
                 )
-                logging.error("Insufficient IAM permissions")
+                logging.error("Insufficient cloud provider permissions")
             else:
-                error_message = f"AWS API error: {error_msg}"
-                logging.error("AWS API error: %s", error_msg)
-            self.worker_exit_code = 1
-        except ValueError as e:
-            error_message = f"Configuration error: {e}"
-            logging.error(error_message)
-            self.worker_exit_code = 2
-        except RuntimeError as e:
-            error_message = f"Runtime error: {e}"
-            logging.error(error_message)
-            self.worker_exit_code = 3
-        except Exception as e:
-            error_message = f"Unexpected error: {e}"
-            logging.exception("Unexpected error during command execution")
+                logging.error("Provider error: %s", error_message)
             self.worker_exit_code = 1
         finally:
             if error_message:

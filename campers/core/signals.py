@@ -5,7 +5,20 @@ from __future__ import annotations
 import signal
 import threading
 import types
-from typing import Any
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    pass
+
+
+class CleanupHandler(Protocol):
+    """Protocol for cleanup handler (Campers instance)."""
+
+    def _cleanup_resources(
+        self, signum: int | None = None, frame: types.FrameType | None = None
+    ) -> None:
+        """Handle cleanup resources."""
+        ...
 
 
 class CleanupInstanceManager:
@@ -14,25 +27,25 @@ class CleanupInstanceManager:
     def __init__(self) -> None:
         """Initialize the cleanup instance manager."""
         self._lock = threading.Lock()
-        self._instance: Any = None
+        self._instance: CleanupHandler | None = None
 
-    def set(self, instance: Any) -> None:
+    def set(self, instance: CleanupHandler | None) -> None:
         """Set the cleanup instance.
 
         Parameters
         ----------
-        instance : Any
+        instance : CleanupHandler | None
             The Campers instance that will handle cleanup
         """
         with self._lock:
             self._instance = instance
 
-    def get(self) -> Any:
+    def get(self) -> CleanupHandler | None:
         """Get the current cleanup instance.
 
         Returns
         -------
-        Any
+        CleanupHandler | None
             The Campers instance handling cleanup, or None if not set
         """
         with self._lock:
@@ -68,23 +81,23 @@ def setup_signal_handlers() -> None:
     signal.signal(signal.SIGTERM, sigterm_handler)
 
 
-def set_cleanup_instance(instance: Any) -> None:
+def set_cleanup_instance(instance: CleanupHandler | None) -> None:
     """Set the instance to handle cleanup for signal handlers.
 
     Parameters
     ----------
-    instance : Any
+    instance : CleanupHandler | None
         The Campers instance that will handle cleanup
     """
     _cleanup_manager.set(instance)
 
 
-def get_cleanup_instance() -> Any:
+def get_cleanup_instance() -> CleanupHandler | None:
     """Get the current cleanup instance.
 
     Returns
     -------
-    Any
+    CleanupHandler | None
         The Campers instance handling cleanup, or None if not set
     """
     return _cleanup_manager.get()

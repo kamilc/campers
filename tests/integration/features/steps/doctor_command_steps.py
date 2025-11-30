@@ -126,13 +126,13 @@ def step_region_has_default_vpc(context: Context, region: str) -> None:
     has_default = any(vpc.get("IsDefault") for vpc in vpcs.get("Vpcs", []))
 
     if not has_default:
-        if vpcs.get("Vpcs"):
-            vpc_id = vpcs["Vpcs"][0]["VpcId"]
-        else:
-            try:
-                vpc_response = ec2_client.create_default_vpc()
-                vpc_id = vpc_response["Vpc"]["VpcId"]
-            except Exception:
+        try:
+            vpc_response = ec2_client.create_default_vpc()
+            vpc_id = vpc_response["Vpc"]["VpcId"]
+        except Exception:
+            if vpcs.get("Vpcs"):
+                vpc_id = vpcs["Vpcs"][0]["VpcId"]
+            else:
                 vpc_response = ec2_client.create_vpc(CidrBlock="10.0.0.0/16")
                 vpc_id = vpc_response["Vpc"]["VpcId"]
     else:
