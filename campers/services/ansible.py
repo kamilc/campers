@@ -18,7 +18,14 @@ class AnsibleManager:
     """Manage Ansible playbook execution in push mode."""
 
     def __init__(self) -> None:
-        """Initialize AnsibleManager."""
+        """Initialize AnsibleManager.
+
+        Notes
+        -----
+        Initializes an empty list of temporary files that may be created
+        during playbook execution. These files should be cleaned up
+        after playbook completion.
+        """
         self._temp_files: list[Path] = []
 
     def check_ansible_installed(self) -> None:

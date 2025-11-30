@@ -4,6 +4,7 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -22,9 +23,13 @@ from campers.constants import (
     WAITER_DELAY_SECONDS,
     WAITER_MAX_ATTEMPTS_LONG,
     WAITER_MAX_ATTEMPTS_SHORT,
-    InstanceState,
 )
 from campers.providers.aws.ami import AMIResolver
+from campers.providers.aws.constants import (
+    ACTIVE_INSTANCE_STATES,
+    UUID_SLICE_LENGTH,
+    VALID_INSTANCE_TYPES,
+)
 from campers.providers.aws.errors import handle_aws_errors
 from campers.providers.aws.keypair import KeyPairInfo, KeyPairManager
 from campers.providers.aws.network import NetworkManager
@@ -37,71 +42,6 @@ from campers.providers.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-UUID_SLICE_LENGTH = 8
-
-ACTIVE_INSTANCE_STATES = [
-    InstanceState.PENDING.value,
-    InstanceState.RUNNING.value,
-    InstanceState.STOPPING.value,
-    InstanceState.STOPPED.value,
-]
-
-
-VALID_INSTANCE_TYPES = frozenset(
-    (
-        "t2.micro",
-        "t2.small",
-        "t2.medium",
-        "t2.large",
-        "t2.xlarge",
-        "t2.2xlarge",
-        "t3.micro",
-        "t3.small",
-        "t3.medium",
-        "t3.large",
-        "t3.xlarge",
-        "t3.2xlarge",
-        "t3a.micro",
-        "t3a.small",
-        "t3a.medium",
-        "t3a.large",
-        "t3a.xlarge",
-        "t3a.2xlarge",
-        "m5.large",
-        "m5.xlarge",
-        "m5.2xlarge",
-        "m5.4xlarge",
-        "m5.8xlarge",
-        "m5.12xlarge",
-        "m5.16xlarge",
-        "m5.24xlarge",
-        "m5a.large",
-        "m5a.xlarge",
-        "m5a.2xlarge",
-        "m5a.4xlarge",
-        "m5a.8xlarge",
-        "m5a.12xlarge",
-        "m5a.16xlarge",
-        "m5a.24xlarge",
-        "c5.large",
-        "c5.xlarge",
-        "c5.2xlarge",
-        "c5.4xlarge",
-        "c5.9xlarge",
-        "c5.12xlarge",
-        "c5.18xlarge",
-        "c5.24xlarge",
-        "r5.large",
-        "r5.xlarge",
-        "r5.2xlarge",
-        "r5.4xlarge",
-        "r5.8xlarge",
-        "r5.12xlarge",
-        "r5.16xlarge",
-        "r5.24xlarge",
-    )
-)
-
 
 class EC2Manager:
     """Manage EC2 instance lifecycle for campers."""
@@ -109,8 +49,8 @@ class EC2Manager:
     def __init__(
         self,
         region: str,
-        boto3_client_factory: Any | None = None,
-        boto3_resource_factory: Any | None = None,
+        boto3_client_factory: Callable[..., Any] | None = None,
+        boto3_resource_factory: Callable[..., Any] | None = None,
     ) -> None:
         """Initialize EC2 manager.
 

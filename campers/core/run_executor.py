@@ -15,9 +15,10 @@ from typing import Any
 from campers.cli import apply_cli_overrides
 from campers.constants import SYNC_TIMEOUT
 from campers.core.config import ConfigLoader
+from campers.core.interfaces import ComputeProvider
 from campers.services.ansible import AnsibleManager
 from campers.services.portforward import PortForwardManager
-from campers.services.ssh import get_ssh_connection_info
+from campers.services.ssh import SSHManager, get_ssh_connection_info
 from campers.services.sync import MutagenManager
 from campers.utils import generate_instance_name
 
@@ -32,9 +33,9 @@ class RunExecutor:
     ----------
     config_loader : ConfigLoader
         Configuration loader instance
-    compute_provider_factory : Callable[..., Any]
+    compute_provider_factory : Callable[[str], ComputeProvider]
         Factory function to create compute provider instances
-    ssh_manager_factory : Callable[..., Any]
+    ssh_manager_factory : type[SSHManager]
         Factory function to create SSHManager instances
     resources : dict[str, Any]
         Shared resources dictionary
@@ -53,8 +54,8 @@ class RunExecutor:
     def __init__(
         self,
         config_loader: ConfigLoader,
-        compute_provider_factory: Callable[..., Any],
-        ssh_manager_factory: Callable[..., Any],
+        compute_provider_factory: Callable[[str], ComputeProvider],
+        ssh_manager_factory: type[SSHManager],
         resources: dict[str, Any],
         resources_lock: threading.Lock,
         cleanup_in_progress_getter: Callable[[], bool],

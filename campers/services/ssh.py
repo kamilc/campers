@@ -10,20 +10,17 @@ from dataclasses import dataclass
 import paramiko
 from paramiko.channel import Channel, ChannelFile
 
-from campers.constants import MAX_COMMAND_LENGTH
+from campers.constants import (
+    DEFAULT_CHANNEL_TIMEOUT,
+    DEFAULT_SSH_PORT,
+    DEFAULT_SSH_TIMEOUT,
+    MAX_COMMAND_LENGTH,
+    SENSITIVE_PATTERNS,
+    SSH_RETRY_DELAYS,
+)
 from campers.providers.aws.ssh import get_aws_ssh_connection_info
 
 logger = logging.getLogger(__name__)
-
-SSH_RETRY_DELAYS = [1, 2, 4, 8, 16, 30, 30, 30, 30, 30]
-
-SENSITIVE_PATTERNS = [
-    "PASSWORD",
-    "SECRET",
-    "TOKEN",
-    "KEY",
-    "PRIVATE",
-]
 
 
 @dataclass
@@ -101,7 +98,13 @@ class SSHManager:
         SSH client instance (None when not connected)
     """
 
-    def __init__(self, host: str, key_file: str, username: str = "ubuntu", port: int = 22) -> None:
+    def __init__(
+        self,
+        host: str,
+        key_file: str,
+        username: str = "ubuntu",
+        port: int = DEFAULT_SSH_PORT,
+    ) -> None:
         """Initialize SSHManager with connection parameters.
 
         Parameters
@@ -193,21 +196,19 @@ class SSHManager:
                         f"Failed to establish SSH connection after {effective_max_retries} attempts"
                     ) from e
 
-    def stream_remaining_output(self, stream: ChannelFile, stream_type: str) -> None:
+    def stream_remaining_output(self, stream: ChannelFile) -> None:
         """Stream remaining output from a channel stream.
 
         Parameters
         ----------
         stream : ChannelFile
             Channel stream to read from (stdout or stderr)
-        stream_type : str
-            Stream type identifier: "stdout" or "stderr"
         """
         for line in stream.readlines():
             logging.info(line.rstrip("\n"))
 
     def stream_output_realtime(
-        self, stdout: ChannelFile, stderr: ChannelFile, timeout: float = 300.0
+        self, stdout: ChannelFile, stderr: ChannelFile, timeout: float = DEFAULT_SSH_TIMEOUT
     ) -> None:
         """Stream stdout and stderr in real-time until command completes.
 
@@ -232,7 +233,7 @@ class SSHManager:
             if time.monotonic() - start_time > timeout:
                 raise TimeoutError(f"Stream output timed out after {timeout} seconds")
 
-            stdout.channel.settimeout(1.0)
+            stdout.channel.settimeout(DEFAULT_CHANNEL_TIMEOUT)
 
             try:
                 line = stdout.readline()
@@ -285,8 +286,8 @@ class SSHManager:
 
             self.stream_output_realtime(stdout, stderr)
 
-            self.stream_remaining_output(stdout, "stdout")
-            self.stream_remaining_output(stderr, "stderr")
+            self.stream_remaining_output(stdout)
+            self.stream_remaining_output(stderr)
 
             exit_code = stdout.channel.recv_exit_status()
             return exit_code
@@ -306,6 +307,29 @@ class SSHManager:
                 stderr.close()
 
             self._active_channel = None
+
+    def validate_command_length(self, command: str) -> None:
+        """Validate that command does not exceed maximum length.
+
+        Parameters
+        ----------
+        command : str
+            Command to validate
+
+        Raises
+        ------
+        ValueError
+            If command is empty or exceeds maximum length
+        """
+        if not command or not command.strip():
+            raise ValueError("Command cannot be empty")
+
+        if len(command) > MAX_COMMAND_LENGTH:
+            msg = (
+                f"Command length ({len(command)}) exceeds maximum of "
+                f"{MAX_COMMAND_LENGTH} characters"
+            )
+            raise ValueError(msg)
 
     def execute_command(self, command: str) -> int:
         """Execute command and stream output in real-time.
@@ -329,16 +353,7 @@ class SSHManager:
         KeyboardInterrupt
             If user presses Ctrl+C during command execution
         """
-        if not command or not command.strip():
-            raise ValueError("Command cannot be empty")
-
-        if len(command) > MAX_COMMAND_LENGTH:
-            msg = (
-                f"Command length ({len(command)}) exceeds maximum of "
-                f"{MAX_COMMAND_LENGTH} characters"
-            )
-            raise ValueError(msg)
-
+        self.validate_command_length(command)
         shell_command = f"cd ~ && bash -c {shlex.quote(command)}"
         return self._execute_with_streaming(shell_command)
 
@@ -366,16 +381,7 @@ class SSHManager:
         KeyboardInterrupt
             If user presses Ctrl+C during command execution
         """
-        if not command or not command.strip():
-            raise ValueError("Command cannot be empty")
-
-        if len(command) > MAX_COMMAND_LENGTH:
-            msg = (
-                f"Command length ({len(command)}) exceeds maximum of "
-                f"{MAX_COMMAND_LENGTH} characters"
-            )
-            raise ValueError(msg)
-
+        self.validate_command_length(command)
         return self._execute_with_streaming(command)
 
     def filter_environment_variables(
@@ -415,11 +421,10 @@ class SSHManager:
             var_names = ", ".join(sorted(filtered_vars.keys()))
             logger.info("Forwarding %s environment variables: %s", len(filtered_vars), var_names)
 
-            sensitive_patterns = ["SECRET", "PASSWORD", "TOKEN", "KEY"]
             sensitive_vars = [
                 name
                 for name in filtered_vars
-                if any(pattern in name.upper() for pattern in sensitive_patterns)
+                if any(pattern in name.upper() for pattern in SENSITIVE_PATTERNS)
             ]
 
             if sensitive_vars:

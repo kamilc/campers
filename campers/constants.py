@@ -197,6 +197,54 @@ Prevents extremely long commands that could cause issues with
 shell argument parsing or remote system limitations.
 """
 
+DEFAULT_SSH_PORT = 22
+"""Default port number for SSH connections.
+
+Standard SSH port used for remote shell access to instances.
+"""
+
+DEFAULT_SSH_TIMEOUT = 300.0
+"""Default timeout in seconds for SSH operations.
+
+Five minutes allows time for SSH connection establishment,
+authentication, and command execution without premature timeouts.
+"""
+
+DEFAULT_CHANNEL_TIMEOUT = 1.0
+"""Default timeout in seconds for SSH channel operations.
+
+Used for individual SSH channel reads/writes to detect hung connections.
+"""
+
+DEFAULT_WAIT_TIMEOUT = 300
+"""Default timeout in seconds for resource wait operations.
+
+Five minutes allows time for resource state transitions such as
+instance startup, volume attachment, or snapshot completion.
+"""
+
+SSH_RETRY_DELAYS = [1, 2, 4, 8, 16, 30, 30, 30, 30, 30]
+"""Exponential backoff delays in seconds for SSH connection retries.
+
+Provides graduated retry strategy that starts with short delays for
+quick recovery from transient issues while allowing longer waits for
+persistent problems without excessive retries.
+"""
+
+SENSITIVE_PATTERNS = [
+    "PASSWORD",
+    "SECRET",
+    "TOKEN",
+    "KEY",
+    "PRIVATE",
+]
+"""Patterns used to identify sensitive data in logs for redaction.
+
+These patterns are matched case-insensitively against log output to
+identify environment variables and configuration values that should
+be redacted before display to protect credentials and secrets.
+"""
+
 EXIT_SUCCESS = 0
 """Exit code indicating successful program completion.
 

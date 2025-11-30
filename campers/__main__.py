@@ -20,6 +20,7 @@ from campers.core.run_executor import RunExecutor
 from campers.core.signals import set_cleanup_instance, setup_signal_handlers
 from campers.lifecycle import LifecycleManager
 from campers.providers import get_provider  # noqa: E402
+from campers.providers.aws.setup import SetupManager
 from campers.services.portforward import PortForwardManager  # noqa: E402
 from campers.services.ssh import SSHManager  # noqa: E402
 from campers.services.sync import MutagenManager  # noqa: E402
@@ -63,7 +64,7 @@ class Campers:
         self._lifecycle_manager: LifecycleManager | None = None
 
         self._run_executor: RunExecutor | None = None
-        self._setup_manager: Any = None
+        self._setup_manager: SetupManager | None = None
 
         setup_signal_handlers()
         set_cleanup_instance(self)
@@ -106,6 +107,18 @@ class Campers:
         return self._run_executor
 
     def _validate_region_wrapper(self, region: str) -> None:
+        """Validate that the provided region is valid for the compute provider.
+
+        Parameters
+        ----------
+        region : str
+            The cloud region identifier to validate
+
+        Raises
+        ------
+        ProviderError
+            If the region is not valid for the provider
+        """
         compute_provider = self.compute_provider_factory(region)
         compute_provider.validate_region(region)
 
@@ -122,11 +135,15 @@ class Campers:
         return self._lifecycle_manager
 
     @property
-    def setup_manager(self) -> Any:
-        """Get the setup manager instance (lazy-loaded from provider)."""
-        if self._setup_manager is None:
-            from campers.providers.aws.setup import SetupManager
+    def setup_manager(self) -> SetupManager:
+        """Get the setup manager instance (lazy-loaded from provider).
 
+        Returns
+        -------
+        SetupManager
+            The cloud setup manager instance
+        """
+        if self._setup_manager is None:
             self._setup_manager = SetupManager(
                 config_loader=self._config_loader,
             )
@@ -220,6 +237,20 @@ class Campers:
         )
 
     def _get_or_create_instance(self, instance_name: str, config: dict[str, Any]) -> dict[str, Any]:
+        """Get an existing instance or create a new one if it doesn't exist.
+
+        Parameters
+        ----------
+        instance_name : str
+            Name of the instance to get or create
+        config : dict[str, Any]
+            Configuration dictionary for instance creation if needed
+
+        Returns
+        -------
+        dict[str, Any]
+            Instance details including ID, IP address, and metadata
+        """
         return self.run_executor.get_or_create_instance(instance_name, config)
 
     def _sync_cleanup_manager_resources(self) -> None:
@@ -255,12 +286,50 @@ class Campers:
             self._cleanup_in_progress = self._cleanup_manager.cleanup_in_progress
 
     def _build_command_in_directory(self, working_dir: str, command: str) -> str:
+        """Build a command that executes in the specified working directory.
+
+        Parameters
+        ----------
+        working_dir : str
+            The remote working directory path
+        command : str
+            The command to execute
+
+        Returns
+        -------
+        str
+            The complete command with directory change prefix
+        """
         return self.run_executor.build_command_in_directory(working_dir, command)
 
     def _truncate_name(self, name: str) -> str:
+        """Truncate instance name to maximum allowed length.
+
+        Parameters
+        ----------
+        name : str
+            The instance name to truncate
+
+        Returns
+        -------
+        str
+            The truncated instance name
+        """
         return truncate_name(name)
 
     def _validate_region(self, region: str) -> None:
+        """Validate that the provided region is valid for the compute provider.
+
+        Parameters
+        ----------
+        region : str
+            The cloud region identifier to validate
+
+        Raises
+        ------
+        ProviderError
+            If the region is not valid for the provider
+        """
         compute_provider = self.compute_provider_factory(region)
         compute_provider.validate_region(region)
 

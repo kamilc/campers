@@ -14,11 +14,13 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError, NoCredentialsError
 
+from campers.providers.aws.constants import (
+    PRICING_API_REGION,
+    REGION_TO_LOCATION,
+)
 from campers.providers.aws.pricing_parsers import parse_ebs_pricing, parse_ec2_pricing
 
 logger = logging.getLogger(__name__)
-
-PRICING_API_REGION = "us-east-1"
 
 
 class PricingCache:
@@ -100,29 +102,6 @@ class PricingService:
     Thread-safe initialization using lock to prevent race conditions when
     multiple threads access pricing_available during initialization.
     """
-
-    REGION_TO_LOCATION = {
-        "us-east-1": "US East (N. Virginia)",
-        "us-east-2": "US East (Ohio)",
-        "us-west-1": "US West (N. California)",
-        "us-west-2": "US West (Oregon)",
-        "eu-west-1": "EU (Ireland)",
-        "eu-west-2": "EU (London)",
-        "eu-west-3": "EU (Paris)",
-        "eu-central-1": "EU (Frankfurt)",
-        "eu-north-1": "EU (Stockholm)",
-        "eu-south-1": "EU (Milan)",
-        "ap-northeast-1": "Asia Pacific (Tokyo)",
-        "ap-northeast-2": "Asia Pacific (Seoul)",
-        "ap-northeast-3": "Asia Pacific (Osaka)",
-        "ap-southeast-1": "Asia Pacific (Singapore)",
-        "ap-southeast-2": "Asia Pacific (Sydney)",
-        "ap-south-1": "Asia Pacific (Mumbai)",
-        "sa-east-1": "South America (Sao Paulo)",
-        "ca-central-1": "Canada (Central)",
-        "me-south-1": "Middle East (Bahrain)",
-        "af-south-1": "Africa (Cape Town)",
-    }
 
     _init_lock = threading.Lock()
 
@@ -218,7 +197,7 @@ class PricingService:
         float or None
             Hourly rate in USD, or None if not found
         """
-        location = self.REGION_TO_LOCATION.get(region)
+        location = REGION_TO_LOCATION.get(region)
 
         if location is None:
             return None
@@ -313,7 +292,7 @@ class PricingService:
         float or None
             Storage rate in USD per GB-month, or None if not found
         """
-        location = self.REGION_TO_LOCATION.get(region)
+        location = REGION_TO_LOCATION.get(region)
 
         if location is None:
             return None

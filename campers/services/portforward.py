@@ -28,7 +28,7 @@ from pathlib import Path
 import paramiko
 from sshtunnel import BaseSSHTunnelForwarderError, SSHTunnelForwarder
 
-from campers.constants import PRIVILEGED_PORT_THRESHOLD
+from campers.constants import DEFAULT_SSH_PORT, PRIVILEGED_PORT_THRESHOLD
 from campers.utils import validate_port
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,11 @@ class PortForwardManager:
     """
 
     def __init__(self) -> None:
-        """Initialize PortForwardManager."""
+        """Initialize PortForwardManager.
+
+        Initializes the port forward manager with no active tunnels.
+        Tunnels are created and managed through the create_tunnels() method.
+        """
         self.tunnel: SSHTunnelForwarder | None = None
         self.ports: list[int] = []
 
@@ -82,7 +86,7 @@ class PortForwardManager:
         host: str,
         key_file: str,
         username: str = "ubuntu",
-        ssh_port: int = 22,
+        ssh_port: int = DEFAULT_SSH_PORT,
     ) -> None:
         """Create SSH tunnels for multiple ports using single SSHTunnelForwarder.
 

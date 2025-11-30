@@ -6,8 +6,7 @@ multiple cloud providers (AWS, GCP, Azure, etc.) through a common interface.
 
 from __future__ import annotations
 
-from typing import Any
-
+from campers.core.interfaces import ComputeProvider, PricingProvider
 from campers.providers.aws import EC2Manager, PricingService
 from campers.providers.exceptions import (
     ProviderAPIError,
@@ -16,25 +15,29 @@ from campers.providers.exceptions import (
     ProviderError,
 )
 
-_PROVIDERS: dict[str, dict[str, Any]] = {}
+_PROVIDERS: dict[str, dict[str, type[ComputeProvider] | type[PricingProvider]]] = {}
 
 
-def register_provider(name: str, compute_class: Any, pricing_class: Any) -> None:
+def register_provider(
+    name: str,
+    compute_class: type[ComputeProvider],
+    pricing_class: type[PricingProvider],
+) -> None:
     """Register a cloud provider implementation.
 
     Parameters
     ----------
     name : str
         Provider name (e.g., 'aws', 'gcp', 'azure')
-    compute_class : Any
+    compute_class : type[ComputeProvider]
         Compute provider class implementing ComputeProvider protocol
-    pricing_class : Any
+    pricing_class : type[PricingProvider]
         Pricing provider class implementing PricingProvider protocol
     """
     _PROVIDERS[name] = {"compute": compute_class, "pricing": pricing_class}
 
 
-def get_provider(name: str) -> dict[str, Any]:
+def get_provider(name: str) -> dict[str, type[ComputeProvider] | type[PricingProvider]]:
     """Get a registered provider by name.
 
     Parameters
@@ -44,7 +47,7 @@ def get_provider(name: str) -> dict[str, Any]:
 
     Returns
     -------
-    dict[str, Any]
+    dict[str, type[ComputeProvider] | type[PricingProvider]]
         Dictionary with 'compute' and 'pricing' keys containing provider classes
 
     Raises
