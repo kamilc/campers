@@ -11,12 +11,12 @@ from campers.providers.aws.utils import (
     extract_instance_from_response,
     sanitize_instance_name,
 )
+from campers.services.validation import validate_port
 from campers.utils import (
     atomic_file_write,
     generate_instance_name,
     get_git_branch,
     get_git_project_name,
-    validate_port,
 )
 
 
@@ -289,27 +289,27 @@ class TestValidatePort:
 
     def test_rejects_port_zero(self) -> None:
         """Test rejects port 0."""
-        with pytest.raises(ValueError, match="Port must be between 1-65535"):
+        with pytest.raises(ValueError, match="Port must be between"):
             validate_port(0)
 
     def test_rejects_negative_port(self) -> None:
         """Test rejects negative port."""
-        with pytest.raises(ValueError, match="Port must be between 1-65535"):
+        with pytest.raises(ValueError, match="Port must be between"):
             validate_port(-1)
 
     def test_rejects_port_over_65535(self) -> None:
         """Test rejects port exceeding 65535."""
-        with pytest.raises(ValueError, match="Port must be between 1-65535"):
+        with pytest.raises(ValueError, match="Port must be between"):
             validate_port(65536)
 
     def test_rejects_string_port(self) -> None:
         """Test rejects non-integer port."""
-        with pytest.raises(ValueError, match="Port must be between 1-65535"):
+        with pytest.raises(ValueError, match="Port must be an integer"):
             validate_port("8080")  # type: ignore
 
     def test_rejects_float_port(self) -> None:
         """Test rejects float port."""
-        with pytest.raises(ValueError, match="Port must be between 1-65535"):
+        with pytest.raises(ValueError, match="Port must be an integer"):
             validate_port(8080.5)  # type: ignore
 
 

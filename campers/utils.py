@@ -188,23 +188,6 @@ def truncate_name(name: str, max_width: int = DEFAULT_NAME_COLUMN_WIDTH) -> str:
     return name
 
 
-def validate_port(port: int) -> None:
-    """Validate port number is in valid range.
-
-    Parameters
-    ----------
-    port : int
-        Port number to validate
-
-    Raises
-    ------
-    ValueError
-        If port is not in valid range 1-65535
-    """
-    if not isinstance(port, int) or port < 1 or port > 65535:
-        raise ValueError(f"Port must be between 1-65535, got {port}")
-
-
 def atomic_file_write(path: Path, content: str) -> None:
     """Write file atomically using temp file and rename with file locking.
 

@@ -9,14 +9,9 @@ import yaml
 from omegaconf import OmegaConf
 from omegaconf.errors import InterpolationResolutionError
 
-from campers.constants import (
-    DEFAULT_DISK_SIZE,
-    DEFAULT_INSTANCE_TYPE,
-    DEFAULT_PROVIDER,
-    DEFAULT_SSH_USERNAME,
-    OnExitAction,
-)
+from campers.constants import DEFAULT_DISK_SIZE, DEFAULT_PROVIDER, OnExitAction
 from campers.providers import get_default_region, list_providers
+from campers.providers.aws.constants import DEFAULT_INSTANCE_TYPE, DEFAULT_SSH_USERNAME
 
 logger = logging.getLogger(__name__)
 

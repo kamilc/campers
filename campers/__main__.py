@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from campers.cli.main import main  # noqa: E402
-from campers.constants import DEFAULT_PROVIDER
+from campers.constants import DEFAULT_PROVIDER, UPDATE_QUEUE_MAX_SIZE
 from campers.core.cleanup import CleanupManager
 from campers.core.config import ConfigLoader  # noqa: E402
 from campers.core.interfaces import ComputeProvider
@@ -171,7 +171,7 @@ class Campers:
                 "ignore": ignore,
                 "json_output": json_output,
             }
-            update_queue: queue.Queue = queue.Queue(maxsize=100)
+            update_queue: queue.Queue = queue.Queue(maxsize=UPDATE_QUEUE_MAX_SIZE)
             app = CampersTUI(
                 campers_instance=self, run_kwargs=run_kwargs, update_queue=update_queue
             )

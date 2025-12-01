@@ -5,9 +5,8 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
-from botocore.exceptions import ClientError
-
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from campers.providers.aws.pricing import (
     PricingCache,

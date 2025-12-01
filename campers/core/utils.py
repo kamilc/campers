@@ -24,7 +24,10 @@ def get_instance_id(instance_details: dict[str, Any]) -> str | None:
     str or None
         Instance ID if found, None otherwise
     """
-    return instance_details.get("InstanceId") or instance_details.get("instance_id")
+    instance_id = instance_details.get("InstanceId")
+    if instance_id is not None:
+        return instance_id
+    return instance_details.get("instance_id")
 
 
 def get_volume_size_or_default(

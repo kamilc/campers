@@ -19,6 +19,7 @@ from textual.css.query import NoMatches
 from textual.widgets import Log
 
 from campers.__main__ import Campers, CampersTUI
+from campers.constants import UPDATE_QUEUE_MAX_SIZE
 from tests.harness.utils.system_snapshot import gather_system_snapshot
 from tests.integration.features.steps.utils import run_async_test
 
@@ -515,7 +516,7 @@ def run_tui_test_with_machine(
             try:
                 async with mocking_context_manager():
                     campers = Campers()
-                    update_queue: queue.Queue = queue.Queue(maxsize=100)
+                    update_queue: queue.Queue = queue.Queue(maxsize=UPDATE_QUEUE_MAX_SIZE)
 
                     app = CampersTUI(
                         campers_instance=campers,

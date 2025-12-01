@@ -29,7 +29,7 @@ import paramiko
 from sshtunnel import BaseSSHTunnelForwarderError, SSHTunnelForwarder
 
 from campers.constants import DEFAULT_SSH_PORT, PRIVILEGED_PORT_THRESHOLD
-from campers.utils import validate_port
+from campers.services.validation import validate_port
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,8 @@ class PortForwardManager:
                 logger.warning(
                     "Port %s is a privileged port (< %s). "
                     "Root privileges may be required on the local machine.",
-                    port, PRIVILEGED_PORT_THRESHOLD
+                    port,
+                    PRIVILEGED_PORT_THRESHOLD,
                 )
         self.validate_key_file(key_file)
 

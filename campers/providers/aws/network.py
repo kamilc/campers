@@ -5,7 +5,7 @@ import time
 import uuid
 from typing import Any
 
-from campers.constants import SSH_SECURITY_GROUP_DEFAULT_CIDR
+from campers.providers.aws.constants import SSH_SECURITY_GROUP_DEFAULT_CIDR
 from campers.providers.aws.errors import handle_aws_errors
 from campers.providers.exceptions import ProviderAPIError
 
@@ -163,7 +163,7 @@ class NetworkManager:
                 if attempt == max_retries - 1:
                     raise
 
-                backoff_time = 2 ** attempt
+                backoff_time = 2**attempt
                 logger.debug(
                     "Security group name collision, retrying with suffix (attempt %d/%d)",
                     attempt + 1,
