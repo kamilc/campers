@@ -167,24 +167,6 @@ def log_and_print_error(message: str, *args: Any) -> None:
     print(f"Error: {formatted_msg}", file=sys.stderr)
 
 
-def get_aws_credentials_error_message() -> str:
-    """Get standard AWS credentials error message.
-
-    Returns
-    -------
-    str
-        Formatted AWS credentials error message
-    """
-    return (
-        "Cloud credentials not found\n\n"
-        "Configure your credentials:\n"
-        "  aws configure\n\n"
-        "Or set environment variables:\n"
-        "  export AWS_ACCESS_KEY_ID=...\n"
-        "  export AWS_SECRET_ACCESS_KEY=..."
-    )
-
-
 def truncate_name(name: str, max_width: int = DEFAULT_NAME_COLUMN_WIDTH) -> str:
     """Truncate name to fit in column width.
 

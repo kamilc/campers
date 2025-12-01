@@ -1,5 +1,6 @@
 """Mutagen bidirectional file synchronization management."""
 
+import contextlib
 import fcntl
 import logging
 import os
@@ -14,6 +15,7 @@ from campers.constants import (
     SYNC_STATUS_CHECK_TIMEOUT_SECONDS,
     SYNC_STATUS_POLL_INTERVAL_SECONDS,
 )
+from campers.services.validation import validate_port
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,9 @@ class MutagenManager:
                     logger.debug("Created SSH config at %s", config_path)
             finally:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        with contextlib.suppress(OSError):
+            lock_path.unlink()
 
     def check_mutagen_installed(self) -> None:
         """Check if mutagen is installed locally.
@@ -135,7 +140,7 @@ class MutagenManager:
                     timeout=10,
                 )
         except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError) as e:
-            logger.warning(f"Failed to cleanup orphaned session {session_name}: {e}")
+            logger.warning("Failed to cleanup orphaned session %s: %s", session_name, e)
 
     def create_sync_session(
         self,
@@ -227,6 +232,8 @@ class MutagenManager:
             logger.error("Failed to read SSH key file: %s", e)
             raise RuntimeError(f"Failed to read SSH key file {key_path}: {e}") from e
 
+        validate_port(ssh_port)
+
         if ssh_wrapper_dir is None:
             ssh_wrapper_dir = tempfile.gettempdir()
 
@@ -287,93 +294,98 @@ Host {host}
         include_line = f"Include {campers_config_path}"
 
         try:
-            self._update_ssh_config_atomic(user_ssh_config, include_line)
-        except (PermissionError, OSError) as e:
-            logger.error("Failed to update SSH config: %s", e)
-            raise RuntimeError(f"Failed to update SSH config at {user_ssh_config}: {e}") from e
+            try:
+                self._update_ssh_config_atomic(user_ssh_config, include_line)
+            except (PermissionError, OSError) as e:
+                logger.error("Failed to update SSH config: %s", e)
+                raise RuntimeError(f"Failed to update SSH config at {user_ssh_config}: {e}") from e
 
-        logger.debug("SSH config for host %s:\n%s", host, host_config.strip())
+            logger.debug("SSH config for host %s:\n%s", host, host_config.strip())
 
-        ssh_path = shutil.which("ssh")
-        if not ssh_path:
-            raise RuntimeError("ssh not found. Please install OpenSSH or add it to your PATH.")
+            ssh_path = shutil.which("ssh")
+            if not ssh_path:
+                raise RuntimeError("ssh not found. Please install OpenSSH or add it to your PATH.")
 
-        add_host_cmd = [
-            ssh_path,
-            "-F",
-            str(campers_config_path),
-            "-o",
-            "IdentitiesOnly=yes",
-            "-i",
-            str(temp_key_path.resolve()),
-            f"{username}@{host}",
-            "echo",
-            "SSH_OK",
-        ]
-        logger.debug("Testing SSH connection: %s", " ".join(add_host_cmd))
+            add_host_cmd = [
+                ssh_path,
+                "-F",
+                str(campers_config_path),
+                "-o",
+                "IdentitiesOnly=yes",
+                "-i",
+                str(temp_key_path.resolve()),
+                f"{username}@{host}",
+                "echo",
+                "SSH_OK",
+            ]
+            logger.debug("Testing SSH connection: %s", " ".join(add_host_cmd))
 
-        ssh_env = os.environ.copy()
-        ssh_env.pop("SSH_AUTH_SOCK", None)
-        ssh_env["MUTAGEN_SSH_CONFIG"] = str(campers_config_path)
-        ssh_env["MUTAGEN_SSH_ARGS"] = (
-            "-oIdentitiesOnly=yes "
-            "-oStrictHostKeyChecking=accept-new "
-            "-oUserKnownHostsFile=/dev/null "
-            f"-i {str(temp_key_path.resolve())}"
-        )
-
-        try:
-            host_result = subprocess.run(
-                add_host_cmd,
-                capture_output=True,
-                text=True,
-                timeout=35,
-                env=ssh_env,
+            ssh_env = os.environ.copy()
+            ssh_env.pop("SSH_AUTH_SOCK", None)
+            ssh_env["MUTAGEN_SSH_CONFIG"] = str(campers_config_path)
+            ssh_env["MUTAGEN_SSH_ARGS"] = (
+                "-oIdentitiesOnly=yes "
+                "-oStrictHostKeyChecking=accept-new "
+                "-oUserKnownHostsFile=/dev/null "
+                f"-i {str(temp_key_path.resolve())}"
             )
-            logger.debug("SSH test exit code: %d", host_result.returncode)
 
-            if host_result.returncode == 0:
-                logger.debug("SSH connection verified successfully")
-            else:
-                logger.warning(
-                    "SSH test failed (exit %d): %s",
-                    host_result.returncode,
-                    host_result.stderr,
+            try:
+                host_result = subprocess.run(
+                    add_host_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=35,
+                    env=ssh_env,
                 )
-        except subprocess.TimeoutExpired:
-            logger.warning("SSH connection test timed out")
-        except (FileNotFoundError, subprocess.SubprocessError) as e:
-            logger.warning("SSH connection test failed: %s", e)
+                logger.debug("SSH test exit code: %d", host_result.returncode)
 
-        logger.debug("Mutagen create command: %s", " ".join(cmd))
+                if host_result.returncode == 0:
+                    logger.debug("SSH connection verified successfully")
+                else:
+                    logger.warning(
+                        "SSH test failed (exit %d): %s",
+                        host_result.returncode,
+                        host_result.stderr,
+                    )
+            except subprocess.TimeoutExpired:
+                logger.warning("SSH connection test timed out")
+            except (FileNotFoundError, subprocess.SubprocessError) as e:
+                logger.warning("SSH connection test failed: %s", e)
 
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                env=ssh_env,
-            )
-        except subprocess.TimeoutExpired as e:
-            logger.error("Mutagen sync create timed out after 120 seconds")
-            if hasattr(e, "stdout") and e.stdout:
-                logger.error("Partial stdout: %s", e.stdout)
-            if hasattr(e, "stderr") and e.stderr:
-                logger.error("Partial stderr: %s", e.stderr)
-            raise RuntimeError(
-                "Mutagen sync create timed out after 120 seconds. "
-                "The remote instance may not be ready or there may be network issues."
-            ) from e
+            logger.debug("Mutagen create command: %s", " ".join(cmd))
 
-        logger.debug("Mutagen create exit code: %d", result.returncode)
-        if result.stdout:
-            logger.debug("Mutagen stdout: %s", result.stdout)
-        if result.stderr:
-            logger.debug("Mutagen stderr: %s", result.stderr)
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    env=ssh_env,
+                )
+            except subprocess.TimeoutExpired as e:
+                logger.error("Mutagen sync create timed out after 120 seconds")
+                if hasattr(e, "stdout") and e.stdout:
+                    logger.error("Partial stdout: %s", e.stdout)
+                if hasattr(e, "stderr") and e.stderr:
+                    logger.error("Partial stderr: %s", e.stderr)
+                raise RuntimeError(
+                    "Mutagen sync create timed out after 120 seconds. "
+                    "The remote instance may not be ready or there may be network issues."
+                ) from e
 
-        if result.returncode != 0:
-            raise RuntimeError(f"Failed to create Mutagen sync session: {result.stderr}")
+            logger.debug("Mutagen create exit code: %d", result.returncode)
+            if result.stdout:
+                logger.debug("Mutagen stdout: %s", result.stdout)
+            if result.stderr:
+                logger.debug("Mutagen stderr: %s", result.stderr)
+
+            if result.returncode != 0:
+                raise RuntimeError(f"Failed to create Mutagen sync session: {result.stderr}")
+        except Exception:
+            with contextlib.suppress(OSError):
+                temp_key_path.unlink()
+            raise
 
     def wait_for_initial_sync(self, session_name: str, timeout: int = 300) -> None:
         """Wait for Mutagen initial sync to complete.
@@ -437,7 +449,7 @@ Host {host}
                 timeout=10,
             )
         except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError) as e:
-            logger.warning(f"Failed to terminate Mutagen session {session_name}: {e}")
+            logger.warning("Failed to terminate Mutagen session %s: %s", session_name, e)
 
         if ssh_wrapper_dir is None:
             ssh_wrapper_dir = tempfile.gettempdir()
@@ -451,7 +463,7 @@ Host {host}
                 temp_key_path.unlink()
                 logger.debug("Removed SSH key file: %s", temp_key_path)
         except OSError as e:
-            logger.warning(f"Failed to remove SSH key file: {e}")
+            logger.warning("Failed to remove SSH key file: %s", e)
 
         if host and campers_config_path.exists():
             try:
@@ -468,4 +480,4 @@ Host {host}
                         f.write(updated_config)
                     logger.debug("Removed host %s from SSH config", host)
             except OSError as e:
-                logger.warning(f"Failed to cleanup SSH config: {e}")
+                logger.warning("Failed to cleanup SSH config: %s", e)

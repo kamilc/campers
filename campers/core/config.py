@@ -9,7 +9,13 @@ import yaml
 from omegaconf import OmegaConf
 from omegaconf.errors import InterpolationResolutionError
 
-from campers.constants import DEFAULT_PROVIDER, OnExitAction
+from campers.constants import (
+    DEFAULT_DISK_SIZE,
+    DEFAULT_INSTANCE_TYPE,
+    DEFAULT_PROVIDER,
+    DEFAULT_SSH_USERNAME,
+    OnExitAction,
+)
 from campers.providers import get_default_region, list_providers
 
 logger = logging.getLogger(__name__)
@@ -23,14 +29,14 @@ class ConfigLoader:
         self.BUILT_IN_DEFAULTS = {
             "provider": DEFAULT_PROVIDER,
             "region": get_default_region(DEFAULT_PROVIDER),
-            "instance_type": "t3.medium",
-            "disk_size": 50,
+            "instance_type": DEFAULT_INSTANCE_TYPE,
+            "disk_size": DEFAULT_DISK_SIZE,
             "ports": [],
             "include_vcs": False,
             "ignore": ["*.pyc", "__pycache__", "*.log", ".DS_Store"],
             "env_filter": ["AWS_.*"],
             "sync_paths": [],
-            "ssh_username": "ubuntu",
+            "ssh_username": DEFAULT_SSH_USERNAME,
             "on_exit": OnExitAction.STOP.value,
             "ssh_allowed_cidr": None,
         }

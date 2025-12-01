@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from campers.cli.main import main  # noqa: E402
+from campers.constants import DEFAULT_PROVIDER
 from campers.core.cleanup import CleanupManager
 from campers.core.config import ConfigLoader  # noqa: E402
 from campers.core.interfaces import ComputeProvider
@@ -20,7 +21,6 @@ from campers.core.run_executor import RunExecutor
 from campers.core.signals import set_cleanup_instance, setup_signal_handlers
 from campers.lifecycle import LifecycleManager
 from campers.providers import get_provider  # noqa: E402
-from campers.providers.aws.setup import SetupManager
 from campers.services.portforward import PortForwardManager  # noqa: E402
 from campers.services.ssh import SSHManager  # noqa: E402
 from campers.services.sync import MutagenManager  # noqa: E402
@@ -64,7 +64,7 @@ class Campers:
         self._lifecycle_manager: LifecycleManager | None = None
 
         self._run_executor: RunExecutor | None = None
-        self._setup_manager: SetupManager | None = None
+        self._setup_manager_cache: Any = None
 
         setup_signal_handlers()
         set_cleanup_instance(self)
@@ -106,22 +106,6 @@ class Campers:
             )
         return self._run_executor
 
-    def _validate_region_wrapper(self, region: str) -> None:
-        """Validate that the provided region is valid for the compute provider.
-
-        Parameters
-        ----------
-        region : str
-            The cloud region identifier to validate
-
-        Raises
-        ------
-        ProviderError
-            If the region is not valid for the provider
-        """
-        compute_provider = self.compute_provider_factory(region)
-        compute_provider.validate_region(region)
-
     @property
     def lifecycle_manager(self) -> LifecycleManager:
         """Get the lifecycle manager instance."""
@@ -135,19 +119,27 @@ class Campers:
         return self._lifecycle_manager
 
     @property
-    def setup_manager(self) -> SetupManager:
+    def setup_manager(self) -> Any:
         """Get the setup manager instance (lazy-loaded from provider).
 
         Returns
         -------
-        SetupManager
-            The cloud setup manager instance
+        Any
+            The cloud setup manager instance for the configured provider
+
+        Notes
+        -----
+        Uses the DEFAULT_PROVIDER constant to load the appropriate setup manager
+        from the provider-specific module. Caches the instance for subsequent accesses.
         """
-        if self._setup_manager is None:
-            self._setup_manager = SetupManager(
+        if self._setup_manager_cache is None:
+            provider = get_provider(DEFAULT_PROVIDER)
+            setup_getter = provider["setup"]
+            setup_class = setup_getter() if callable(setup_getter) else setup_getter
+            self._setup_manager_cache = setup_class(
                 config_loader=self._config_loader,
             )
-        return self._setup_manager
+        return self._setup_manager_cache
 
     def run(
         self,

@@ -9,6 +9,10 @@ from __future__ import annotations
 from campers.core.interfaces import ComputeProvider, PricingProvider
 from campers.providers.aws import EC2Manager, PricingService
 from campers.providers.aws.constants import DEFAULT_REGION
+from campers.providers.aws.pricing import (
+    calculate_monthly_cost,
+    format_cost,
+)
 from campers.providers.exceptions import (
     ProviderAPIError,
     ProviderConnectionError,
@@ -16,7 +20,7 @@ from campers.providers.exceptions import (
     ProviderError,
 )
 
-_PROVIDERS: dict[str, dict[str, type[ComputeProvider] | type[PricingProvider] | str]] = {}
+_PROVIDERS: dict[str, dict[str, object]] = {}
 
 
 def register_provider(
@@ -120,4 +124,18 @@ __all__ = [
     "ProviderConnectionError",
 ]
 
-register_provider("aws", EC2Manager, PricingService, DEFAULT_REGION)
+def _get_setup_manager() -> type:
+    """Lazily import SetupManager to avoid circular imports."""
+    from campers.providers.aws.setup import SetupManager as AWSSetupManager
+    return AWSSetupManager
+
+
+_PROVIDERS["aws"] = {
+    "compute": EC2Manager,
+    "pricing": PricingService,
+    "pricing_service": PricingService,
+    "setup": _get_setup_manager,
+    "calculate_monthly_cost": calculate_monthly_cost,
+    "format_cost": format_cost,
+    "default_region": DEFAULT_REGION,
+}

@@ -15,8 +15,8 @@ import paramiko
 from campers.core.interfaces import ComputeProvider
 from campers.logging import StreamFormatter, StreamRoutingFilter
 from campers.providers import ProviderAPIError, ProviderCredentialsError
+from campers.providers.aws.utils import get_aws_credentials_error_message
 from campers.services.ssh import SSHManager
-from campers.utils import get_aws_credentials_error_message
 
 
 def get_campers_base_class() -> type:

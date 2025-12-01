@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import time
 import uuid
 from collections.abc import Callable
@@ -60,7 +61,13 @@ class EC2Manager:
             Optional factory for creating boto3 clients. If None, uses boto3.client
         boto3_resource_factory : Callable[..., Any] | None
             Optional factory for creating boto3 resources. If None, uses boto3.resource
+
+        Raises
+        ------
+        ValueError
+            If region format is invalid
         """
+        self._validate_region_format(region)
         self.region = region
         self.boto3_client_factory = boto3_client_factory or boto3.client
         self.boto3_resource_factory = boto3_resource_factory or boto3.resource
@@ -105,7 +112,7 @@ class EC2Manager:
             if hasattr(self, "ec2_client") and self.ec2_client is not None:
                 self.ec2_client.close()
         except (AttributeError, OSError) as e:
-            logger.debug(f"Error closing EC2 client: {e}")
+            logger.debug("Error closing EC2 client: %s", e)
 
         try:
             if (
@@ -116,7 +123,30 @@ class EC2Manager:
             ):
                 self.ec2_resource.meta.client.close()
         except (AttributeError, OSError) as e:
-            logger.debug(f"Error closing EC2 resource client: {e}")
+            logger.debug("Error closing EC2 resource client: %s", e)
+
+    def _validate_region_format(self, region: str) -> None:
+        """Validate AWS region format.
+
+        AWS regions follow the pattern: {area}-{direction}{number}
+        Examples: us-east-1, eu-west-2, ap-southeast-1
+
+        Parameters
+        ----------
+        region : str
+            Region string to validate
+
+        Raises
+        ------
+        ValueError
+            If region format is invalid
+        """
+        region_pattern = r'^[a-z]{2}-[a-z]+-\d[a-z]?$'
+        if not re.match(region_pattern, region):
+            raise ValueError(
+                f"Invalid AWS region format: '{region}'. "
+                f"Region must match format like 'us-east-1', 'eu-west-2', etc."
+            )
 
     def resolve_ami(self, config: dict[str, Any]) -> str:
         """Resolve AMI ID from configuration.
@@ -525,22 +555,25 @@ class EC2Manager:
                 raise
             except (ProviderAPIError, ProviderConnectionError) as e:
                 logger.warning(
-                    f"Unable to query all AWS regions ({e.__class__.__name__}), "
-                    f"falling back to default region '{self.region}' only. "
-                    f"Use --region flag to query specific regions."
+                    "Unable to query all AWS regions (%s), "
+                    "falling back to default region '%s' only. "
+                    "Use --region flag to query specific regions.",
+                    e.__class__.__name__, self.region
                 )
                 regions = [self.region]
             except RetryError as e:
                 logger.warning(
-                    f"Unable to query all AWS regions (retries exhausted), "
-                    f"falling back to default region '{self.region}' only. "
-                    f"Use --region flag to query specific regions. Error: {e}"
+                    "Unable to query all AWS regions (retries exhausted), "
+                    "falling back to default region '%s' only. "
+                    "Use --region flag to query specific regions. Error: %s",
+                    self.region, e
                 )
                 regions = [self.region]
 
         instances = []
 
         for region in regions:
+            regional_ec2 = None
             try:
                 with handle_aws_errors():
                     regional_ec2 = self.boto3_client_factory("ec2", region_name=region)
@@ -577,11 +610,17 @@ class EC2Manager:
             except ProviderCredentialsError:
                 raise
             except ProviderAPIError as e:
-                logger.warning(f"Failed to query region {region}: {e}")
+                logger.warning("Failed to query region %s: %s", region, e)
                 continue
             except ProviderConnectionError as e:
-                logger.warning(f"Failed to query region {region}: {e}")
+                logger.warning("Failed to query region %s: %s", region, e)
                 continue
+            finally:
+                if regional_ec2 is not None:
+                    try:
+                        regional_ec2.close()
+                    except Exception as e:
+                        logger.debug("Failed to close regional EC2 client for %s: %s", region, e)
 
         seen = set()
         unique_instances = []
@@ -646,7 +685,7 @@ class EC2Manager:
         RuntimeError
             If instance fails to reach stopped state within timeout
         """
-        logger.info(f"Stopping instance {instance_id}...")
+        logger.info("Stopping instance %s...", instance_id)
 
         self.ec2_client.stop_instances(InstanceIds=[instance_id])
 
@@ -665,7 +704,7 @@ class EC2Manager:
         response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
         instance = extract_instance_from_response(response)
 
-        logger.info(f"Instance {instance_id} stopped")
+        logger.info("Instance %s stopped", instance_id)
         return {
             "instance_id": instance_id,
             "public_ip": instance.get("PublicIpAddress"),
@@ -694,14 +733,14 @@ class EC2Manager:
             If instance fails to reach running state within timeout or
             if instance is not in stopped state
         """
-        logger.info(f"Starting instance {instance_id}...")
+        logger.info("Starting instance %s...", instance_id)
 
         response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
         instance = extract_instance_from_response(response)
         current_state = instance["State"]["Name"]
 
         if current_state == "running":
-            logger.info(f"Instance {instance_id} is already running")
+            logger.info("Instance %s is already running", instance_id)
             return {
                 "instance_id": instance_id,
                 "public_ip": instance.get("PublicIpAddress"),
@@ -743,7 +782,7 @@ class EC2Manager:
                 time.sleep(SSH_IP_RETRY_DELAY)
 
         new_ip = instance.get("PublicIpAddress")
-        logger.info(f"Instance {instance_id} started with IP {new_ip}")
+        logger.info("Instance %s started with IP %s", instance_id, new_ip)
 
         unique_id = None
         tags = instance.get("Tags", [])
@@ -791,7 +830,7 @@ class EC2Manager:
 
         block_device_mappings = instance.get("BlockDeviceMappings", [])
         if not block_device_mappings:
-            logger.warning(f"Instance {instance_id} has no block device mappings")
+            logger.warning("Instance %s has no block device mappings", instance_id)
             return None
 
         block_device = block_device_mappings[0]
@@ -807,7 +846,7 @@ class EC2Manager:
                 raise RuntimeError(f"Volume {volume_id} not found")
             volume = volumes[0]
             size = volume.get("Size", 0)
-            logger.info(f"Instance {instance_id} has root volume size {size}GB")
+            logger.info("Instance %s has root volume size %sGB", instance_id, size)
             return size
         except ClientError as e:
             raise RuntimeError(f"Failed to get volume size for {instance_id}: {e}") from e
@@ -831,7 +870,7 @@ class EC2Manager:
             tags = instance.get("Tags", [])
             return {tag["Key"]: tag["Value"] for tag in tags}
         except (ClientError, IndexError, KeyError) as e:
-            logger.warning(f"Failed to get tags for instance {instance_id}: {e}")
+            logger.warning("Failed to get tags for instance %s: %s", instance_id, e)
             return {}
 
     def validate_region(self, region: str) -> bool:

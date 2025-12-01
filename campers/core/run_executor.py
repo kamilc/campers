@@ -195,8 +195,7 @@ class RunExecutor:
 
         finally:
             if (
-                not tui_mode
-                and not self.cleanup_in_progress_getter()
+                not self.cleanup_in_progress_getter()
                 and cleanup_resources_callback
             ):
                 cleanup_resources_callback()

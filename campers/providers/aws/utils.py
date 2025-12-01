@@ -58,3 +58,21 @@ def sanitize_instance_name(name: str) -> str:
     name = re.sub(r"-+", "-", name)
     name = name.strip("-")
     return name[:256]
+
+
+def get_aws_credentials_error_message() -> str:
+    """Get standard AWS credentials error message.
+
+    Returns
+    -------
+    str
+        Formatted AWS credentials error message
+    """
+    return (
+        "Cloud credentials not found\n\n"
+        "Configure your credentials:\n"
+        "  aws configure\n\n"
+        "Or set environment variables:\n"
+        "  export AWS_ACCESS_KEY_ID=...\n"
+        "  export AWS_SECRET_ACCESS_KEY=..."
+    )

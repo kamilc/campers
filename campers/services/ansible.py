@@ -10,6 +10,11 @@ from typing import Any
 import yaml
 
 from campers.constants import ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS
+from campers.services.validation import (
+    validate_ansible_host,
+    validate_ansible_user,
+    validate_port,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +141,10 @@ class AnsibleManager:
         Path
             Path to generated temporary inventory file
         """
+        validate_ansible_host(host)
+        validate_ansible_user(user)
+        validate_port(port)
+
         inventory_content = (
             "[all]\n"
             f"ec2instance "

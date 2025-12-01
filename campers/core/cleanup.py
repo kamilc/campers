@@ -37,6 +37,12 @@ class CleanupManager:
         Configuration dictionary containing on_exit setting (optional)
     pricing_provider : PricingProvider | None
         Pricing service for getting storage rates (optional)
+
+    Notes
+    -----
+    Lock Ordering: Always acquire cleanup_lock before resources_lock to prevent deadlocks.
+    This ordering is maintained throughout the cleanup operation to ensure consistent
+    synchronization semantics.
     """
 
     def __init__(

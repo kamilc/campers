@@ -111,12 +111,12 @@ def test_create_tunnels_success_multiple_ports(
     assert port_forward_manager.ports == [8888, 8889, 8890]
 
     expected_info_calls = [
-        call("Creating SSH tunnel for port 8888..."),
-        call("Creating SSH tunnel for port 8889..."),
-        call("Creating SSH tunnel for port 8890..."),
-        call("SSH tunnel established: localhost:8888 -> remote:8888"),
-        call("SSH tunnel established: localhost:8889 -> remote:8889"),
-        call("SSH tunnel established: localhost:8890 -> remote:8890"),
+        call("Creating SSH tunnel for port %s...", 8888),
+        call("Creating SSH tunnel for port %s...", 8889),
+        call("Creating SSH tunnel for port %s...", 8890),
+        call("SSH tunnel established: localhost:%s -> remote:%s", 8888, 8888),
+        call("SSH tunnel established: localhost:%s -> remote:%s", 8889, 8889),
+        call("SSH tunnel established: localhost:%s -> remote:%s", 8890, 8890),
     ]
     assert mock_logger.info.call_args_list == expected_info_calls
 
@@ -240,8 +240,8 @@ def test_stop_all_tunnels_success(
     assert port_forward_manager.ports == []
 
     expected_info_calls = [
-        call("Stopping SSH tunnel for port 8888..."),
-        call("Stopping SSH tunnel for port 8889..."),
+        call("Stopping SSH tunnel for port %s...", 8888),
+        call("Stopping SSH tunnel for port %s...", 8889),
     ]
     assert mock_logger.info.call_args_list == expected_info_calls
 
@@ -264,7 +264,10 @@ def test_stop_all_tunnels_handles_exceptions(
     assert port_forward_manager.tunnel is None
     assert port_forward_manager.ports == []
 
-    mock_logger.warning.assert_called_once_with("Error stopping tunnels: Stop failed")
+    mock_logger.warning.assert_called_once()
+    args, kwargs = mock_logger.warning.call_args
+    assert args[0] == "Error stopping tunnels: %s"
+    assert isinstance(args[1], OSError)
 
 
 @patch("campers.services.portforward.logger")

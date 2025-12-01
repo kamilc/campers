@@ -121,17 +121,18 @@ class PortForwardManager:
             validate_port(port)
             if port < PRIVILEGED_PORT_THRESHOLD:
                 logger.warning(
-                    f"Port {port} is a privileged port (< {PRIVILEGED_PORT_THRESHOLD}). "
-                    "Root privileges may be required on the local machine."
+                    "Port %s is a privileged port (< %s). "
+                    "Root privileges may be required on the local machine.",
+                    port, PRIVILEGED_PORT_THRESHOLD
                 )
         self.validate_key_file(key_file)
 
         if os.getenv("CAMPERS_TEST_MODE") == "1":
             for port in ports:
-                logger.info(f"Creating SSH tunnel for port {port}...")
+                logger.info("Creating SSH tunnel for port %s...", port)
 
             for port in ports:
-                logger.info(f"SSH tunnel established: localhost:{port} -> remote:{port}")
+                logger.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
 
             self.ports = ports
             return
@@ -141,7 +142,7 @@ class PortForwardManager:
 
         try:
             for port in ports:
-                logger.info(f"Creating SSH tunnel for port {port}...")
+                logger.info("Creating SSH tunnel for port %s...", port)
 
             tunnel = SSHTunnelForwarder(
                 ssh_address_or_host=(host, ssh_port),
@@ -158,7 +159,7 @@ class PortForwardManager:
             self.ports = ports
 
             for port in ports:
-                logger.info(f"SSH tunnel established: localhost:{port} -> remote:{port}")
+                logger.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
 
         except (
             BaseSSHTunnelForwarderError,
@@ -172,12 +173,12 @@ class PortForwardManager:
         """Stop the SSH tunnel forwarder."""
         if self.tunnel:
             for port in self.ports:
-                logger.info(f"Stopping SSH tunnel for port {port}...")
+                logger.info("Stopping SSH tunnel for port %s...", port)
 
             try:
                 self.tunnel.stop()
             except (BaseSSHTunnelForwarderError, OSError) as e:
-                logger.warning(f"Error stopping tunnels: {e}")
+                logger.warning("Error stopping tunnels: %s", e)
 
             self.tunnel = None
             self.ports = []

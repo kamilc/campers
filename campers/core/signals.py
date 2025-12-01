@@ -22,7 +22,11 @@ class CleanupHandler(Protocol):
 
 
 class CleanupInstanceManager:
-    """Thread-safe manager for the cleanup instance."""
+    """Thread-safe manager for the cleanup instance.
+
+    Uses a single lock to protect both getting and checking the instance,
+    preventing race conditions between signal handlers and cleanup teardown.
+    """
 
     def __init__(self) -> None:
         """Initialize the cleanup instance manager."""
@@ -51,6 +55,29 @@ class CleanupInstanceManager:
         with self._lock:
             return self._instance
 
+    def cleanup_with_lock(
+        self, signum: int, frame: types.FrameType | None
+    ) -> None:
+        """Perform cleanup with lock protection against concurrent set(None) calls.
+
+        Parameters
+        ----------
+        signum : int
+            Signal number
+        frame : types.FrameType | None
+            Signal frame
+
+        Notes
+        -----
+        This method atomically retrieves the instance and calls cleanup,
+        preventing race conditions where the instance might be set to None
+        by another thread between get() and the cleanup call.
+        """
+        with self._lock:
+            instance = self._instance
+            if instance is not None:
+                instance._cleanup_resources(signum=signum, frame=frame)
+
 
 _cleanup_manager = CleanupInstanceManager()
 
@@ -62,20 +89,17 @@ def setup_signal_handlers() -> None:
     initialization phase (e.g., during paramiko import).
 
     Signal handlers delegate cleanup responsibility to the Campers instance,
-    which manages resource cleanup in a thread-safe manner.
+    which manages resource cleanup in a thread-safe manner using atomic
+    check-and-act patterns to prevent race conditions.
     """
 
     def sigint_handler(signum: int, frame: types.FrameType | None) -> None:
         """Handle SIGINT (Ctrl+C) signal."""
-        instance = _cleanup_manager.get()
-        if instance is not None:
-            instance._cleanup_resources(signum=signum, frame=frame)
+        _cleanup_manager.cleanup_with_lock(signum=signum, frame=frame)
 
     def sigterm_handler(signum: int, frame: types.FrameType | None) -> None:
         """Handle SIGTERM signal."""
-        instance = _cleanup_manager.get()
-        if instance is not None:
-            instance._cleanup_resources(signum=signum, frame=frame)
+        _cleanup_manager.cleanup_with_lock(signum=signum, frame=frame)
 
     signal.signal(signal.SIGINT, sigint_handler)
     signal.signal(signal.SIGTERM, sigterm_handler)

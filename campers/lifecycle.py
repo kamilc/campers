@@ -9,11 +9,7 @@ from typing import Any
 from campers.core.config import ConfigLoader
 from campers.core.interfaces import ComputeProvider
 from campers.core.utils import get_volume_size_or_default
-from campers.providers.aws.pricing import (
-    PricingService,
-    calculate_monthly_cost,
-    format_cost,
-)
+from campers.providers import get_provider
 from campers.providers.exceptions import ProviderAPIError, ProviderCredentialsError
 from campers.utils import format_time_ago
 
@@ -44,6 +40,30 @@ class LifecycleManager:
         self.compute_provider_factory = compute_provider_factory
         self.log_and_print_error = log_and_print_error
         self.truncate_name = truncate_name
+
+    def _get_pricing_service_and_functions(
+        self, provider_name: str = "aws"
+    ) -> tuple[Any, Any, Any]:
+        """Get PricingService and pricing functions from provider registry.
+
+        Parameters
+        ----------
+        provider_name : str
+            Name of the provider (default: "aws")
+
+        Returns
+        -------
+        tuple[Any, Any, Any]
+            Tuple of (PricingService class, calculate_monthly_cost function, format_cost function)
+        """
+        from campers.constants import DEFAULT_PROVIDER
+
+        provider = get_provider(DEFAULT_PROVIDER)
+        return (
+            provider["pricing_service"],
+            provider["calculate_monthly_cost"],
+            provider["format_cost"],
+        )
 
     def _validate_region(self, region: str) -> None:
         """Validate that a region is valid using the compute provider.
@@ -138,75 +158,83 @@ class LifecycleManager:
                 print("No campers-managed instances found")
                 return
 
+            (
+                PricingService,
+                calculate_monthly_cost,
+                format_cost,
+            ) = self._get_pricing_service_and_functions()
             pricing_service = PricingService()
 
-            if not pricing_service.pricing_available:
-                print("ℹ️  Pricing unavailable\n")
+            try:
+                if not pricing_service.pricing_available:
+                    print("ℹ️  Pricing unavailable\n")
 
-            total_monthly_cost = 0.0
-            costs_available = False
-
-            for inst in instances:
-                regional_manager = self.compute_provider_factory(region=inst["region"])
-                volume_size = regional_manager.get_volume_size(inst["instance_id"])
-
-                if volume_size is None:
-                    volume_size = 0
-
-                monthly_cost = calculate_monthly_cost(
-                    instance_type=inst["instance_type"],
-                    region=inst["region"],
-                    state=inst["state"],
-                    volume_size_gb=volume_size,
-                    pricing_service=pricing_service,
-                )
-
-                if monthly_cost is not None:
-                    total_monthly_cost += monthly_cost
-                    costs_available = True
-
-                inst["monthly_cost"] = monthly_cost
-                inst["volume_size"] = volume_size
-
-            if region:
-                print(f"Instances in {region}:")
-                header = (
-                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} "
-                    f"{'LAUNCHED':<12} {'COST/MONTH':<21}"
-                )
-                print(header)
-                print("-" * 100)
+                total_monthly_cost = 0.0
+                costs_available = False
 
                 for inst in instances:
-                    name = self.truncate_name(inst["camp_config"])
-                    launched = format_time_ago(inst["launch_time"])
-                    cost_str = format_cost(inst["monthly_cost"])
-                    row = (
-                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
-                        f"{inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
-                    )
-                    print(row)
-            else:
-                header = (
-                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} "
-                    f"{'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
-                )
-                print(header)
-                print("-" * 115)
+                    regional_manager = self.compute_provider_factory(region=inst["region"])
+                    volume_size = regional_manager.get_volume_size(inst["instance_id"])
 
-                for inst in instances:
-                    name = self.truncate_name(inst["camp_config"])
-                    launched = format_time_ago(inst["launch_time"])
-                    cost_str = format_cost(inst["monthly_cost"])
-                    row = (
-                        f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
-                        f"{inst['region']:<15} {inst['instance_type']:<15} {launched:<12} "
-                        f"{cost_str:<21}"
-                    )
-                    print(row)
+                    if volume_size is None:
+                        volume_size = 0
 
-            if costs_available:
-                print(f"\nTotal estimated cost: {format_cost(total_monthly_cost)}")
+                    monthly_cost = calculate_monthly_cost(
+                        instance_type=inst["instance_type"],
+                        region=inst["region"],
+                        state=inst["state"],
+                        volume_size_gb=volume_size,
+                        pricing_service=pricing_service,
+                    )
+
+                    if monthly_cost is not None:
+                        total_monthly_cost += monthly_cost
+                        costs_available = True
+
+                    inst["monthly_cost"] = monthly_cost
+                    inst["volume_size"] = volume_size
+
+                if region:
+                    print(f"Instances in {region}:")
+                    header = (
+                        f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} "
+                        f"{'LAUNCHED':<12} {'COST/MONTH':<21}"
+                    )
+                    print(header)
+                    print("-" * 100)
+
+                    for inst in instances:
+                        name = self.truncate_name(inst["camp_config"])
+                        launched = format_time_ago(inst["launch_time"])
+                        cost_str = format_cost(inst["monthly_cost"])
+                        row = (
+                            f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
+                            f"{inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
+                        )
+                        print(row)
+                else:
+                    header = (
+                        f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} "
+                        f"{'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
+                    )
+                    print(header)
+                    print("-" * 115)
+
+                    for inst in instances:
+                        name = self.truncate_name(inst["camp_config"])
+                        launched = format_time_ago(inst["launch_time"])
+                        cost_str = format_cost(inst["monthly_cost"])
+                        row = (
+                            f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
+                            f"{inst['region']:<15} {inst['instance_type']:<15} {launched:<12} "
+                            f"{cost_str:<21}"
+                        )
+                        print(row)
+
+                if costs_available:
+                    print(f"\nTotal estimated cost: {format_cost(total_monthly_cost)}")
+            finally:
+                pricing_service.close()
 
         except ProviderCredentialsError:
             print("Error: Cloud provider credentials not found. Please configure credentials.")
@@ -282,40 +310,48 @@ class LifecycleManager:
             regional_manager = self.compute_provider_factory(region=target["region"])
             volume_size = get_volume_size_or_default(regional_manager, instance_id)
 
+            (
+                PricingService,
+                calculate_monthly_cost,
+                format_cost,
+            ) = self._get_pricing_service_and_functions()
             pricing_service = PricingService()
 
-            running_cost = calculate_monthly_cost(
-                instance_type=target["instance_type"],
-                region=target["region"],
-                state="running",
-                volume_size_gb=volume_size,
-                pricing_service=pricing_service,
-            )
+            try:
+                running_cost = calculate_monthly_cost(
+                    instance_type=target["instance_type"],
+                    region=target["region"],
+                    state="running",
+                    volume_size_gb=volume_size,
+                    pricing_service=pricing_service,
+                )
 
-            stopped_cost = calculate_monthly_cost(
-                instance_type=target["instance_type"],
-                region=target["region"],
-                state="stopped",
-                volume_size_gb=volume_size,
-                pricing_service=pricing_service,
-            )
+                stopped_cost = calculate_monthly_cost(
+                    instance_type=target["instance_type"],
+                    region=target["region"],
+                    state="stopped",
+                    volume_size_gb=volume_size,
+                    pricing_service=pricing_service,
+                )
 
-            regional_manager.stop_instance(instance_id)
+                regional_manager.stop_instance(instance_id)
 
-            print(f"\nInstance {instance_id} has been successfully stopped.")
+                print(f"\nInstance {instance_id} has been successfully stopped.")
 
-            if running_cost is not None and stopped_cost is not None:
-                savings = running_cost - stopped_cost
-                savings_pct = (savings / running_cost * 100) if running_cost > 0 else 0
+                if running_cost is not None and stopped_cost is not None:
+                    savings = running_cost - stopped_cost
+                    savings_pct = (savings / running_cost * 100) if running_cost > 0 else 0
 
-                print("\n💰 Cost Impact:")
-                print(f"  Previous: {format_cost(running_cost)}")
-                print(f"  New: {format_cost(stopped_cost)}")
-                print(f"  Savings: {format_cost(savings)} (~{savings_pct:.0f}% reduction)")
-            else:
-                print("\n(Cost information unavailable)")
+                    print("\n💰 Cost Impact:")
+                    print(f"  Previous: {format_cost(running_cost)}")
+                    print(f"  New: {format_cost(stopped_cost)}")
+                    print(f"  Savings: {format_cost(savings)} (~{savings_pct:.0f}% reduction)")
+                else:
+                    print("\n(Cost information unavailable)")
 
-            print(f"\n  Restart with: campers start {instance_id}")
+                print(f"\n  Restart with: campers start {instance_id}")
+            finally:
+                pricing_service.close()
 
         except RuntimeError as e:
             if target is not None:
@@ -414,41 +450,49 @@ class LifecycleManager:
             regional_manager = self.compute_provider_factory(region=target["region"])
             volume_size = get_volume_size_or_default(regional_manager, instance_id)
 
+            (
+                PricingService,
+                calculate_monthly_cost,
+                format_cost,
+            ) = self._get_pricing_service_and_functions()
             pricing_service = PricingService()
 
-            stopped_cost = calculate_monthly_cost(
-                instance_type=target["instance_type"],
-                region=target["region"],
-                state="stopped",
-                volume_size_gb=volume_size,
-                pricing_service=pricing_service,
-            )
+            try:
+                stopped_cost = calculate_monthly_cost(
+                    instance_type=target["instance_type"],
+                    region=target["region"],
+                    state="stopped",
+                    volume_size_gb=volume_size,
+                    pricing_service=pricing_service,
+                )
 
-            running_cost = calculate_monthly_cost(
-                instance_type=target["instance_type"],
-                region=target["region"],
-                state="running",
-                volume_size_gb=volume_size,
-                pricing_service=pricing_service,
-            )
+                running_cost = calculate_monthly_cost(
+                    instance_type=target["instance_type"],
+                    region=target["region"],
+                    state="running",
+                    volume_size_gb=volume_size,
+                    pricing_service=pricing_service,
+                )
 
-            instance_details = regional_manager.start_instance(instance_id)
+                instance_details = regional_manager.start_instance(instance_id)
 
-            new_ip = instance_details.get("public_ip", "N/A")
-            print(f"\nInstance {instance_id} has been successfully started.")
-            print(f"  Public IP: {new_ip}")
+                new_ip = instance_details.get("public_ip", "N/A")
+                print(f"\nInstance {instance_id} has been successfully started.")
+                print(f"  Public IP: {new_ip}")
 
-            if stopped_cost is not None and running_cost is not None:
-                increase = running_cost - stopped_cost
+                if stopped_cost is not None and running_cost is not None:
+                    increase = running_cost - stopped_cost
 
-                print("\n💰 Cost Impact:")
-                print(f"  Previous: {format_cost(stopped_cost)}")
-                print(f"  New: {format_cost(running_cost)}")
-                print(f"  Increase: {format_cost(increase)}/month")
-            else:
-                print("\n(Cost information unavailable)")
+                    print("\n💰 Cost Impact:")
+                    print(f"  Previous: {format_cost(stopped_cost)}")
+                    print(f"  New: {format_cost(running_cost)}")
+                    print(f"  Increase: {format_cost(increase)}/month")
+                else:
+                    print("\n(Cost information unavailable)")
 
-            print("\n  To establish SSH/Mutagen/ports: campers run <machine>")
+                print("\n  To establish SSH/Mutagen/ports: campers run <machine>")
+            finally:
+                pricing_service.close()
 
         except RuntimeError as e:
             if target is not None:

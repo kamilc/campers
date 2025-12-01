@@ -42,7 +42,7 @@ def get_aws_ssh_connection_info(
     """
     from campers.services.ssh import SSHConnectionInfo
 
-    logger.info(f"get_aws_ssh_connection_info: instance_id={instance_id}, public_ip={public_ip!r}")
+    logger.info("get_aws_ssh_connection_info: instance_id=%s, public_ip=%r", instance_id, public_ip)
 
     if public_ip:
         return SSHConnectionInfo(host=public_ip, port=22, key_file=key_file)

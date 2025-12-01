@@ -239,6 +239,85 @@ missing required settings, or configuration validation failures.
 """
 
 
+MIN_VALID_PORT = 1
+"""Minimum valid port number.
+
+Port numbers must be >= 1 for valid network socket communication.
+"""
+
+MAX_VALID_PORT = 65535
+"""Maximum valid port number.
+
+Port numbers must be <= 65535 due to 16-bit port field limitation in TCP/UDP headers.
+"""
+
+SAFE_HOSTNAME_PATTERN = r'^[a-zA-Z0-9][a-zA-Z0-9\.\-]*$'
+"""Regex pattern for validating hostnames.
+
+Hostnames must start with alphanumeric, followed by alphanumeric, dots, or hyphens.
+Prevents shell metacharacters and injection attacks when interpolating into configs.
+"""
+
+SAFE_USERNAME_PATTERN = r'^[a-zA-Z_][a-zA-Z0-9_\-]*$'
+"""Regex pattern for validating SSH usernames.
+
+Usernames must start with letter or underscore, followed by alphanumeric, underscore, or hyphen.
+Prevents shell metacharacters and injection attacks in SSH configuration.
+Common usernames like 'ec2-user', 'ubuntu', etc. are supported.
+"""
+
+DEFAULT_INSTANCE_TYPE = "t3.medium"
+"""Default EC2 instance type for new instances.
+
+Provides good balance between cost and performance for development/testing workloads.
+"""
+
+DEFAULT_DISK_SIZE = 50
+"""Default root volume size in GB for new instances.
+
+Provides sufficient space for typical development/testing codebases and dependencies.
+"""
+
+DEFAULT_SSH_USERNAME = "ubuntu"
+"""Default SSH username for instances.
+
+Used when connecting to Ubuntu-based EC2 instances, which default to 'ubuntu' user.
+"""
+
+STATUS_IN_PROGRESS = "in_progress"
+"""Status value indicating cleanup operation is in progress."""
+
+STATUS_COMPLETED = "completed"
+"""Status value indicating cleanup operation completed successfully."""
+
+STATUS_FAILED = "failed"
+"""Status value indicating cleanup operation failed."""
+
+STATUS_STOPPING = "stopping"
+"""Status value indicating instance is stopping."""
+
+STATUS_TERMINATING = "terminating"
+"""Status value indicating instance is terminating."""
+
+STREAM_TYPE_STDOUT = "stdout"
+"""Stream type identifier for standard output."""
+
+STREAM_TYPE_STDERR = "stderr"
+"""Stream type identifier for standard error."""
+
+SSH_RETRY_COUNT = 10
+"""Number of retry attempts for SSH connections.
+
+Corresponds to the length of SSH_RETRY_DELAYS constant.
+"""
+
+SSH_SECURITY_GROUP_DEFAULT_CIDR = "0.0.0.0/0"
+"""Default CIDR block for SSH security group when none specified.
+
+Allows SSH access from any IP address. Warning should be logged when used.
+"""
+
+
 class OnExitAction(str, Enum):
     """Actions to take on campers exit."""
 
