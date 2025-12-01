@@ -1,5 +1,6 @@
 """SSH connection and command execution management."""
 
+import inspect
 import logging
 import os
 import re
@@ -75,6 +76,11 @@ def get_ssh_connection_info(instance_id: str, public_ip: str, key_file: str) -> 
 
     if get_ssh_info_func is None:
         raise ValueError("SSH connection info function not registered for the provider")
+
+    if callable(get_ssh_info_func):
+        sig = inspect.signature(get_ssh_info_func)
+        if len(sig.parameters) == 0:
+            get_ssh_info_func = get_ssh_info_func()
 
     return get_ssh_info_func(instance_id, public_ip, key_file)
 

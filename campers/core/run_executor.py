@@ -22,6 +22,8 @@ from campers.services.ssh import SSHManager, get_ssh_connection_info
 from campers.services.sync import MutagenManager
 from campers.utils import generate_instance_name
 
+logger = logging.getLogger(__name__)
+
 
 class RunExecutor:
     """Orchestrates the run command execution flow.
@@ -266,7 +268,7 @@ class RunExecutor:
             Merged and validated configuration
         """
         if verbose:
-            logging.getLogger().setLevel(logging.DEBUG)
+            logging.getLogger("campers").setLevel(logging.DEBUG)
             logging.debug("Verbose mode enabled")
 
         config = self.config_loader.load_config()
@@ -298,10 +300,7 @@ class RunExecutor:
 
         self._validate_sync_paths_config(merged_config.get("sync_paths"))
 
-        self._send_queue_update(
-            update_queue,
-            {"type": "merged_config", "payload": merged_config}
-        )
+        self._send_queue_update(update_queue, {"type": "merged_config", "payload": merged_config})
 
         self.update_queue = update_queue
         return merged_config
@@ -343,8 +342,7 @@ class RunExecutor:
             self.resources["instance_details"] = instance_details
 
         self._send_queue_update(
-            update_queue,
-            {"type": "instance_details", "payload": instance_details}
+            update_queue, {"type": "instance_details", "payload": instance_details}
         )
 
         return instance_details, compute_provider
@@ -373,6 +371,11 @@ class RunExecutor:
         """
         logging.info("Waiting for SSH to be ready...")
 
+        required_keys = ["instance_id", "public_ip", "key_file"]
+        for key in required_keys:
+            if key not in instance_details:
+                raise KeyError(f"Required key '{key}' missing from instance_details")
+
         ssh_info = get_ssh_connection_info(
             instance_details["instance_id"],
             instance_details["public_ip"],
@@ -399,8 +402,7 @@ class RunExecutor:
             return None, None, None
 
         self._send_queue_update(
-            update_queue,
-            {"type": "status_update", "payload": {"status": "running"}}
+            update_queue, {"type": "status_update", "payload": {"status": "running"}}
         )
 
         with self.resources_lock:
@@ -452,7 +454,7 @@ class RunExecutor:
                 {
                     "type": "mutagen_status",
                     "payload": {"state": "not_configured"},
-                }
+                },
             )
             return
 
@@ -464,7 +466,7 @@ class RunExecutor:
                 {
                     "type": "mutagen_status",
                     "payload": {"state": "disabled"},
-                }
+                },
             )
         else:
             if self.cleanup_in_progress_getter():
@@ -486,7 +488,7 @@ class RunExecutor:
                 {
                     "type": "mutagen_status",
                     "payload": {"state": "starting", "files_synced": 0},
-                }
+                },
             )
 
             campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
@@ -513,7 +515,7 @@ class RunExecutor:
                 {
                     "type": "mutagen_status",
                     "payload": {"state": "syncing", "files_synced": 0},
-                }
+                },
             )
 
             mutagen_mgr.wait_for_initial_sync(mutagen_session_name, timeout=SYNC_TIMEOUT)
@@ -524,7 +526,7 @@ class RunExecutor:
                 {
                     "type": "mutagen_status",
                     "payload": {"state": "idle"},
-                }
+                },
             )
 
     def _phase_ansible_provisioning(
@@ -809,11 +811,10 @@ class RunExecutor:
 
             if state == "stopped":
                 logging.info("Found stopped instance %s, starting...", instance_id)
-                print("Found stopped instance for this branch, starting...")
 
                 started_details = compute_provider.start_instance(instance_id)
                 new_ip = started_details.get("public_ip")
-                print(f"Instance started. New IP: {new_ip}")
+                logger.info(f"Instance started. New IP: {new_ip}")
 
                 started_details["reused"] = True
                 return started_details
@@ -835,7 +836,6 @@ class RunExecutor:
                 )
 
         logging.info("Creating new instance: %s", instance_name)
-        print("Creating new instance...")
 
         instance_details = compute_provider.launch_instance(
             config=config, instance_name=instance_name

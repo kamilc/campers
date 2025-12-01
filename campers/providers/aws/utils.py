@@ -26,9 +26,13 @@ def extract_instance_from_response(response: dict[str, Any]) -> dict[str, Any]:
     """
     if not response.get("Reservations"):
         raise ValueError("No reservations in response")
-    if not response["Reservations"][0].get("Instances"):
+
+    instances = response["Reservations"][0].get("Instances", [])
+
+    if not instances:
         raise ValueError("No instances in reservation")
-    return response["Reservations"][0]["Instances"][0]
+
+    return instances[0]
 
 
 def sanitize_instance_name(name: str) -> str:

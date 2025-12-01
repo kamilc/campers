@@ -178,7 +178,7 @@ _PROVIDERS["aws"] = {
     "pricing": PricingService,
     "pricing_service": PricingService,
     "setup": _get_setup_manager,
-    "get_ssh_connection_info": _get_ssh_connection_info_func(),
+    "get_ssh_connection_info": _get_ssh_connection_info_func,
     "calculate_monthly_cost": calculate_monthly_cost,
     "format_cost": format_cost,
     "default_region": DEFAULT_REGION,

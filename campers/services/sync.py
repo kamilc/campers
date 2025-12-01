@@ -88,16 +88,21 @@ class MutagenManager:
 
         Notes
         -----
-        Environment variable CAMPERS_MUTAGEN_NOT_INSTALLED=1 can be set in BDD
-        tests to simulate mutagen not being installed (needed for subprocess-based
-        BDD tests where mocking is not possible).
+        Test harness can set CAMPERS_MUTAGEN_NOT_INSTALLED=1 to simulate
+        mutagen not being installed (needed for subprocess-based BDD tests
+        where mocking is not possible).
         """
-        if os.environ.get("CAMPERS_MUTAGEN_NOT_INSTALLED") == "1":
-            raise RuntimeError(
-                "Mutagen is not installed locally.\n"
-                "Please install Mutagen to use campers file synchronization.\n"
-                "Visit: https://github.com/mutagen-io/mutagen"
-            )
+        try:
+            from tests.harness.services.sync import should_skip_mutagen_installation_check
+
+            if should_skip_mutagen_installation_check():
+                raise RuntimeError(
+                    "Mutagen is not installed locally.\n"
+                    "Please install Mutagen to use campers file synchronization.\n"
+                    "Visit: https://github.com/mutagen-io/mutagen"
+                )
+        except ImportError:
+            pass
 
         try:
             result = subprocess.run(

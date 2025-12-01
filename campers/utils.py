@@ -1,6 +1,5 @@
 """Utility functions for campers."""
 
-import contextlib
 import fcntl
 import logging
 import os
@@ -17,6 +16,8 @@ from campers.constants import (
     SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_git_project_name() -> str | None:
@@ -223,5 +224,9 @@ def atomic_file_write(path: Path, content: str) -> None:
             finally:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
     finally:
-        with contextlib.suppress(OSError):
+        try:
             lock_path.unlink()
+        except FileNotFoundError:
+            logger.debug("Lock file already deleted: %s", lock_path)
+        except OSError as e:
+            logger.debug("Failed to delete lock file %s: %s", lock_path, e)

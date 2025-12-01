@@ -364,10 +364,10 @@ class CleanupManager:
                     storage_rate = self._get_storage_rate(compute_provider.region)
                     storage_cost = float(volume_size) * storage_rate
 
-                    print("\nInstance stopped successfully")
-                    print(f"  Instance ID: {instance_id}")
-                    print(f"  Estimated storage cost: ~${storage_cost:.2f}/month")
-                    print(f"  Restart with: campers start {instance_id}")
+                    logging.info("\nInstance stopped successfully")
+                    logging.info(f"  Instance ID: {instance_id}")
+                    logging.info(f"  Estimated storage cost: ~${storage_cost:.2f}/month")
+                    logging.info(f"  Restart with: campers start {instance_id}")
                 else:
                     compute_provider.terminate_instance(instance_id)
                     logging.info("Cloud instance terminated successfully")
@@ -427,9 +427,7 @@ class CleanupManager:
             self.cleanup_mutagen_session(resources_to_clean, errors)
             self.cleanup_ssh_connections(resources_to_clean, errors)
 
-            success, error_msg = self._cleanup_instance_helper(
-                resources_to_clean, errors, "stop"
-            )
+            success, error_msg = self._cleanup_instance_helper(resources_to_clean, errors, "stop")
             if not success and error_msg:
                 logging.warning("Instance cleanup failed: %s", error_msg)
 
