@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from campers.cli import apply_cli_overrides
-from campers.constants import CLEANUP_TIMEOUT_SECONDS, SYNC_TIMEOUT
+from campers.constants import CLEANUP_TIMEOUT_SECONDS, DEFAULT_SSH_USERNAME, SYNC_TIMEOUT
 from campers.core.config import ConfigLoader
 from campers.core.interfaces import ComputeProvider
 from campers.services.ansible import AnsibleManager
@@ -43,6 +43,8 @@ class RunExecutor:
         Lock for thread-safe resource access
     cleanup_in_progress_getter : Callable[[], bool]
         Callable that returns cleanup in progress status
+    cleanup_event : threading.Event | None
+        Event that signals when cleanup has started (optional)
     update_queue : queue.Queue | None
         Queue for TUI updates (optional)
     mutagen_manager_factory : type[MutagenManager] | None
@@ -59,6 +61,7 @@ class RunExecutor:
         resources: dict[str, Any],
         resources_lock: threading.Lock,
         cleanup_in_progress_getter: Callable[[], bool],
+        cleanup_event: threading.Event | None = None,
         update_queue: queue.Queue[Any] | None = None,
         mutagen_manager_factory: type[MutagenManager] | None = None,
         portforward_manager_factory: type[PortForwardManager] | None = None,
@@ -69,9 +72,27 @@ class RunExecutor:
         self.resources = resources
         self.resources_lock = resources_lock
         self.cleanup_in_progress_getter = cleanup_in_progress_getter
+        self.cleanup_event = cleanup_event
         self.update_queue = update_queue
         self.mutagen_manager_factory = mutagen_manager_factory or MutagenManager
         self.portforward_manager_factory = portforward_manager_factory or PortForwardManager
+
+    def _send_queue_update(self, update_queue: queue.Queue | None, update_data: dict) -> None:
+        """Send update to queue, handling overflow gracefully.
+
+        Parameters
+        ----------
+        update_queue : queue.Queue | None
+            Queue to send update to (no-op if None)
+        update_data : dict
+            Update payload to send
+        """
+        if update_queue is not None:
+            try:
+                update_queue.put_nowait(update_data)
+            except queue.Full:
+                update_type = update_data.get("type")
+                logging.warning("TUI update queue full, dropping update: %s", update_type)
 
     def execute(
         self,
@@ -155,11 +176,15 @@ class RunExecutor:
 
             skip_ssh = os.environ.get("CAMPERS_SKIP_SSH_CONNECTION") == "1"
             if skip_ssh:
-                start_time = time.time()
-                while not self.cleanup_in_progress_getter():
-                    if time.time() - start_time > CLEANUP_TIMEOUT_SECONDS:
+                if self.cleanup_event is not None:
+                    if not self.cleanup_event.wait(timeout=CLEANUP_TIMEOUT_SECONDS):
                         raise TimeoutError("Cleanup did not start within timeout period")
-                    time.sleep(0.1)
+                else:
+                    start_time = time.time()
+                    while not self.cleanup_in_progress_getter():
+                        if time.time() - start_time > CLEANUP_TIMEOUT_SECONDS:
+                            raise TimeoutError("Cleanup did not start within timeout period")
+                        time.sleep(0.1)
                 return instance_details
 
             ssh_manager, ssh_host, ssh_port = self._phase_ssh_connection(
@@ -273,9 +298,10 @@ class RunExecutor:
 
         self._validate_sync_paths_config(merged_config.get("sync_paths"))
 
-        if update_queue is not None:
-            logging.debug("Sending merged_config to TUI queue")
-            update_queue.put({"type": "merged_config", "payload": merged_config})
+        self._send_queue_update(
+            update_queue,
+            {"type": "merged_config", "payload": merged_config}
+        )
 
         self.update_queue = update_queue
         return merged_config
@@ -316,9 +342,10 @@ class RunExecutor:
         with self.resources_lock:
             self.resources["instance_details"] = instance_details
 
-        if update_queue is not None:
-            logging.debug("Sending instance_details to TUI queue")
-            update_queue.put({"type": "instance_details", "payload": instance_details})
+        self._send_queue_update(
+            update_queue,
+            {"type": "instance_details", "payload": instance_details}
+        )
 
         return instance_details, compute_provider
 
@@ -355,7 +382,7 @@ class RunExecutor:
         ssh_manager = self.ssh_manager_factory(
             host=ssh_info.host,
             key_file=ssh_info.key_file,
-            username=merged_config.get("ssh_username", "ubuntu"),
+            username=merged_config.get("ssh_username", DEFAULT_SSH_USERNAME),
             port=ssh_info.port,
         )
 
@@ -371,8 +398,10 @@ class RunExecutor:
             logging.debug("Cleanup in progress, aborting further operations")
             return None, None, None
 
-        if update_queue is not None:
-            update_queue.put({"type": "status_update", "payload": {"status": "running"}})
+        self._send_queue_update(
+            update_queue,
+            {"type": "status_update", "payload": {"status": "running"}}
+        )
 
         with self.resources_lock:
             self.resources["ssh_manager"] = ssh_manager
@@ -418,25 +447,25 @@ class RunExecutor:
                 self.resources["mutagen_mgr"] = mutagen_mgr
                 self.resources["mutagen_session_name"] = mutagen_session_name
         else:
-            if update_queue is not None:
-                update_queue.put(
-                    {
-                        "type": "mutagen_status",
-                        "payload": {"state": "not_configured"},
-                    }
-                )
+            self._send_queue_update(
+                update_queue,
+                {
+                    "type": "mutagen_status",
+                    "payload": {"state": "not_configured"},
+                }
+            )
             return
 
         if disable_mutagen:
             logging.info("Mutagen disabled via CAMPERS_DISABLE_MUTAGEN=1; skipping sync setup.")
 
-            if update_queue is not None:
-                update_queue.put(
-                    {
-                        "type": "mutagen_status",
-                        "payload": {"state": "disabled"},
-                    }
-                )
+            self._send_queue_update(
+                update_queue,
+                {
+                    "type": "mutagen_status",
+                    "payload": {"state": "disabled"},
+                }
+            )
         else:
             if self.cleanup_in_progress_getter():
                 logging.debug("Cleanup in progress, aborting Mutagen sync")
@@ -452,13 +481,13 @@ class RunExecutor:
                 instance_details["public_ip"],
             )
 
-            if update_queue is not None:
-                update_queue.put(
-                    {
-                        "type": "mutagen_status",
-                        "payload": {"state": "starting", "files_synced": 0},
-                    }
-                )
+            self._send_queue_update(
+                update_queue,
+                {
+                    "type": "mutagen_status",
+                    "payload": {"state": "starting", "files_synced": 0},
+                }
+            )
 
             campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
 
@@ -470,7 +499,7 @@ class RunExecutor:
                 remote_path=sync_config["remote"],
                 host=ssh_host,
                 key_file=instance_details["key_file"],
-                username=merged_config.get("ssh_username", "ubuntu"),
+                username=merged_config.get("ssh_username", DEFAULT_SSH_USERNAME),
                 ignore_patterns=merged_config.get("ignore"),
                 include_vcs=merged_config.get("include_vcs", False),
                 ssh_wrapper_dir=campers_dir,
@@ -479,24 +508,24 @@ class RunExecutor:
 
             logging.info("Waiting for initial file sync to complete...")
 
-            if update_queue is not None:
-                update_queue.put(
-                    {
-                        "type": "mutagen_status",
-                        "payload": {"state": "syncing", "files_synced": 0},
-                    }
-                )
+            self._send_queue_update(
+                update_queue,
+                {
+                    "type": "mutagen_status",
+                    "payload": {"state": "syncing", "files_synced": 0},
+                }
+            )
 
             mutagen_mgr.wait_for_initial_sync(mutagen_session_name, timeout=SYNC_TIMEOUT)
             logging.info("File sync completed")
 
-            if update_queue is not None:
-                update_queue.put(
-                    {
-                        "type": "mutagen_status",
-                        "payload": {"state": "idle"},
-                    }
-                )
+            self._send_queue_update(
+                update_queue,
+                {
+                    "type": "mutagen_status",
+                    "payload": {"state": "idle"},
+                }
+            )
 
     def _phase_ansible_provisioning(
         self,
@@ -539,7 +568,7 @@ class RunExecutor:
                 playbooks_config=playbooks_config,
                 instance_ip=instance_details["public_ip"],
                 ssh_key_file=instance_details["key_file"],
-                ssh_username=merged_config.get("ssh_username", "ubuntu"),
+                ssh_username=merged_config.get("ssh_username", DEFAULT_SSH_USERNAME),
                 ssh_port=ssh_port if ssh_port else 22,
             )
             logging.info("Ansible playbook(s) completed successfully")
@@ -608,13 +637,14 @@ class RunExecutor:
                     ports=merged_config["ports"],
                     host=pf_info.host,
                     key_file=pf_info.key_file,
-                    username=merged_config.get("ssh_username", "ubuntu"),
+                    username=merged_config.get("ssh_username", DEFAULT_SSH_USERNAME),
                     ssh_port=pf_info.port,
                 )
             except RuntimeError as e:
                 logging.error("Port forwarding failed: %s", e)
                 with self.resources_lock:
                     self.resources.pop("portforward_mgr", None)
+                raise RuntimeError(f"Port forwarding is configured but failed: {e}") from e
 
         if merged_config.get("startup_script"):
             if self.cleanup_in_progress_getter():

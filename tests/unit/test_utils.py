@@ -186,7 +186,7 @@ class TestGenerateInstanceName:
             mock_branch.return_value = None
             mock_time.return_value = 1234567890.5
             result = generate_instance_name()
-            assert result == "campers-1234567890"
+            assert result == "campers-1234567890500000"
 
     def test_generates_timestamp_name_without_project(self) -> None:
         """Test fallback to timestamp when project is None."""
@@ -199,7 +199,7 @@ class TestGenerateInstanceName:
             mock_branch.return_value = "main"
             mock_time.return_value = 1234567890.5
             result = generate_instance_name()
-            assert result == "campers-1234567890"
+            assert result == "campers-1234567890500000"
 
     def test_sanitizes_git_based_name(self) -> None:
         """Test that git-based names are sanitized."""
@@ -213,7 +213,7 @@ class TestGenerateInstanceName:
             assert result == "campers-myproject-feature-new-api-v2"
 
     def test_timestamp_is_10_digits(self) -> None:
-        """Test that timestamp is 10 digits (Unix seconds)."""
+        """Test that timestamp is 16 digits (Unix microseconds)."""
         with (
             patch("campers.utils.get_git_project_name") as mock_proj,
             patch("campers.utils.get_git_branch") as mock_branch,
@@ -225,7 +225,7 @@ class TestGenerateInstanceName:
             result = generate_instance_name()
             assert result.startswith("campers-")
             timestamp_part = result.split("-")[1]
-            assert len(timestamp_part) == 10
+            assert len(timestamp_part) == 16
             assert timestamp_part.isdigit()
 
 

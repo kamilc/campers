@@ -195,6 +195,12 @@ Used as the default provider when none is specified in configuration,
 environment variables, or command-line arguments.
 """
 
+DEFAULT_SSH_USERNAME = "ubuntu"
+"""Default SSH username for instances.
+
+Used when connecting to Ubuntu-based instances. Provider-agnostic constant.
+"""
+
 SSH_RETRY_DELAYS = [1, 2, 4, 8, 16, 30, 30, 30, 30, 30]
 """Exponential backoff delays in seconds for SSH connection retries.
 

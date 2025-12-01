@@ -16,6 +16,7 @@ from textual.widgets import Log, Static
 
 from campers.constants import (
     CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS,
+    DEFAULT_SSH_USERNAME,
     MAX_UPDATES_PER_TICK,
     TUI_STATUS_UPDATE_PROCESSING_DELAY,
     TUI_UPDATE_INTERVAL,
@@ -323,7 +324,7 @@ class CampersTUI(App):
 
         if "public_ip" in details and details["public_ip"]:
             try:
-                ssh_username = details.get("ssh_username", "ubuntu")
+                ssh_username = details.get("ssh_username", DEFAULT_SSH_USERNAME)
                 key_file = details.get("key_file", "key.pem")
                 public_ip = details["public_ip"]
                 ssh_string = f"ssh -o IdentitiesOnly=yes -i {key_file} {ssh_username}@{public_ip}"
@@ -419,9 +420,12 @@ class CampersTUI(App):
                 logging.error(error_message)
 
                 if self._update_queue is not None:
-                    self._update_queue.put(
-                        {"type": "status_update", "payload": {"status": "error"}}
-                    )
+                    try:
+                        self._update_queue.put_nowait(
+                            {"type": "status_update", "payload": {"status": "error"}}
+                        )
+                    except queue.Full:
+                        logging.warning("TUI update queue full, dropping error status update")
                     time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
 
             if self.campers._abort_requested:

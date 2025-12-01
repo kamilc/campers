@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 class ConfigLoader:
     """Load and merge YAML configuration with defaults."""
 
+    SSH_USERNAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+
     def __init__(self) -> None:
         """Initialize ConfigLoader with provider-specific defaults."""
         provider_defaults = get_provider_defaults(DEFAULT_PROVIDER)
@@ -251,8 +253,7 @@ class ConfigLoader:
 
         if "ssh_username" in config:
             ssh_username = config["ssh_username"]
-            pattern: str = r"^[a-z_][a-z0-9_-]{0,31}$"
-            if not re.match(pattern, ssh_username):
+            if not self.SSH_USERNAME_PATTERN.match(ssh_username):
                 raise ValueError(
                     f"Invalid ssh_username '{ssh_username}'. "
                     f"Must start with lowercase letter or underscore, "

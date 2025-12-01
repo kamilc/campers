@@ -58,13 +58,13 @@ class Campers:
             config_dict={},
         )
 
-        self._mutagen_manager_factory = lambda: MutagenManager()
-        self._portforward_manager_factory = lambda: PortForwardManager()
+        self._mutagen_manager_factory = MutagenManager
+        self._portforward_manager_factory = PortForwardManager
 
         self._lifecycle_manager: LifecycleManager | None = None
 
         self._run_executor: RunExecutor | None = None
-        self._setup_manager_cache: Any = None
+        self._setup_manager_cache: object | None = None
 
         self._signal_manager = SignalManager(self)
         self._signal_manager.register()
@@ -100,6 +100,7 @@ class Campers:
                 resources=self._resources,
                 resources_lock=self._resources_lock,
                 cleanup_in_progress_getter=lambda: self.cleanup_in_progress,
+                cleanup_event=self._cleanup_manager.cleanup_event,
                 update_queue=self._update_queue,
                 mutagen_manager_factory=self._mutagen_manager_factory,
                 portforward_manager_factory=self._portforward_manager_factory,
@@ -119,12 +120,12 @@ class Campers:
         return self._lifecycle_manager
 
     @property
-    def setup_manager(self) -> Any:
+    def setup_manager(self) -> object:
         """Get the setup manager instance (lazy-loaded from provider).
 
         Returns
         -------
-        Any
+        object
             The cloud setup manager instance for the configured provider
 
         Notes
@@ -246,9 +247,14 @@ class Campers:
         return self.run_executor.get_or_create_instance(instance_name, config)
 
     def _sync_cleanup_manager_resources(self) -> None:
-        """Ensure cleanup manager uses the current resources dictionary."""
-        if self._cleanup_manager.resources is not self._resources:
-            self._cleanup_manager.resources = self._resources
+        """Ensure cleanup manager uses the current resources dictionary.
+
+        Acquires locks in correct order (cleanup_lock before resources_lock)
+        to prevent deadlocks and ensure atomicity when updating the reference.
+        """
+        with self._cleanup_lock, self._resources_lock:
+            if self._cleanup_manager.resources is not self._resources:
+                self._cleanup_manager.resources = self._resources
 
     def _stop_instance_cleanup(self, signum: int | None = None) -> None:
         self._sync_cleanup_manager_resources()
@@ -267,7 +273,8 @@ class Campers:
 
         self._sync_cleanup_manager_resources()
 
-        self._cleanup_manager.cleanup_in_progress = self._cleanup_in_progress
+        with self._cleanup_lock:
+            self._cleanup_manager.cleanup_in_progress = self._cleanup_in_progress
 
         old_harness = os.environ.pop("CAMPERS_HARNESS_MANAGED", None)
         try:
@@ -275,7 +282,8 @@ class Campers:
         finally:
             if old_harness is not None:
                 os.environ["CAMPERS_HARNESS_MANAGED"] = old_harness
-            self._cleanup_in_progress = self._cleanup_manager.cleanup_in_progress
+            with self._cleanup_lock:
+                self._cleanup_in_progress = self._cleanup_manager.cleanup_in_progress
 
     def _build_command_in_directory(self, working_dir: str, command: str) -> str:
         """Build a command that executes in the specified working directory.

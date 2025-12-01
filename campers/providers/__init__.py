@@ -6,12 +6,12 @@ multiple cloud providers (AWS, GCP, Azure, etc.) through a common interface.
 
 from __future__ import annotations
 
+from campers.constants import DEFAULT_SSH_USERNAME
 from campers.core.interfaces import ComputeProvider, PricingProvider
 from campers.providers.aws import EC2Manager, PricingService
 from campers.providers.aws.constants import (
     DEFAULT_INSTANCE_TYPE,
     DEFAULT_REGION,
-    DEFAULT_SSH_USERNAME,
 )
 from campers.providers.aws.pricing import (
     calculate_monthly_cost,
@@ -141,7 +141,7 @@ def get_provider_defaults(provider_name: str) -> dict[str, object]:
     provider_info = _PROVIDERS[provider_name]
     return {
         "instance_type": provider_info.get("default_instance_type", "t3.medium"),
-        "ssh_username": provider_info.get("default_ssh_username", "ubuntu"),
+        "ssh_username": provider_info.get("default_ssh_username", DEFAULT_SSH_USERNAME),
         "env_filter": provider_info.get("env_filter", []),
     }
 

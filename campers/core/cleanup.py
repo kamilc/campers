@@ -61,6 +61,7 @@ class CleanupManager:
         self.config_dict = config_dict or {}
         self.pricing_provider = pricing_provider
         self.cleanup_in_progress = False
+        self.cleanup_event = threading.Event()
 
     def _emit_cleanup_event(self, step: str, status: str) -> None:
         """Emit cleanup event to TUI update queue.
@@ -73,12 +74,15 @@ class CleanupManager:
             Status of the step (in_progress, completed, or failed)
         """
         if self.update_queue is not None:
-            self.update_queue.put(
-                {
-                    "type": "cleanup_event",
-                    "payload": {"step": step, "status": status},
-                }
-            )
+            try:
+                self.update_queue.put_nowait(
+                    {
+                        "type": "cleanup_event",
+                        "payload": {"step": step, "status": status},
+                    }
+                )
+            except queue.Full:
+                logging.warning("TUI update queue full, dropping cleanup event")
 
     def _get_storage_rate(self, region: str) -> float:
         """Get storage rate for a region using pricing provider.
@@ -139,6 +143,7 @@ class CleanupManager:
                 logging.info("Cleanup already in progress, please wait...")
                 return
             self.cleanup_in_progress = True
+            self.cleanup_event.set()
 
         try:
             on_exit_action = self.config_dict.get("on_exit", "stop")
@@ -293,7 +298,7 @@ class CleanupManager:
         resources_to_clean: dict[str, Any],
         errors: list[Exception],
         action: str,
-    ) -> None:
+    ) -> tuple[bool, str | None]:
         """Helper method for common cleanup logic between stop and terminate operations.
 
         Parameters
@@ -304,6 +309,12 @@ class CleanupManager:
             List to accumulate errors during cleanup
         action : str
             Action to perform: 'stop' or 'terminate'
+
+        Returns
+        -------
+        tuple[bool, str | None]
+            Tuple of (success, error_message). success is True if cleanup succeeded,
+            False otherwise. error_message is a string describing the error if any.
 
         Notes
         -----
@@ -316,14 +327,15 @@ class CleanupManager:
                 logging.debug("No instance to stop - launch may not have completed")
             else:
                 logging.debug("No instance to terminate - launch may not have completed")
-            return
+            return (True, None)
 
         instance_details = resources_to_clean["instance_details"]
         instance_id = get_instance_id(instance_details)
 
         if instance_id is None:
-            logging.warning("Cannot %s instance: instance_id is None", action)
-            return
+            error_msg = "instance_id is None"
+            logging.warning("Cannot %s instance: %s", action, error_msg)
+            return (False, error_msg)
 
         status_map = {"stop": "stopping", "terminate": "terminating"}
         event_action = f"{action}_instance"
@@ -332,7 +344,12 @@ class CleanupManager:
         logging.info("Cleaning up cloud instance %s...", instance_id)
 
         if self.update_queue is not None:
-            self.update_queue.put({"type": "status_update", "payload": {"status": status_value}})
+            try:
+                self.update_queue.put_nowait(
+                    {"type": "status_update", "payload": {"status": status_value}}
+                )
+            except queue.Full:
+                logging.warning("TUI update queue full, dropping status update")
             time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
 
         self._emit_cleanup_event(event_action, "in_progress")
@@ -356,10 +373,18 @@ class CleanupManager:
                     logging.info("Cloud instance terminated successfully")
 
                 self._emit_cleanup_event(event_action, "completed")
+                return (True, None)
+            else:
+                error_msg = "compute_provider is None"
+                logging.error("Error %sing instance: %s", action, error_msg)
+                self._emit_cleanup_event(event_action, "failed")
+                return (False, error_msg)
         except (ProviderAPIError, RuntimeError) as e:
+            error_msg = str(e)
             logging.error("Error %sing instance: %s", action, e)
             errors.append(e)
             self._emit_cleanup_event(event_action, "failed")
+            return (False, error_msg)
 
     def stop_instance_cleanup(self, signum: int | None = None) -> None:
         """Stop instance while preserving resources for later restart.
@@ -384,7 +409,8 @@ class CleanupManager:
         try:
             errors = []
 
-            with self.resources_lock:
+            with self.cleanup_lock, self.resources_lock:
+                self.cleanup_in_progress = True
                 resources_to_clean = dict(self.resources)
                 self.resources.clear()
 
@@ -401,7 +427,11 @@ class CleanupManager:
             self.cleanup_mutagen_session(resources_to_clean, errors)
             self.cleanup_ssh_connections(resources_to_clean, errors)
 
-            self._cleanup_instance_helper(resources_to_clean, errors, "stop")
+            success, error_msg = self._cleanup_instance_helper(
+                resources_to_clean, errors, "stop"
+            )
+            if not success and error_msg:
+                logging.warning("Instance cleanup failed: %s", error_msg)
 
             if errors:
                 logging.info("Cleanup completed with %s errors", len(errors))
@@ -434,7 +464,8 @@ class CleanupManager:
         try:
             errors = []
 
-            with self.resources_lock:
+            with self.cleanup_lock, self.resources_lock:
+                self.cleanup_in_progress = True
                 resources_to_clean = dict(self.resources)
                 self.resources.clear()
 
@@ -451,7 +482,11 @@ class CleanupManager:
             self.cleanup_mutagen_session(resources_to_clean, errors)
             self.cleanup_ssh_connections(resources_to_clean, errors)
 
-            self._cleanup_instance_helper(resources_to_clean, errors, "terminate")
+            success, error_msg = self._cleanup_instance_helper(
+                resources_to_clean, errors, "terminate"
+            )
+            if not success and error_msg:
+                logging.warning("Instance cleanup failed: %s", error_msg)
 
             if errors:
                 logging.info("Cleanup completed with %s errors", len(errors))

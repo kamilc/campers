@@ -109,7 +109,7 @@ def generate_instance_name() -> str:
         raw_name = f"campers-{project}-{branch}"
         return sanitize_instance_name(raw_name)
 
-    return f"campers-{int(time.time())}"
+    return f"campers-{int(time.time() * 1000000)}"
 
 
 def format_time_ago(dt: datetime) -> str:

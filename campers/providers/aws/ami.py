@@ -39,7 +39,7 @@ class AMIResolver:
                 host = str(endpoint.host).lower()
                 return "localstack" in host or "localhost:4566" in host
         except (AttributeError, TypeError):
-            pass
+            logger.debug("Unable to access EC2 client endpoint attribute")
 
         try:
             meta = self.ec2_client.meta
@@ -47,7 +47,7 @@ class AMIResolver:
                 url = str(meta.endpoint_url).lower()
                 return "localstack" in url or "localhost:4566" in url
         except (AttributeError, TypeError):
-            pass
+            logger.debug("Unable to access EC2 client meta.endpoint_url attribute")
 
         return False
 

@@ -308,6 +308,7 @@ def test_run_with_sync_paths_creates_mutagen_session(campers_module) -> None:
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
+        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
         result = campers_instance.run()
 
@@ -364,6 +365,7 @@ def test_run_executes_command_from_synced_directory(campers_module) -> None:
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
+        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
         result = campers_instance.run()
 
@@ -420,6 +422,7 @@ def test_run_executes_startup_script_from_synced_directory(campers_module) -> No
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
+        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
         result = campers_instance.run()
 
@@ -510,6 +513,7 @@ def test_run_startup_script_failure_prevents_command(campers_module) -> None:
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
+        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
         with pytest.raises(RuntimeError, match="Startup script failed with exit code: 42"):
             campers_instance.run()
@@ -569,6 +573,7 @@ cd src"""
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
+        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
         result = campers_instance.run()
 
@@ -624,6 +629,7 @@ def test_run_with_port_forwarding_creates_tunnels(campers_module) -> None:
 
         mock_portforward_instance = MagicMock()
         mock_portforward.return_value = mock_portforward_instance
+        campers_instance._portforward_manager_factory = lambda: mock_portforward_instance
 
         result = campers_instance.run()
 
@@ -689,6 +695,7 @@ def test_run_port_forwarding_cleanup_order(campers_module) -> None:
             "tunnels_stop"
         )
         mock_portforward.return_value = mock_portforward_instance
+        campers_instance._portforward_manager_factory = lambda: mock_portforward_instance
 
         result = campers_instance.run()
 
@@ -743,10 +750,11 @@ def test_run_port_forwarding_error_triggers_cleanup(campers_module) -> None:
             "Port 8888 already in use"
         )
         mock_portforward.return_value = mock_portforward_instance
+        campers_instance._portforward_manager_factory = lambda: mock_portforward_instance
 
-        result = campers_instance.run()
+        with pytest.raises(RuntimeError, match="Port forwarding is configured but failed"):
+            campers_instance.run()
 
-        assert result["instance_id"] == mock_instance_details["instance_id"]
         mock_portforward_instance.stop_all_tunnels.assert_not_called()
         mock_ssh_instance.close.assert_called_once()
 
@@ -798,9 +806,11 @@ def test_run_port_forwarding_with_sync_paths(campers_module) -> None:
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
+        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
         mock_portforward_instance = MagicMock()
         mock_portforward.return_value = mock_portforward_instance
+        campers_instance._portforward_manager_factory = lambda: mock_portforward_instance
 
         result = campers_instance.run()
 
@@ -867,12 +877,14 @@ def test_run_port_forwarding_with_startup_script(campers_module) -> None:
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
+        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
         mock_portforward_instance = MagicMock()
         mock_portforward_instance.create_tunnels.side_effect = (
             lambda **kwargs: execution_order.append("port_forward")
         )
         mock_portforward.return_value = mock_portforward_instance
+        campers_instance._portforward_manager_factory = lambda: mock_portforward_instance
 
         result = campers_instance.run()
 
@@ -1062,6 +1074,7 @@ def test_run_forwards_env_to_startup_script(campers_module) -> None:
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
+        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
         result = campers_instance.run()
 
@@ -1371,9 +1384,11 @@ def test_run_tracks_resources_incrementally(campers_module) -> None:
 
         mock_mutagen_instance = MagicMock()
         mock_mutagen.return_value = mock_mutagen_instance
+        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
         mock_portforward_instance = MagicMock()
         mock_portforward.return_value = mock_portforward_instance
+        campers_instance._portforward_manager_factory = lambda: mock_portforward_instance
 
         original_cleanup = campers_instance._cleanup_resources
         campers_instance._cleanup_resources = lambda *args, **kwargs: (

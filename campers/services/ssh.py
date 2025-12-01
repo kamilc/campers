@@ -15,6 +15,7 @@ from campers.constants import (
     DEFAULT_PROVIDER,
     DEFAULT_SSH_PORT,
     DEFAULT_SSH_TIMEOUT,
+    DEFAULT_SSH_USERNAME,
     MAX_COMMAND_LENGTH,
     SENSITIVE_PATTERNS,
     SSH_RETRY_DELAYS,
@@ -110,7 +111,7 @@ class SSHManager:
         self,
         host: str,
         key_file: str,
-        username: str = "ubuntu",
+        username: str = DEFAULT_SSH_USERNAME,
         port: int = DEFAULT_SSH_PORT,
     ) -> None:
         """Initialize SSHManager with connection parameters.

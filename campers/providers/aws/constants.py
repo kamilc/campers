@@ -170,12 +170,6 @@ DEFAULT_INSTANCE_TYPE = "t3.medium"
 Provides good balance between cost and performance for development/testing workloads.
 """
 
-DEFAULT_SSH_USERNAME = "ubuntu"
-"""Default SSH username for instances.
-
-Used when connecting to Ubuntu-based EC2 instances, which default to 'ubuntu' user.
-"""
-
 SSH_SECURITY_GROUP_DEFAULT_CIDR = "0.0.0.0/0"
 """Default CIDR block for SSH security group when none specified.
 

@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from campers.constants import ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS
+from campers.constants import ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS, DEFAULT_SSH_USERNAME
 from campers.services.validation import (
     validate_ansible_host,
     validate_ansible_user,
@@ -58,7 +58,7 @@ class AnsibleManager:
         playbooks_config: dict[str, Any],
         instance_ip: str,
         ssh_key_file: str,
-        ssh_username: str = "ubuntu",
+        ssh_username: str = DEFAULT_SSH_USERNAME,
         ssh_port: int = 22,
     ) -> None:
         """Execute one or more Ansible playbooks.
