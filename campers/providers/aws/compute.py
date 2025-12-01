@@ -13,6 +13,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import (
     ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
     NoCredentialsError,
     WaiterError,
 )
@@ -32,7 +34,11 @@ from campers.providers.aws.constants import (
 from campers.providers.aws.errors import handle_aws_errors
 from campers.providers.aws.keypair import KeyPairInfo, KeyPairManager
 from campers.providers.aws.network import NetworkManager
-from campers.providers.aws.utils import extract_instance_from_response
+from campers.providers.aws.utils import (
+    extract_instance_from_response,
+    extract_tag_value,
+    tags_to_dict,
+)
 from campers.providers.exceptions import (
     ProviderAPIError,
     ProviderConnectionError,
@@ -141,7 +147,7 @@ class EC2Manager:
         ValueError
             If region format is invalid
         """
-        region_pattern = r'^[a-z]{2}-[a-z]+-\d[a-z]?$'
+        region_pattern = r"^[a-z]{2}-[a-z]+-\d[a-z]?$"
         if not re.match(region_pattern, region):
             raise ValueError(
                 f"Invalid AWS region format: '{region}'. "
@@ -558,7 +564,8 @@ class EC2Manager:
                     "Unable to query all AWS regions (%s), "
                     "falling back to default region '%s' only. "
                     "Use --region flag to query specific regions.",
-                    e.__class__.__name__, self.region
+                    e.__class__.__name__,
+                    self.region,
                 )
                 regions = [self.region]
             except RetryError as e:
@@ -566,7 +573,8 @@ class EC2Manager:
                     "Unable to query all AWS regions (retries exhausted), "
                     "falling back to default region '%s' only. "
                     "Use --region flag to query specific regions. Error: %s",
-                    self.region, e
+                    self.region,
+                    e,
                 )
                 regions = [self.region]
 
@@ -592,9 +600,7 @@ class EC2Manager:
                     for page in page_iterator:
                         for reservation in page["Reservations"]:
                             for instance in reservation["Instances"]:
-                                tags = {
-                                    tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])
-                                }
+                                tags = tags_to_dict(instance.get("Tags", []))
 
                                 instances.append(
                                     {
@@ -619,7 +625,7 @@ class EC2Manager:
                 if regional_ec2 is not None:
                     try:
                         regional_ec2.close()
-                    except Exception as e:
+                    except (AttributeError, OSError) as e:
                         logger.debug("Failed to close regional EC2 client for %s: %s", region, e)
 
         seen = set()
@@ -784,12 +790,8 @@ class EC2Manager:
         new_ip = instance.get("PublicIpAddress")
         logger.info("Instance %s started with IP %s", instance_id, new_ip)
 
-        unique_id = None
         tags = instance.get("Tags", [])
-        for tag in tags:
-            if tag["Key"] == "UniqueId":
-                unique_id = tag["Value"]
-                break
+        unique_id = extract_tag_value(tags, "UniqueId")
 
         key_file = None
         if unique_id:
@@ -868,7 +870,7 @@ class EC2Manager:
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
             instance = extract_instance_from_response(response)
             tags = instance.get("Tags", [])
-            return {tag["Key"]: tag["Value"] for tag in tags}
+            return tags_to_dict(tags)
         except (ClientError, IndexError, KeyError) as e:
             logger.warning("Failed to get tags for instance %s: %s", instance_id, e)
             return {}
@@ -894,7 +896,7 @@ class EC2Manager:
             ec2 = boto3.client("ec2", region_name=region, config=config)
             ec2.describe_regions(RegionNames=[region])
             return True
-        except (ClientError, Exception) as e:
+        except (ClientError, NoCredentialsError, EndpointConnectionError, ConnectTimeoutError) as e:
             logger.warning("Unable to validate region %s: %s", region, e)
             return False
         finally:
@@ -916,12 +918,7 @@ class EC2Manager:
         """
         instance = self.ec2_resource.Instance(instance_id)
 
-        unique_id = None
-
-        for tag in instance.tags or []:
-            if tag["Key"] == "UniqueId":
-                unique_id = tag["Value"]
-                break
+        unique_id = extract_tag_value(instance.tags or [], "UniqueId")
 
         sg_id = instance.security_groups[0]["GroupId"] if instance.security_groups else None
 

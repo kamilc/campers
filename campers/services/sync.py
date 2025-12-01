@@ -12,6 +12,9 @@ import time
 from pathlib import Path
 
 from campers.constants import (
+    SSH_CONFIG_CONNECT_TIMEOUT,
+    SSH_CONFIG_SERVER_ALIVE_COUNT,
+    SSH_CONFIG_SERVER_ALIVE_INTERVAL,
     SYNC_STATUS_CHECK_TIMEOUT_SECONDS,
     SYNC_STATUS_POLL_INTERVAL_SECONDS,
 )
@@ -268,9 +271,9 @@ Host {host}
     IdentityFile {str(temp_key_path.resolve())}
     IdentitiesOnly yes
     StrictHostKeyChecking accept-new
-    ConnectTimeout 30
-    ServerAliveInterval 60
-    ServerAliveCountMax 3
+    ConnectTimeout {SSH_CONFIG_CONNECT_TIMEOUT}
+    ServerAliveInterval {SSH_CONFIG_SERVER_ALIVE_INTERVAL}
+    ServerAliveCountMax {SSH_CONFIG_SERVER_ALIVE_COUNT}
 """
 
         if campers_config_path.exists():
@@ -382,7 +385,12 @@ Host {host}
 
             if result.returncode != 0:
                 raise RuntimeError(f"Failed to create Mutagen sync session: {result.stderr}")
-        except Exception:
+        except (
+            RuntimeError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+            subprocess.SubprocessError,
+        ):
             with contextlib.suppress(OSError):
                 temp_key_path.unlink()
             raise

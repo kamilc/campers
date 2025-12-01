@@ -12,13 +12,14 @@ from paramiko.channel import Channel, ChannelFile
 
 from campers.constants import (
     DEFAULT_CHANNEL_TIMEOUT,
+    DEFAULT_PROVIDER,
     DEFAULT_SSH_PORT,
     DEFAULT_SSH_TIMEOUT,
     MAX_COMMAND_LENGTH,
     SENSITIVE_PATTERNS,
     SSH_RETRY_DELAYS,
 )
-from campers.providers.aws.ssh import get_aws_ssh_connection_info
+from campers.providers import get_provider
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,9 @@ class SSHConnectionInfo:
 def get_ssh_connection_info(instance_id: str, public_ip: str, key_file: str) -> SSHConnectionInfo:
     """Determine SSH connection host, port, and key file.
 
-    Delegates to provider-specific SSH resolution. Currently only AWS is
-    supported, but this interface allows for multi-cloud support in the future.
+    Delegates to provider-specific SSH resolution through the provider registry.
+    Currently only AWS is supported, but this interface allows for multi-cloud
+    support in the future.
 
     Parameters
     ----------
@@ -67,7 +69,13 @@ def get_ssh_connection_info(instance_id: str, public_ip: str, key_file: str) -> 
     ValueError
         If SSH connection details cannot be determined
     """
-    return get_aws_ssh_connection_info(instance_id, public_ip, key_file)
+    provider = get_provider(DEFAULT_PROVIDER)
+    get_ssh_info_func = provider.get("get_ssh_connection_info")
+
+    if get_ssh_info_func is None:
+        raise ValueError("SSH connection info function not registered for the provider")
+
+    return get_ssh_info_func(instance_id, public_ip, key_file)
 
 
 class SSHManager:

@@ -183,6 +183,39 @@ Allows SSH access from any IP address. Warning should be logged when used.
 """
 
 
+BOTO3_CLIENT_CONNECT_TIMEOUT = 5
+"""Timeout in seconds for initial boto3 client connection.
+
+Controls connection timeout when creating boto3 clients for AWS API calls.
+"""
+
+BOTO3_CLIENT_READ_TIMEOUT = 30
+"""Timeout in seconds for boto3 client read operations.
+
+Controls timeout for reading responses from AWS API calls.
+"""
+
+BOTO3_CLIENT_MAX_ATTEMPTS = 3
+"""Maximum retry attempts for boto3 client operations.
+
+Controls how many times boto3 will retry failed API calls using adaptive
+retry strategy.
+"""
+
+BOTO3_PAGINATION_MAX_RESULTS_SMALL = 5
+"""Max results for pagination queries returning small result sets.
+
+Used for describe_instances, describe_vpcs, describe_security_groups operations
+where result set is typically small.
+"""
+
+BOTO3_PAGINATION_MAX_RESULTS_SINGLE = 1
+"""Max results for pagination queries expecting single result.
+
+Used for pricing API queries where we only need the first/best result.
+"""
+
+
 class InstanceState(str, Enum):
     """EC2 instance state values."""
 

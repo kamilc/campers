@@ -239,11 +239,9 @@ def step_localstack_is_healthy(context: Context) -> None:
         logger.info(f"describe_images response: {images_response.get('Images', [])}")
         if images_response.get("Images"):
             img = images_response["Images"][0]
-            img_name = img.get('Name', 'unknown')
-            img_arch = img.get('Architecture', 'unknown')
-            logger.info(
-                f"Verified AMI exists with name: {img_name}, architecture: {img_arch}"
-            )
+            img_name = img.get("Name", "unknown")
+            img_arch = img.get("Architecture", "unknown")
+            logger.info(f"Verified AMI exists with name: {img_name}, architecture: {img_arch}")
     except Exception as e:
         logger.warning(f"Failed to verify AMI: {e}")
 

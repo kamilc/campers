@@ -18,7 +18,7 @@ from campers.core.cleanup import CleanupManager
 from campers.core.config import ConfigLoader  # noqa: E402
 from campers.core.interfaces import ComputeProvider
 from campers.core.run_executor import RunExecutor
-from campers.core.signals import set_cleanup_instance, setup_signal_handlers
+from campers.core.signals import SignalManager
 from campers.lifecycle import LifecycleManager
 from campers.providers import get_provider  # noqa: E402
 from campers.services.portforward import PortForwardManager  # noqa: E402
@@ -66,8 +66,8 @@ class Campers:
         self._run_executor: RunExecutor | None = None
         self._setup_manager_cache: Any = None
 
-        setup_signal_handlers()
-        set_cleanup_instance(self)
+        self._signal_manager = SignalManager(self)
+        self._signal_manager.register()
 
     @property
     def compute_provider_factory(self) -> Callable[[str], ComputeProvider]:

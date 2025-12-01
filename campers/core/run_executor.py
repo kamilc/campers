@@ -194,10 +194,7 @@ class RunExecutor:
             return self._format_output(instance_details, json_output)
 
         finally:
-            if (
-                not self.cleanup_in_progress_getter()
-                and cleanup_resources_callback
-            ):
+            if not self.cleanup_in_progress_getter() and cleanup_resources_callback:
                 cleanup_resources_callback()
 
     def _phase_config_validation(

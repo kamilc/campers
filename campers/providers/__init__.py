@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from campers.core.interfaces import ComputeProvider, PricingProvider
 from campers.providers.aws import EC2Manager, PricingService
-from campers.providers.aws.constants import DEFAULT_REGION
+from campers.providers.aws.constants import (
+    DEFAULT_INSTANCE_TYPE,
+    DEFAULT_REGION,
+    DEFAULT_SSH_USERNAME,
+)
 from campers.providers.aws.pricing import (
     calculate_monthly_cost,
     format_cost,
@@ -113,21 +117,60 @@ def get_default_region(provider_name: str) -> str:
     return default_region
 
 
+def get_provider_defaults(provider_name: str) -> dict[str, object]:
+    """Get provider-specific defaults (instance_type, ssh_username, env_filter).
+
+    Parameters
+    ----------
+    provider_name : str
+        Provider name
+
+    Returns
+    -------
+    dict[str, object]
+        Dictionary with keys: instance_type, ssh_username, env_filter
+
+    Raises
+    ------
+    ValueError
+        If provider is not registered
+    """
+    if provider_name not in _PROVIDERS:
+        raise ValueError(f"Unknown provider: {provider_name}")
+
+    provider_info = _PROVIDERS[provider_name]
+    return {
+        "instance_type": provider_info.get("default_instance_type", "t3.medium"),
+        "ssh_username": provider_info.get("default_ssh_username", "ubuntu"),
+        "env_filter": provider_info.get("env_filter", []),
+    }
+
+
 __all__ = [
     "register_provider",
     "get_provider",
     "list_providers",
     "get_default_region",
+    "get_provider_defaults",
     "ProviderError",
     "ProviderCredentialsError",
     "ProviderAPIError",
     "ProviderConnectionError",
 ]
 
+
 def _get_setup_manager() -> type:
     """Lazily import SetupManager to avoid circular imports."""
     from campers.providers.aws.setup import SetupManager as AWSSetupManager
+
     return AWSSetupManager
+
+
+def _get_ssh_connection_info_func() -> object:
+    """Lazily import AWS SSH connection function to avoid circular imports."""
+    from campers.providers.aws.ssh import get_aws_ssh_connection_info
+
+    return get_aws_ssh_connection_info
 
 
 _PROVIDERS["aws"] = {
@@ -135,7 +178,11 @@ _PROVIDERS["aws"] = {
     "pricing": PricingService,
     "pricing_service": PricingService,
     "setup": _get_setup_manager,
+    "get_ssh_connection_info": _get_ssh_connection_info_func(),
     "calculate_monthly_cost": calculate_monthly_cost,
     "format_cost": format_cost,
     "default_region": DEFAULT_REGION,
+    "default_instance_type": DEFAULT_INSTANCE_TYPE,
+    "default_ssh_username": DEFAULT_SSH_USERNAME,
+    "env_filter": ["AWS_.*"],
 }

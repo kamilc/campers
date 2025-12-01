@@ -10,8 +10,7 @@ from omegaconf import OmegaConf
 from omegaconf.errors import InterpolationResolutionError
 
 from campers.constants import DEFAULT_DISK_SIZE, DEFAULT_PROVIDER, OnExitAction
-from campers.providers import get_default_region, list_providers
-from campers.providers.aws.constants import DEFAULT_INSTANCE_TYPE, DEFAULT_SSH_USERNAME
+from campers.providers import get_default_region, get_provider_defaults, list_providers
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +20,18 @@ class ConfigLoader:
 
     def __init__(self) -> None:
         """Initialize ConfigLoader with provider-specific defaults."""
+        provider_defaults = get_provider_defaults(DEFAULT_PROVIDER)
         self.BUILT_IN_DEFAULTS = {
             "provider": DEFAULT_PROVIDER,
             "region": get_default_region(DEFAULT_PROVIDER),
-            "instance_type": DEFAULT_INSTANCE_TYPE,
+            "instance_type": provider_defaults["instance_type"],
             "disk_size": DEFAULT_DISK_SIZE,
             "ports": [],
             "include_vcs": False,
             "ignore": ["*.pyc", "__pycache__", "*.log", ".DS_Store"],
-            "env_filter": ["AWS_.*"],
+            "env_filter": provider_defaults["env_filter"],
             "sync_paths": [],
-            "ssh_username": DEFAULT_SSH_USERNAME,
+            "ssh_username": provider_defaults["ssh_username"],
             "on_exit": OnExitAction.STOP.value,
             "ssh_allowed_cidr": None,
         }

@@ -299,6 +299,25 @@ SSH_RETRY_COUNT = 10
 Corresponds to the length of SSH_RETRY_DELAYS constant.
 """
 
+SSH_CONFIG_CONNECT_TIMEOUT = 30
+"""SSH config ConnectTimeout value in seconds.
+
+Controls how long SSH waits to establish initial connection to remote host.
+"""
+
+SSH_CONFIG_SERVER_ALIVE_INTERVAL = 60
+"""SSH config ServerAliveInterval value in seconds.
+
+Interval at which SSH sends keepalive messages to prevent connection timeout
+due to inactivity on the network.
+"""
+
+SSH_CONFIG_SERVER_ALIVE_COUNT = 3
+"""SSH config ServerAliveCountMax value.
+
+Number of unanswered keepalive messages allowed before SSH closes the connection.
+"""
+
 
 class OnExitAction(str, Enum):
     """Actions to take on campers exit."""

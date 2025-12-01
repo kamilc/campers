@@ -3,17 +3,11 @@
 from __future__ import annotations
 
 from campers.core.interfaces import ComputeProvider, PricingProvider, SSHProvider
-from campers.core.signals import (
-    get_cleanup_instance,
-    set_cleanup_instance,
-    setup_signal_handlers,
-)
+from campers.core.signals import SignalManager
 
 __all__ = [
     "ComputeProvider",
     "PricingProvider",
     "SSHProvider",
-    "setup_signal_handlers",
-    "set_cleanup_instance",
-    "get_cleanup_instance",
+    "SignalManager",
 ]

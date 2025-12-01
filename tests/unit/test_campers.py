@@ -1684,7 +1684,9 @@ def test_list_command_invalid_region(campers_module, aws_credentials) -> None:
     from unittest.mock import MagicMock
 
     mock_compute_provider = MagicMock()
-    mock_compute_provider.validate_region.side_effect = ValueError("Invalid region: 'invalid-region-xyz'")
+    mock_compute_provider.validate_region.side_effect = ValueError(
+        "Invalid region: 'invalid-region-xyz'"
+    )
 
     campers_instance = campers_module(
         compute_provider_factory=MagicMock(return_value=mock_compute_provider)

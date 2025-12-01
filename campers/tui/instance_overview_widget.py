@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 
 from textual.widgets import Static
 
-from campers.constants import STATS_REFRESH_INTERVAL_SECONDS
+from campers.constants import DEFAULT_PROVIDER, STATS_REFRESH_INTERVAL_SECONDS
 from campers.core.interfaces import ComputeProvider, PricingProvider
-from campers.providers.aws.pricing import PricingService
+from campers.providers import get_provider
 from campers.providers.exceptions import ProviderError
 
 if TYPE_CHECKING:
@@ -66,13 +66,15 @@ class InstanceOverviewWidget(Static):
             self._interval_timer.stop()
 
     def _initialize_services(self) -> None:
-        """Initialize AWS services in background thread."""
+        """Initialize cloud provider services in background thread."""
         from campers.core.config import ConfigLoader
 
         try:
-            default_region = ConfigLoader.BUILT_IN_DEFAULTS["region"]
+            default_region = ConfigLoader().BUILT_IN_DEFAULTS["region"]
             self.compute_provider = self._compute_provider_factory(region=default_region)
-            self.pricing_service = PricingService()
+            provider_info = get_provider(DEFAULT_PROVIDER)
+            pricing_class = provider_info["pricing"]
+            self.pricing_service = pricing_class()
             self._initialized = True
             self.app.call_from_thread(self._start_refresh_timer)
         except (RuntimeError, ValueError, OSError) as e:
@@ -103,7 +105,8 @@ class InstanceOverviewWidget(Static):
             self.stopped_count = len(stopped)
 
             if self.pricing_service and self.pricing_service.pricing_available:
-                from campers.providers.aws.pricing import calculate_monthly_cost
+                provider_info = get_provider(DEFAULT_PROVIDER)
+                calculate_monthly_cost = provider_info["calculate_monthly_cost"]
 
                 monthly_costs = [
                     calculate_monthly_cost(

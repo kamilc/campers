@@ -76,3 +76,44 @@ def get_aws_credentials_error_message() -> str:
         "  export AWS_ACCESS_KEY_ID=...\n"
         "  export AWS_SECRET_ACCESS_KEY=..."
     )
+
+
+def tags_to_dict(tags: list[dict[str, str]]) -> dict[str, str]:
+    """Convert AWS tags list to dictionary.
+
+    Parameters
+    ----------
+    tags : list[dict[str, str]]
+        List of AWS tags with "Key" and "Value" keys
+
+    Returns
+    -------
+    dict[str, str]
+        Dictionary mapping tag keys to values
+    """
+    return {tag["Key"]: tag["Value"] for tag in tags if "Key" in tag and "Value" in tag}
+
+
+def extract_tag_value(
+    tags: list[dict[str, str]], key: str, default: str | None = None
+) -> str | None:
+    """Extract a single tag value from AWS tags list.
+
+    Parameters
+    ----------
+    tags : list[dict[str, str]]
+        List of AWS tags with "Key" and "Value" keys
+    key : str
+        Tag key to search for
+    default : str | None
+        Default value if tag not found (default: None)
+
+    Returns
+    -------
+    str | None
+        The tag value, or default if not found
+    """
+    for tag in tags:
+        if tag.get("Key") == key:
+            return tag.get("Value")
+    return default

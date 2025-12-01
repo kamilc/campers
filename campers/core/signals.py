@@ -5,10 +5,7 @@ from __future__ import annotations
 import signal
 import threading
 import types
-from typing import TYPE_CHECKING, Protocol
-
-if TYPE_CHECKING:
-    pass
+from typing import Protocol
 
 
 class CleanupHandler(Protocol):
@@ -21,107 +18,61 @@ class CleanupHandler(Protocol):
         ...
 
 
-class CleanupInstanceManager:
-    """Thread-safe manager for the cleanup instance.
+class SignalManager:
+    """Manages signal registration for a single cleanup handler instance.
 
-    Uses a single lock to protect both getting and checking the instance,
-    preventing race conditions between signal handlers and cleanup teardown.
+    Stores previous signal handlers and restores them when the instance is destroyed.
+    Ensures only one active signal handler at a time.
     """
 
-    def __init__(self) -> None:
-        """Initialize the cleanup instance manager."""
+    def __init__(self, handler: CleanupHandler) -> None:
+        """Initialize the signal manager.
+
+        Parameters
+        ----------
+        handler : CleanupHandler
+            The cleanup handler instance (typically Campers)
+        """
+        self._handler = handler
         self._lock = threading.Lock()
-        self._instance: CleanupHandler | None = None
+        self._previous_sigint_handler: signal.Handlers | None = None
+        self._previous_sigterm_handler: signal.Handlers | None = None
+        self._is_registered = False
 
-    def set(self, instance: CleanupHandler | None) -> None:
-        """Set the cleanup instance.
+    def register(self) -> None:
+        """Register signal handlers for this instance.
 
-        Parameters
-        ----------
-        instance : CleanupHandler | None
-            The Campers instance that will handle cleanup
+        Thread-safe registration that stores previous handlers for restoration.
         """
         with self._lock:
-            self._instance = instance
+            if self._is_registered:
+                return
 
-    def get(self) -> CleanupHandler | None:
-        """Get the current cleanup instance.
+            def sigint_handler(signum: int, frame: types.FrameType | None) -> None:
+                self._handler._cleanup_resources(signum=signum, frame=frame)
 
-        Returns
-        -------
-        CleanupHandler | None
-            The Campers instance handling cleanup, or None if not set
+            def sigterm_handler(signum: int, frame: types.FrameType | None) -> None:
+                self._handler._cleanup_resources(signum=signum, frame=frame)
+
+            self._previous_sigint_handler = signal.signal(signal.SIGINT, sigint_handler)
+            self._previous_sigterm_handler = signal.signal(signal.SIGTERM, sigterm_handler)
+            self._is_registered = True
+
+    def restore(self) -> None:
+        """Restore previous signal handlers.
+
+        Thread-safe restoration of original signal handlers.
         """
         with self._lock:
-            return self._instance
+            if not self._is_registered:
+                return
 
-    def cleanup_with_lock(
-        self, signum: int, frame: types.FrameType | None
-    ) -> None:
-        """Perform cleanup with lock protection against concurrent set(None) calls.
+            if self._previous_sigint_handler is not None:
+                signal.signal(signal.SIGINT, self._previous_sigint_handler)
+            if self._previous_sigterm_handler is not None:
+                signal.signal(signal.SIGTERM, self._previous_sigterm_handler)
+            self._is_registered = False
 
-        Parameters
-        ----------
-        signum : int
-            Signal number
-        frame : types.FrameType | None
-            Signal frame
-
-        Notes
-        -----
-        This method atomically retrieves the instance and calls cleanup,
-        preventing race conditions where the instance might be set to None
-        by another thread between get() and the cleanup call.
-        """
-        with self._lock:
-            instance = self._instance
-            if instance is not None:
-                instance._cleanup_resources(signum=signum, frame=frame)
-
-
-_cleanup_manager = CleanupInstanceManager()
-
-
-def setup_signal_handlers() -> None:
-    """Register signal handlers at module level before heavy imports.
-
-    This ensures signals like SIGINT are caught even during module
-    initialization phase (e.g., during paramiko import).
-
-    Signal handlers delegate cleanup responsibility to the Campers instance,
-    which manages resource cleanup in a thread-safe manner using atomic
-    check-and-act patterns to prevent race conditions.
-    """
-
-    def sigint_handler(signum: int, frame: types.FrameType | None) -> None:
-        """Handle SIGINT (Ctrl+C) signal."""
-        _cleanup_manager.cleanup_with_lock(signum=signum, frame=frame)
-
-    def sigterm_handler(signum: int, frame: types.FrameType | None) -> None:
-        """Handle SIGTERM signal."""
-        _cleanup_manager.cleanup_with_lock(signum=signum, frame=frame)
-
-    signal.signal(signal.SIGINT, sigint_handler)
-    signal.signal(signal.SIGTERM, sigterm_handler)
-
-
-def set_cleanup_instance(instance: CleanupHandler | None) -> None:
-    """Set the instance to handle cleanup for signal handlers.
-
-    Parameters
-    ----------
-    instance : CleanupHandler | None
-        The Campers instance that will handle cleanup
-    """
-    _cleanup_manager.set(instance)
-
-
-def get_cleanup_instance() -> CleanupHandler | None:
-    """Get the current cleanup instance.
-
-    Returns
-    -------
-    CleanupHandler | None
-        The Campers instance handling cleanup, or None if not set
-    """
-    return _cleanup_manager.get()
+    def __del__(self) -> None:
+        """Ensure signal handlers are restored on cleanup."""
+        self.restore()

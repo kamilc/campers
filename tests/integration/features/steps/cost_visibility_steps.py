@@ -131,8 +131,13 @@ def step_pricing_api_not_accessible(context: Context) -> None:
     def client_factory(service_name, region_name=None, **kwargs):
         if service_name == "pricing":
             raise ClientError(
-                {"Error": {"Code": "UnknownEndpoint", "Message": "Pricing API not available in LocalStack"}},
-                "CreateClient"
+                {
+                    "Error": {
+                        "Code": "UnknownEndpoint",
+                        "Message": "Pricing API not available in LocalStack",
+                    }
+                },
+                "CreateClient",
             )
         return original_boto3_client(service_name, region_name=region_name, **kwargs)
 

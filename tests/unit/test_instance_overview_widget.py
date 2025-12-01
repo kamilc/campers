@@ -140,14 +140,13 @@ def test_refresh_stats_calculates_daily_cost_when_pricing_available(
     ]
 
     initialized_widget.pricing_service.pricing_available = True
+    initialized_widget.pricing_service.get_ec2_hourly_rate.side_effect = [37.45, 37.45]
 
-    with patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_calc:
-        mock_calc.side_effect = [899.0, 899.0]
+    initialized_widget._refresh_stats_sync()
 
-        initialized_widget._refresh_stats_sync()
-
-        assert initialized_widget.daily_cost == pytest.approx(1798.0 / 30, rel=0.01)
-        assert mock_calc.call_count == 2
+    expected_monthly = 37.45 * 24 * 30 * 2
+    expected_daily = expected_monthly / 30
+    assert initialized_widget.daily_cost == pytest.approx(expected_daily, rel=0.01)
 
 
 def test_refresh_stats_sets_none_cost_when_pricing_unavailable(
@@ -237,14 +236,12 @@ def test_refresh_stats_shows_na_when_all_prices_none(initialized_widget, mock_ec
     ]
 
     initialized_widget.pricing_service.pricing_available = True
+    initialized_widget.pricing_service.get_ec2_hourly_rate.return_value = None
 
-    with patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_calc:
-        mock_calc.return_value = None
+    initialized_widget._refresh_stats_sync()
 
-        initialized_widget._refresh_stats_sync()
-
-        assert initialized_widget.daily_cost is None
-        assert initialized_widget.render_stats() == "Instances - Running: 1  Stopped: 0  N/A"
+    assert initialized_widget.daily_cost is None
+    assert initialized_widget.render_stats() == "Instances - Running: 1  Stopped: 0  N/A"
 
 
 def test_refresh_stats_skips_when_not_initialized(mock_campers, mock_ec2_manager):
