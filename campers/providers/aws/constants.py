@@ -4,6 +4,50 @@ This module contains constants specific to AWS cloud provider operations,
 including EC2 instance management and pricing information.
 """
 
+from enum import Enum
+
+WAITER_DELAY_SECONDS = 15
+"""Delay between waiter polling attempts in seconds.
+
+Used by AWS waiters when polling for resource state changes
+(e.g., waiting for instance to reach 'running' state).
+"""
+
+WAITER_MAX_ATTEMPTS_SHORT = 20
+"""Maximum number of attempts for short-duration waiter operations.
+
+Used for operations that typically complete quickly, such as
+checking instance metadata availability or early-stage state transitions.
+"""
+
+WAITER_MAX_ATTEMPTS_LONG = 40
+"""Maximum number of attempts for long-duration waiter operations.
+
+Used for operations that may take longer to complete, such as
+instance startup, SSH readiness, or Mutagen synchronization initialization.
+"""
+
+SSH_IP_RETRY_MAX = 10
+"""Maximum number of retry attempts when fetching SSH connection details.
+
+Retries are used when instance tags containing SSH configuration
+are not immediately available, particularly in LocalStack environments.
+"""
+
+SSH_IP_RETRY_DELAY = 0.5
+"""Delay in seconds between SSH connection detail retry attempts.
+
+Provides time for instance metadata to propagate while avoiding
+excessive API calls to EC2 describe operations.
+"""
+
+DEFAULT_REGION = "us-east-1"
+"""Default AWS region for instance provisioning.
+
+Used when no region is specified in configuration, environment,
+or command-line arguments.
+"""
+
 UUID_SLICE_LENGTH = 8
 """Number of characters from UUID to use in instance names.
 
@@ -118,3 +162,13 @@ REGION_TO_LOCATION = {
 Maps regional codes (e.g., 'us-east-1') to human-readable location
 descriptions used in pricing API responses and user-facing output.
 """
+
+
+class InstanceState(str, Enum):
+    """EC2 instance state values."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    STOPPED = "stopped"
+    STOPPING = "stopping"
+    TERMINATED = "terminated"

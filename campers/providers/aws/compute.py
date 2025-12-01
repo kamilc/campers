@@ -17,18 +17,16 @@ from botocore.exceptions import (
 )
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
-from campers.constants import (
-    SSH_IP_RETRY_DELAY,
-    SSH_IP_RETRY_MAX,
-    WAITER_DELAY_SECONDS,
-    WAITER_MAX_ATTEMPTS_LONG,
-    WAITER_MAX_ATTEMPTS_SHORT,
-)
 from campers.providers.aws.ami import AMIResolver
 from campers.providers.aws.constants import (
     ACTIVE_INSTANCE_STATES,
+    SSH_IP_RETRY_DELAY,
+    SSH_IP_RETRY_MAX,
     UUID_SLICE_LENGTH,
     VALID_INSTANCE_TYPES,
+    WAITER_DELAY_SECONDS,
+    WAITER_MAX_ATTEMPTS_LONG,
+    WAITER_MAX_ATTEMPTS_SHORT,
 )
 from campers.providers.aws.errors import handle_aws_errors
 from campers.providers.aws.keypair import KeyPairInfo, KeyPairManager

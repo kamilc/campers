@@ -9,8 +9,8 @@ import yaml
 from omegaconf import OmegaConf
 from omegaconf.errors import InterpolationResolutionError
 
-from campers.constants import DEFAULT_REGION, OnExitAction
-from campers.providers import list_providers
+from campers.constants import DEFAULT_PROVIDER, OnExitAction
+from campers.providers import get_default_region, list_providers
 
 logger = logging.getLogger(__name__)
 
@@ -18,20 +18,22 @@ logger = logging.getLogger(__name__)
 class ConfigLoader:
     """Load and merge YAML configuration with defaults."""
 
-    BUILT_IN_DEFAULTS = {
-        "provider": "aws",
-        "region": DEFAULT_REGION,
-        "instance_type": "t3.medium",
-        "disk_size": 50,
-        "ports": [],
-        "include_vcs": False,
-        "ignore": ["*.pyc", "__pycache__", "*.log", ".DS_Store"],
-        "env_filter": ["AWS_.*"],
-        "sync_paths": [],
-        "ssh_username": "ubuntu",
-        "on_exit": OnExitAction.STOP.value,
-        "ssh_allowed_cidr": None,
-    }
+    def __init__(self) -> None:
+        """Initialize ConfigLoader with provider-specific defaults."""
+        self.BUILT_IN_DEFAULTS = {
+            "provider": DEFAULT_PROVIDER,
+            "region": get_default_region(DEFAULT_PROVIDER),
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "ports": [],
+            "include_vcs": False,
+            "ignore": ["*.pyc", "__pycache__", "*.log", ".DS_Store"],
+            "env_filter": ["AWS_.*"],
+            "sync_paths": [],
+            "ssh_username": "ubuntu",
+            "on_exit": OnExitAction.STOP.value,
+            "ssh_allowed_cidr": None,
+        }
 
     def load_config(self, config_path: str | None = None) -> dict[str, Any]:
         """Load configuration from YAML file.

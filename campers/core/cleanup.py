@@ -15,8 +15,8 @@ from typing import Any
 import paramiko
 
 from campers.constants import TUI_STATUS_UPDATE_PROCESSING_DELAY
+from campers.core.interfaces import PricingProvider
 from campers.core.utils import get_instance_id, get_volume_size_or_default
-from campers.providers.aws.pricing import PricingService
 from campers.providers.exceptions import ProviderAPIError
 
 
@@ -35,6 +35,8 @@ class CleanupManager:
         Queue for sending cleanup events to TUI (optional)
     config_dict : dict[str, Any] | None
         Configuration dictionary containing on_exit setting (optional)
+    pricing_provider : PricingProvider | None
+        Pricing service for getting storage rates (optional)
     """
 
     def __init__(
@@ -44,12 +46,14 @@ class CleanupManager:
         cleanup_lock: threading.Lock,
         update_queue: queue.Queue | None = None,
         config_dict: dict[str, Any] | None = None,
+        pricing_provider: PricingProvider | None = None,
     ) -> None:
         self.resources = resources_dict
         self.resources_lock = resources_lock
         self.cleanup_lock = cleanup_lock
         self.update_queue = update_queue
         self.config_dict = config_dict or {}
+        self.pricing_provider = pricing_provider
         self.cleanup_in_progress = False
 
     def _emit_cleanup_event(self, step: str, status: str) -> None:
@@ -71,28 +75,29 @@ class CleanupManager:
             )
 
     def _get_storage_rate(self, region: str) -> float:
-        """Get EBS storage rate for a region using Pricing API.
+        """Get storage rate for a region using pricing provider.
 
         Parameters
         ----------
         region : str
-            AWS region code
+            Cloud region code
 
         Returns
         -------
         float
-            Storage rate in USD per GB-month (0.0 if API unavailable)
+            Storage rate in USD per GB-month (0.0 if API unavailable or no provider)
         """
-        pricing_service = PricingService()
+        if self.pricing_provider is None:
+            logging.debug("No pricing provider available, returning default rate of 0.0")
+            return 0.0
+
         try:
-            rate = pricing_service.get_storage_price(region)
+            rate = self.pricing_provider.get_storage_price(region)
 
             if rate > 0:
                 return rate
         except (OSError, ConnectionError, TimeoutError) as e:
             logging.debug("Failed to fetch storage pricing: %s", e)
-        finally:
-            pricing_service.close()
 
         return 0.0
 

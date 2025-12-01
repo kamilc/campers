@@ -35,7 +35,7 @@ class Campers:
     def __init__(
         self,
         compute_provider_factory: Callable[[str], ComputeProvider] | None = None,
-        ssh_manager_factory: type | None = None,
+        ssh_manager_factory: type[SSHManager] | None = None,
     ) -> None:
         """Initialize Campers CLI with optional dependency injection."""
         self._config_loader = ConfigLoader()

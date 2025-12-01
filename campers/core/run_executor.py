@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from campers.cli import apply_cli_overrides
-from campers.constants import SYNC_TIMEOUT
+from campers.constants import CLEANUP_TIMEOUT_SECONDS, SYNC_TIMEOUT
 from campers.core.config import ConfigLoader
 from campers.core.interfaces import ComputeProvider
 from campers.services.ansible import AnsibleManager
@@ -155,10 +155,9 @@ class RunExecutor:
 
             skip_ssh = os.environ.get("CAMPERS_SKIP_SSH_CONNECTION") == "1"
             if skip_ssh:
-                max_wait_seconds = 300
                 start_time = time.time()
                 while not self.cleanup_in_progress_getter():
-                    if time.time() - start_time > max_wait_seconds:
+                    if time.time() - start_time > CLEANUP_TIMEOUT_SECONDS:
                         raise TimeoutError("Cleanup did not start within timeout period")
                     time.sleep(0.1)
                 return instance_details

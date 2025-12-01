@@ -13,41 +13,6 @@ Five minutes allows time for large codebases to complete initial sync over SSH.
 Timeout prevents indefinite hangs if sync stalls due to network or filesystem issues.
 """
 
-WAITER_DELAY_SECONDS = 15
-"""Delay between waiter polling attempts in seconds.
-
-Used by AWS waiters when polling for resource state changes
-(e.g., waiting for instance to reach 'running' state).
-"""
-
-WAITER_MAX_ATTEMPTS_SHORT = 20
-"""Maximum number of attempts for short-duration waiter operations.
-
-Used for operations that typically complete quickly, such as
-checking instance metadata availability or early-stage state transitions.
-"""
-
-WAITER_MAX_ATTEMPTS_LONG = 40
-"""Maximum number of attempts for long-duration waiter operations.
-
-Used for operations that may take longer to complete, such as
-instance startup, SSH readiness, or Mutagen synchronization initialization.
-"""
-
-SSH_IP_RETRY_MAX = 10
-"""Maximum number of retry attempts when fetching SSH connection details.
-
-Retries are used when instance tags containing SSH configuration
-are not immediately available, particularly in LocalStack environments.
-"""
-
-SSH_IP_RETRY_DELAY = 0.5
-"""Delay in seconds between SSH connection detail retry attempts.
-
-Provides time for instance metadata to propagate while avoiding
-excessive API calls to EC2 describe operations.
-"""
-
 VERSION_CHECK_TIMEOUT_SECONDS = 5
 """Timeout in seconds for version check operations.
 
@@ -183,13 +148,6 @@ Limits memory usage and prevents unbounded queue growth when
 the TUI processes updates at varying rates.
 """
 
-DEFAULT_REGION = "us-east-1"
-"""Default cloud provider region for instance provisioning.
-
-Used when no region is specified in configuration, environment,
-or command-line arguments. Standard AWS default region.
-"""
-
 MAX_COMMAND_LENGTH = 10000
 """Maximum length in characters for commands sent to remote instance.
 
@@ -221,6 +179,20 @@ DEFAULT_WAIT_TIMEOUT = 300
 
 Five minutes allows time for resource state transitions such as
 instance startup, volume attachment, or snapshot completion.
+"""
+
+CLEANUP_TIMEOUT_SECONDS = 300
+"""Timeout in seconds for waiting for cleanup to start when skipping SSH.
+
+Used by run executor to wait for cleanup manager to begin shutdown
+when SSH connection is skipped.
+"""
+
+DEFAULT_PROVIDER = "aws"
+"""Default cloud provider for resource provisioning.
+
+Used as the default provider when none is specified in configuration,
+environment variables, or command-line arguments.
 """
 
 SSH_RETRY_DELAYS = [1, 2, 4, 8, 16, 30, 30, 30, 30, 30]
@@ -265,16 +237,6 @@ EXIT_CONFIG_ERROR = 2
 Used when the application terminates due to invalid configuration,
 missing required settings, or configuration validation failures.
 """
-
-
-class InstanceState(str, Enum):
-    """Instance state values."""
-
-    PENDING = "pending"
-    RUNNING = "running"
-    STOPPED = "stopped"
-    STOPPING = "stopping"
-    TERMINATED = "terminated"
 
 
 class OnExitAction(str, Enum):
