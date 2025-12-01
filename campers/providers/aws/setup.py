@@ -96,14 +96,19 @@ class SetupManager:
             sts_client = boto3.client("sts", region_name=effective_region)
             sts_client.get_caller_identity()
             logger.info("AWS credentials found")
+            print("AWS credentials found")
             return True
         except NoCredentialsError:
             logger.info("AWS credentials not found\n")
             logger.info("Fix it:")
             logger.info("  aws configure")
+            print("AWS credentials not found")
+            print("Fix it:")
+            print("  aws configure")
             return False
         except ClientError:
             logger.info("AWS credentials found")
+            print("AWS credentials found")
             return True
         finally:
             if sts_client:
@@ -351,6 +356,7 @@ class SetupManager:
         effective_region = self.get_effective_region(region)
 
         logger.info("Running diagnostics for %s...", effective_region)
+        print(f"Running diagnostics for {effective_region}...")
 
         if not self.check_aws_credentials(effective_region):
             sys.exit(1)
@@ -361,26 +367,39 @@ class SetupManager:
             check_result = self.check_infrastructure(ec2_client, effective_region)
 
             if not check_result.vpc_exists:
-                logger.info("No default VPC in %s", effective_region)
+                message = f"No default VPC in {effective_region}"
+                logger.info(message)
+                print(message)
+                print("Fix it:")
+                print("  campers setup")
+                print("Or manually:")
+                print(f"  aws ec2 create-default-vpc --region {effective_region}")
                 logger.info("Fix it:")
                 logger.info("  campers setup")
                 logger.info("Or manually:")
                 logger.info("  aws ec2 create-default-vpc --region %s", effective_region)
             else:
-                logger.info("Default VPC exists in %s", effective_region)
+                message = f"Default VPC exists in {effective_region}"
+                logger.info(message)
+                print(message)
 
             if check_result.missing_permissions:
                 perms_str = ", ".join(check_result.missing_permissions)
                 logger.info("Missing IAM permissions: %s", perms_str)
+                print(f"Missing IAM permissions: {perms_str}")
                 logger.info("Required permissions:")
+                print("Required permissions:")
                 for perm in check_result.missing_permissions:
                     logger.info("  - %s", perm)
+                    print(f"  - {perm}")
             else:
                 logger.info("IAM permissions verified")
+                print("IAM permissions verified")
 
             self.check_service_quotas(ec2_client, effective_region)
             self.check_regional_availability(ec2_client, effective_region)
 
             logger.info("Diagnostics complete.")
+            print("Diagnostics complete.")
         finally:
             ec2_client.close()

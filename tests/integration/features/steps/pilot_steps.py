@@ -333,7 +333,22 @@ async def poll_tui_with_unified_timeout(
 
         try:
             log_widget = app.query_one(Log)
-            log_lines = [str(line) for line in log_widget.lines]
+            log_lines = []
+            try:
+                for line in log_widget.lines:
+                    log_lines.append(str(line))
+            except OSError as os_error:
+                logger.debug(
+                    f"OSError while iterating log widget lines (errno {os_error.errno}): {os_error}. "
+                    "This may indicate a PTY/device issue. Using fallback extraction."
+                )
+                log_lines = []
+                try:
+                    log_text = log_widget.render_str("")
+                    if log_text:
+                        log_lines = str(log_text).split("\n")
+                except Exception:
+                    log_lines = []
             log_text = "\n".join(log_lines)
 
             if "Command completed" in log_text:
@@ -406,10 +421,29 @@ def extract_log_lines(app: CampersTUI) -> tuple[list[str], str]:
     """
     try:
         log_widget = app.query_one(Log)
-        log_lines = [str(line) for line in log_widget.lines]
+        log_lines = []
+        try:
+            for line in log_widget.lines:
+                log_lines.append(str(line))
+        except OSError as os_error:
+            logger.debug(
+                f"OSError while iterating log widget lines (errno {os_error.errno}): {os_error}. "
+                "This may indicate a PTY/device issue. Attempting fallback."
+            )
+            log_lines = []
+            try:
+                log_text = log_widget.render_str("")
+                if log_text:
+                    log_lines = str(log_text).split("\n")
+            except Exception:
+                log_lines = []
+        except Exception as e:
+            logger.debug(f"Error while iterating log lines (non-OSError): {e}")
+            log_lines = []
     except NoMatches:
         log_lines = []
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Failed to extract log lines: {e}")
         log_lines = []
 
     return log_lines, "\n".join(log_lines)
@@ -543,9 +577,27 @@ def run_tui_test_with_machine(
                                     )
 
                                 await pilot.pause(3.0)
-                                log_lines, log_text = extract_log_lines(app)
-                                status_widget = app.query_one("#status-widget")
-                                final_status = str(status_widget.render())
+                                log_lines = []
+                                log_text = ""
+                                final_status = "unknown"
+                                try:
+                                    log_lines, log_text = extract_log_lines(app)
+                                    logger.info(f"Successfully extracted {len(log_lines)} log lines")
+                                except Exception as log_extract_error:
+                                    logger.info(
+                                        f"Failed to extract log lines: {log_extract_error}. "
+                                        "This is expected in non-PTY test environments."
+                                    )
+                                try:
+                                    status_widget = app.query_one("#status-widget")
+                                    final_status = str(status_widget.render())
+                                    logger.info(f"Status widget extracted: {final_status}")
+                                except Exception as status_error:
+                                    logger.warning(
+                                        f"Failed to extract status widget: {status_error}",
+                                        exc_info=True
+                                    )
+                                    final_status = "extraction_failed"
 
                                 logger.info(
                                     "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
@@ -565,9 +617,19 @@ def run_tui_test_with_machine(
                             f"Check logs for container boot delays or SSH issues."
                         )
             except Exception as e:
-                logger.error(f"Exception during TUI result extraction: {e}")
-                log_lines, log_text = extract_log_lines(app) if "app" in locals() else ([], "")
-                exit_code = getattr(app, "worker_exit_code", None) if "app" in locals() else None
+                logger.error(f"Exception during TUI result extraction: {e}", exc_info=True)
+                log_lines = []
+                log_text = ""
+                exit_code = None
+                if "app" in locals():
+                    try:
+                        log_lines, log_text = extract_log_lines(app)
+                    except Exception as extract_error:
+                        logger.warning(
+                            f"Could not extract logs from app after error: {extract_error}. "
+                            "This may occur if the app context has closed."
+                        )
+                    exit_code = getattr(app, "worker_exit_code", None)
 
                 return {
                     "status": "extraction_failed",
