@@ -79,13 +79,21 @@ class EC2ContainerManager:
         for attempt in range(max_attempts):
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(1)
+                sock.settimeout(2)
                 result = sock.connect_ex(("localhost", port))
-                sock.close()
 
                 if result == 0:
-                    logger.debug(f"SSH server ready on port {port} (attempt {attempt + 1})")
-                    return True
+                    try:
+                        banner = sock.recv(1024)
+                        sock.close()
+                        if banner:
+                            logger.debug(f"SSH server ready on port {port} (attempt {attempt + 1}) - received banner")
+                            return True
+                    except Exception as e:
+                        logger.debug(f"SSH banner read failed on port {port} (attempt {attempt + 1}): {e}")
+                        sock.close()
+                else:
+                    sock.close()
             except Exception as e:
                 logger.debug(f"SSH health check failed (attempt {attempt + 1}): {e}")
 
@@ -385,8 +393,11 @@ exec /init
             ssh_health_start = time.time()
             logger.info(f"Waiting for SSH server to be ready on localhost:{port}...")
 
-            while time.time() - start_time < timeout:
-                if self.is_ssh_server_ready(port):
+            ssh_timeout = timeout - (time.time() - start_time)
+            ssh_deadline = time.time() + ssh_timeout
+
+            while time.time() < ssh_deadline:
+                if self.is_ssh_server_ready(port, max_attempts=1):
                     ssh_ready_elapsed = time.time() - ssh_health_start
                     total_elapsed = time.time() - start_time
                     logger.info(

@@ -449,6 +449,68 @@ def extract_log_lines(app: CampersTUI) -> tuple[list[str], str]:
     return log_lines, "\n".join(log_lines)
 
 
+async def ensure_monitor_provisioning_complete(behave_context: Context | None = None) -> None:
+    """Wait for the LocalStack monitor to fully provision instances before TUI launch.
+
+    This synchronization prevents SSH tag race conditions where production code
+    queries for CampersSSHHost/CampersSSHPort tags before the monitor has
+    finished provisioning the SSH container and applying tags.
+
+    The fix waits for recent ssh-ready events to settle (no new events for 1 second),
+    indicating the monitor has finished provisioning all pending instances.
+
+    Parameters
+    ----------
+    behave_context : Context | None
+        Behave context containing the harness instance
+
+    Notes
+    -----
+    This is purely test harness code and does not touch production code.
+    It leverages the event_bus to detect when provisioning is complete.
+    """
+    if behave_context is None or not hasattr(behave_context, "harness"):
+        logger.debug("No harness context available; skipping monitor synchronization")
+        return
+
+    harness = behave_context.harness
+    if not hasattr(harness, "services") or harness.services is None:
+        logger.debug("Harness services not initialized; skipping monitor synchronization")
+        return
+
+    event_bus = harness.services.event_bus
+
+    logger.info("Ensuring monitor has provisioned all instances before TUI launch")
+
+    idle_count = 0
+    idle_threshold = 4
+
+    for iteration in range(50):
+        try:
+            ssh_event = event_bus.wait_for(
+                event_type="ssh-ready",
+                instance_id=None,
+                timeout_sec=0.25,
+            )
+            logger.info(
+                f"Detected ssh-ready event for instance {ssh_event.instance_id} "
+                f"(iteration {iteration + 1}); resetting idle counter"
+            )
+            idle_count = 0
+            await asyncio.sleep(0.05)
+        except Exception:
+            idle_count += 1
+            if idle_count >= idle_threshold:
+                logger.info(
+                    f"Monitor provisioning idle for {idle_count * 0.25:.2f}s; "
+                    "assuming all instances fully provisioned with SSH tags"
+                )
+                break
+            await asyncio.sleep(0.05)
+
+    logger.info("Monitor provisioning synchronization complete")
+
+
 def run_tui_test_with_machine(
     camp_name: str,
     config_path: str,
@@ -460,6 +522,9 @@ def run_tui_test_with_machine(
     Uses a single unified timeout budget for all polling operations to prevent
     timeout accumulation that could exceed scenario limits. Applies Mutagen
     mocking for LocalStack scenarios to avoid real AWS connections.
+
+    Ensures the monitor has fully provisioned and tagged instances before
+    launching the TUI to avoid SSH tag race conditions.
 
     Parameters
     ----------
@@ -561,6 +626,8 @@ def run_tui_test_with_machine(
 
                     try:
                         async with asyncio.timeout(max_wait):
+                            await ensure_monitor_provisioning_complete(behave_context)
+
                             async with app.run_test() as pilot:
                                 await pilot.pause()
 
