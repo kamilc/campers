@@ -187,7 +187,16 @@ class SSHManager:
                 else:
                     self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-                key = paramiko.PKey.from_private_key_file(self.key_file)
+                try:
+                    key = paramiko.Ed25519Key.from_private_key_file(self.key_file)
+                except (paramiko.SSHException, ValueError):
+                    try:
+                        key = paramiko.RSAKey.from_private_key_file(self.key_file)
+                    except (paramiko.SSHException, ValueError):
+                        try:
+                            key = paramiko.ECDSAKey.from_private_key_file(self.key_file)
+                        except (paramiko.SSHException, ValueError):
+                            key = paramiko.DSSKey.from_private_key_file(self.key_file)
 
                 self.client.connect(
                     hostname=self.host,

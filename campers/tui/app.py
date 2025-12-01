@@ -361,6 +361,16 @@ class CampersTUI(App):
 
             if self.worker_exit_code == 0:
                 logging.info("Command completed successfully")
+
+            if self._update_queue is not None:
+                try:
+                    self._update_queue.put_nowait(
+                        {"type": "status_update", "payload": {"status": "terminating"}}
+                    )
+                except queue.Full:
+                    logging.warning("TUI update queue full, dropping terminating status")
+
+            logging.info("Cleanup completed successfully")
         except KeyboardInterrupt:
             logging.info("Operation cancelled by user")
             self.worker_exit_code = 130
@@ -415,6 +425,10 @@ class CampersTUI(App):
             else:
                 logging.error("Provider error: %s", error_message)
             self.worker_exit_code = 1
+        except Exception as e:
+            logging.error("Unexpected error during execution: %s", str(e), exc_info=True)
+            error_message = f"Unexpected error: {str(e)}"
+            self.worker_exit_code = 1
         finally:
             if error_message:
                 logging.error(error_message)
@@ -433,6 +447,7 @@ class CampersTUI(App):
             elif not self.campers._cleanup_in_progress:
                 self.campers._cleanup_resources()
 
+            time.sleep(0.5)
             self.call_from_thread(self.exit, self.worker_exit_code)
 
     def on_key(self, event: events.Key) -> None:

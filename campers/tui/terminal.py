@@ -47,6 +47,9 @@ def detect_terminal_background() -> TerminalBackground:
     if platform.system() == "Windows" or termios is None or tty is None:
         return TerminalBackground(color_hex="#000000", is_light=False)
 
+    if not sys.stdin.isatty():
+        return TerminalBackground(color_hex="#000000", is_light=False)
+
     try:
         sys.stdout.write("\033]11;?\033\\")
         sys.stdout.flush()
@@ -60,9 +63,14 @@ def detect_terminal_background() -> TerminalBackground:
 
             while time.time() - start_time < 0.1:
                 if select.select([sys.stdin], [], [], 0)[0]:
-                    char = sys.stdin.read(1)
-                    response += char
-                    if response.endswith("\033\\") or response.endswith("\007"):
+                    try:
+                        char = sys.stdin.read(1)
+                        if not char:
+                            break
+                        response += char
+                        if response.endswith("\033\\") or response.endswith("\007"):
+                            break
+                    except (OSError, IOError):
                         break
 
             if match := re.search(
