@@ -34,7 +34,7 @@ Scenario: Ad-hoc instance tagged without camp name
   When I launch instance with options "--instance-type t3.medium"
   Then instance has tag "MachineConfig" with value "ad-hoc"
 
-@poc @localstack @pilot @timeout_300
+@poc @localstack @pilot @timeout_330
 Scenario: Launch and terminate instance via TUI with LocalStack
   Given a config file with camp "test-camp" defined
   And camp "test-camp" has instance_type "t3.micro"

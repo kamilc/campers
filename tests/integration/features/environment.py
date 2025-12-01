@@ -1129,13 +1129,28 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         instance_ids_to_terminate = list(set(instance_ids_to_terminate))
 
         if instance_ids_to_terminate:
-            if is_localstack_scenario and hasattr(context, "ec2_manager"):
+            has_valid_ec2_manager = (
+                is_localstack_scenario
+                and hasattr(context, "ec2_manager")
+                and context.ec2_manager is not None
+            )
+            if has_valid_ec2_manager:
                 for instance_id in instance_ids_to_terminate:
                     logger.info(f"Terminating instance: {instance_id}")
                     try:
-                        context.ec2_manager.ec2_client.terminate_instances(
-                            InstanceIds=[instance_id]
+                        has_valid_client = (
+                            hasattr(context.ec2_manager, "ec2_client")
+                            and context.ec2_manager.ec2_client is not None
                         )
+                        if has_valid_client:
+                            context.ec2_manager.ec2_client.terminate_instances(
+                                InstanceIds=[instance_id]
+                            )
+                        else:
+                            logger.debug(
+                                f"ec2_client is None for instance {instance_id} "
+                                "- skipping termination"
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to terminate instance {instance_id}: {e}")
 
