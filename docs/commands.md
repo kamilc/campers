@@ -4,273 +4,88 @@ Complete reference for all Campers CLI commands.
 
 ## run
 
-Launch an EC2 instance with file sync and command execution.
+The primary command. It provisions, syncs, and connects you to the camp.
 
 ```bash
 campers run [CAMP_NAME] [OPTIONS]
 ```
 
-### Arguments
+**Behavior:**
+1.  If the instance doesn't exist, it creates it.
+2.  If it's stopped, it starts it.
+3.  It establishes the Mutagen file sync.
+4.  It sets up SSH port forwarding.
+5.  It opens an interactive SSH shell (or runs the specified command).
 
-| Argument | Description |
-|----------|-------------|
-| `CAMP_NAME` | Name of camp from configuration (optional) |
+### TUI (Terminal User Interface)
+By default, `run` opens a dashboard showing:
+- **Sync Status:** Number of files synced.
+- **Logs:** Output from startup scripts and commands.
+- **Instance Stats:** IP address, region, uptime.
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `-c`, `--command` | Command to execute |
-| `--instance-type` | Override EC2 instance type |
+| `-c`, `--command` | Command to execute instead of opening a shell |
+| `--instance-type` | Override EC2 instance type (e.g., `c6a.xlarge`) |
 | `--disk-size` | Override root volume size (GB) |
 | `--region` | Override AWS region |
-| `--port` | Additional port to forward |
-| `--plain` | Disable TUI, use plain text output |
-
-### Examples
-
-```bash
-# Use defaults
-campers run
-
-# Use a named camp
-campers run jupyter
-
-# Override settings
-campers run --instance-type t3.large --disk-size 100
-
-# Execute a specific command
-campers run dev -c "python train.py"
-
-# Plain text output (no TUI)
-campers run --plain
-```
+| `--port` | Additional port(s) to forward |
+| `--plain` | Disable the TUI (useful for CI/CD or simple logs) |
 
 ## list
 
-Display all Campers-managed instances across regions.
+Show all instances managed by Campers.
 
 ```bash
-campers list [OPTIONS]
-```
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `--region` | Filter by AWS region |
-| `--json` | Output as JSON |
-
-### Examples
-
-```bash
-# List all instances
 campers list
-
-# Filter by region
-campers list --region us-west-2
-
-# JSON output for scripting
-campers list --json
 ```
 
-### Output
-
-```
-┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
-┃ Name               ┃ Instance ID  ┃ State      ┃ Region         ┃
-┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
-│ campers-myproj-main│ i-0abc123def │ running    │ us-east-1      │
-│ campers-myproj-dev │ i-0def456abc │ stopped    │ us-east-1      │
-└────────────────────┴──────────────┴────────────┴────────────────┘
-```
+Use `--json` for programmatic output (e.g., building custom dashboards).
 
 ## stop
 
-Stop a running instance. The instance and its data are preserved.
+Stops the instance but **preserves the disk**.
 
 ```bash
-campers stop <TARGET>
+campers stop <NAME>
 ```
 
-### Arguments
-
-| Argument | Description |
-|----------|-------------|
-| `TARGET` | Instance name or ID |
-
-### Examples
-
-```bash
-# Stop by name
-campers stop dev
-
-# Stop by instance ID
-campers stop i-0abc123def456
-```
-
-!!! note
-    Stopped instances do not incur compute charges, but EBS volumes still incur storage charges.
-
-## start
-
-Start a previously stopped instance.
-
-```bash
-campers start <TARGET>
-```
-
-### Arguments
-
-| Argument | Description |
-|----------|-------------|
-| `TARGET` | Instance name or ID |
-
-### Examples
-
-```bash
-# Start by name
-campers start dev
-
-# Start by instance ID
-campers start i-0abc123def456
-```
-
-After starting, use `campers run` to reconnect with file sync:
-
-```bash
-campers start dev
-campers run dev
-```
+*   **Cost:** You stop paying for EC2 compute. You continue paying for EBS storage.
+*   **Use Case:** End of the day. You want to resume exactly where you left off tomorrow.
 
 ## destroy
 
-Terminate an instance and delete associated resources (key pair, security group).
+Terminates the instance and **deletes the disk**.
 
 ```bash
-campers destroy <TARGET> [OPTIONS]
+campers destroy <NAME>
 ```
 
-### Arguments
-
-| Argument | Description |
-|----------|-------------|
-| `TARGET` | Instance name or ID |
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `--force` | Skip confirmation prompt |
-
-### Examples
-
-```bash
-# Destroy by name
-campers destroy dev
-
-# Destroy by instance ID
-campers destroy i-0abc123def456
-
-# Skip confirmation
-campers destroy dev --force
-```
-
-!!! danger "Warning"
-    This permanently deletes the instance and all data on its volumes. This action cannot be undone.
+*   **Cost:** All billing stops.
+*   **Use Case:** Task complete. You don't need this environment anymore.
 
 ## init
 
-Generate a starter configuration file.
+Creates a `campers.yaml` starter file in the current directory.
 
 ```bash
-campers init [OPTIONS]
-```
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `--force` | Overwrite existing configuration |
-
-### Examples
-
-```bash
-# Generate campers.yaml
 campers init
-
-# Overwrite existing config
-campers init --force
 ```
 
 ## doctor
 
-Verify AWS credentials and required IAM permissions.
+Diagnose common issues (AWS credentials, IAM permissions, Mutagen installation).
 
 ```bash
 campers doctor
 ```
 
-### Checks Performed
-
-- AWS credentials are configured
-- IAM permissions for EC2 operations
-- Mutagen is installed
-- Network connectivity to AWS
-
-### Example Output
-
-```
-Checking AWS credentials... OK
-Checking IAM permissions... OK
-Checking Mutagen installation... OK
-All checks passed!
-```
-
 ## setup
 
-Create required AWS resources (VPC, security groups) for a region.
+One-time setup helper. Creates a default VPC and Security Group in the specified region if they don't exist.
 
 ```bash
-campers setup [OPTIONS]
+campers setup --region us-east-1
 ```
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `--region` | AWS region to set up |
-
-### Examples
-
-```bash
-# Set up default region
-campers setup
-
-# Set up specific region
-campers setup --region eu-west-1
-```
-
-### Resources Created
-
-- Default VPC (if not exists)
-- Security group with SSH access
-- Required IAM resources
-
-## Global Options
-
-These options work with all commands:
-
-| Option | Description |
-|--------|-------------|
-| `--help` | Show help message |
-| `--version` | Show version number |
-
-## Exit Codes
-
-| Code | Description |
-|------|-------------|
-| `0` | Success |
-| `1` | General error |
-| `2` | Configuration error |
-| `130` | Interrupted (Ctrl+C) |
