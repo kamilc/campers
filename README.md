@@ -93,7 +93,7 @@ camps:
     # Use the Deep Learning AMI
     ami:
       query:
-        name: "Deep Learning AMI GPU TensorFlow*"
+        name: "Deep Learning Base AMI (Ubuntu*)*"
         owner: "amazon"
     # Open Jupyter on your laptop's localhost:8888
     ports: [8888]
