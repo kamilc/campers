@@ -53,7 +53,7 @@ If you are compiling large C++ or Rust projects, you can provision a high-core i
 
 ## Features
 
-- **Mutagen Sync**: Uses Mutagen for high-performance, conflict-aware file synchronization.
+- **Mutagen Sync**: Uses [Mutagen](https://mutagen.io/) for high-performance file synchronization. It is not `rsync`; it uses a real-time, bi-directional sync agent that is orders of magnitude faster for large projects (like `node_modules`).
 - **Automatic Port Forwarding**: Tunnels remote ports to your local machine based on your configuration.
 - **Ansible Integration**: Supports running Ansible playbooks to configure the instance on startup.
 - **Cost Control:** Encourages an ephemeral workflow where instances are destroyed when not in use.

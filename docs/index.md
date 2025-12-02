@@ -23,7 +23,7 @@
 
 ## Key Features
 
-- **Mutagen Sync**: Real-time, bidirectional file synchronization (sub-20ms latency).
+- **Mutagen Sync**: Real-time, bidirectional file synchronization. Unlike `rsync` or NFS, Mutagen uses a smart forwarding agent that provides **local-native latency**. You edit files instantly; sync happens in the background (<20ms).
 - **Auto-Port Forwarding**: Access remote web apps and Jupyter notebooks via `localhost`.
 - **Ansible Provisioning**: Configure instances with standard Ansible playbooks.
 - **TUI Dashboard**: Monitor logs, sync status, and instance health in a beautiful terminal interface.
