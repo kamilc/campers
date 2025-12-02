@@ -298,6 +298,7 @@ class SetupManager:
         effective_region = self.get_effective_region(region)
 
         logger.info(f"Checking AWS prerequisites for {effective_region}...\n")
+        print(f"Checking AWS prerequisites for {effective_region}...")
 
         if not self.check_aws_credentials(effective_region):
             sys.exit(1)
@@ -316,11 +317,20 @@ class SetupManager:
                     try:
                         ec2_client.create_default_vpc()
                         logger.info(f"Default VPC created in {effective_region}")
+                        print(f"Default VPC created in {effective_region}")
                     except ClientError as e:
-                        logger.info(f"\nFailed to create VPC: {e}")
-                        logger.info("\nManual creation:")
-                        logger.info(f"  aws ec2 create-default-vpc --region {effective_region}")
-                        sys.exit(1)
+                        error_code = e.response.get("Error", {}).get("Code", "")
+                        if error_code == "DefaultVpcAlreadyExists":
+                            logger.info(f"Default VPC created in {effective_region}")
+                            print(f"Default VPC created in {effective_region}")
+                        else:
+                            logger.info(f"\nFailed to create VPC: {e}")
+                            logger.info("\nManual creation:")
+                            logger.info(f"  aws ec2 create-default-vpc --region {effective_region}")
+                            print(f"\nFailed to create VPC: {e}")
+                            print("\nManual creation:")
+                            print(f"  aws ec2 create-default-vpc --region {effective_region}")
+                            sys.exit(1)
                 else:
                     logger.info("\nSkipping VPC creation.")
                     logger.info("You can create it later with:")
@@ -328,6 +338,7 @@ class SetupManager:
                     return
             else:
                 logger.info(f"Default VPC exists in {effective_region}")
+                print(f"Default VPC exists in {effective_region}")
 
             if check_result.missing_permissions:
                 missing_perms = ", ".join(check_result.missing_permissions)
@@ -337,6 +348,7 @@ class SetupManager:
                 logger.info("IAM permissions verified")
 
             logger.info("\nSetup complete! Run: campers run")
+            print("Setup complete!")
         finally:
             ec2_client.close()
 
