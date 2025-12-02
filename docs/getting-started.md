@@ -111,13 +111,14 @@ Campers is designed to let you **edit locally** while Mutagen syncs changes inst
 
 However, if you prefer to use **VS Code Remote - SSH** (e.g., for the integrated terminal, remote debugging, or extensions that need to run on the host), you can still do so:
 
-1.  Run `campers info` to get the IP address and key path.
-2.  In VS Code, open the **Remote Explorer**.
-3.  Add a new SSH Host:
+1.  Run `campers run`.
+2.  Look at the **SSH** line in the TUI dashboard. It will show something like:
     ```bash
-    ssh -i /path/to/key.pem ubuntu@<INSTANCE_IP>
+    ssh -i /path/to/key.pem ubuntu@1.2.3.4
     ```
-4.  Connect! You can now use the remote terminal and debugger directly.
+3.  In VS Code, open the **Remote Explorer**.
+4.  Add a new SSH Host using that exact command.
+5.  Connect! You can now use the remote terminal and debugger directly.
 
 ## Next Steps
 
