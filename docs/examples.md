@@ -131,4 +131,38 @@ camps:
       sudo usermod -aG docker ubuntu
       
     command: docker compose up
+
+## Advanced: AWS Profile Support
+
+If you rely on `AWS_PROFILE` (switching between accounts/roles) instead of raw environment variables, you can sync your credentials file to the remote instance.
+
+!!! warning "Security Implication"
+    This copies your **entire** `~/.aws` directory (all profiles) to the cloud instance.
+    
+    While Campers instances are secured by SSH keys and strictly limited security groups (no open ports), if the instance is compromised, all your local profiles are exposed. Only use this if you trust the environment.
+
+```yaml
+defaults:
+  env_filter:
+    # Forward the profile name env var
+    - AWS_PROFILE
+
+  sync_paths:
+    # 1. Sync your code
+    - local: .
+      remote: /home/ubuntu/${project}
+    
+    # 2. Sync your AWS credentials
+    - local: ~/.aws
+      remote: /home/ubuntu/.aws
+      ignore:
+        - "cli/cache" # Don't sync CLI cache junk
+```
+
+**Usage:**
+```bash
+export AWS_PROFILE=dev-account
+campers run
+# On remote: aws s3 ls (uses dev-account profile)
+```
 ```
