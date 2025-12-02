@@ -149,8 +149,6 @@ campers list
 ```
 
 ### Full Control
-
-### Full Control
 Since you get a standard Linux instance, you can run **multiple services** at once. You might use `supervisord` or `docker compose` to spin up Jupyter, TensorBoard, and a database simultaneously. Campers will automatically forward all the ports you specify.
 
 ### Environment Forwarding

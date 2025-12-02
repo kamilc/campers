@@ -52,27 +52,42 @@ playbooks:
         - name: Install CUDA
           apt: {name: nvidia-cuda-toolkit, state: present}
         - name: Install PyTorch
-          pip: {name: [torch, torchvision, jupyterlab]}
+          pip: {name: [torch, torchvision, jupyterlab, tensorboard]}
 
 camps:
-  training:
+  experiment:
     instance_type: g5.xlarge  # NVIDIA A10G
     region: us-west-2
     disk_size: 200
     
-    # Forward Jupyter (8888) and TensorBoard (6006)
-    ports: [8888, 6006]
+    # Forward Jupyter (8888)
+    ports: [8888]
     
     ansible_playbooks: [gpu-setup]
     
     # Auto-start Jupyter
     command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+
+  training:
+    instance_type: p3.2xlarge # V100 GPU
+    region: us-west-2
+    ports: [6006] # TensorBoard
+    ansible_playbooks: [gpu-setup]
+    
+    # Pull data on every start
+    startup_script: |
+      cd ${remote_dir}
+      dvc pull data/
+
+    # Run background monitoring + training
+    command: |
+      tensorboard --logdir logs --port 6006 &
+      python train_model.py
 ```
 
 **Workflow:**
-1. Run `campers run training`
-2. Wait for setup to complete.
-3. Open `http://localhost:8888` in your local browser.
+1. Run `campers run experiment` for interactive work.
+2. Run `campers run training` for heavy batch jobs.
 
 ## Heavy Compilation (Rust/C++)
 
@@ -98,9 +113,9 @@ camps:
     on_exit: terminate
 ```
 
-## Web Development (Full Stack)
+## Web Development (Full Control)
 
-Run a backend, frontend, and database in the cloud, but edit code locally.
+Run a backend, frontend, and database in the cloud using Docker Compose. This gives you full control over the environment.
 
 ```yaml
 camps:
