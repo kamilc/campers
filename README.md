@@ -30,6 +30,10 @@ With Campers, the workflow looks like this:
     *   **Stop**: If you simply close Campers (Ctrl+C), the instance is stopped but preserved. Storage is kept, so you can resume work later by running `campers run` again. You only pay for storage while stopped.
     *   **Destroy**: To completely remove the instance and stop all costs, run `campers destroy`.
 
+<p align="center">
+  <img src="docs/assets/infographic.jpg" alt="Campers Workflow Infographic" width="100%">
+</p>
+
 ## Use Cases
 
 **Data Science & Pipelines**
