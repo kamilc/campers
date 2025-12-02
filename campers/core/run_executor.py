@@ -78,6 +78,7 @@ class RunExecutor:
         self.update_queue = update_queue
         self.mutagen_manager_factory = mutagen_manager_factory or MutagenManager
         self.portforward_manager_factory = portforward_manager_factory or PortForwardManager
+        self.merged_config: dict[str, Any] | None = None
 
     def _send_queue_update(self, update_queue: queue.Queue | None, update_data: dict) -> None:
         """Send update to queue, handling overflow gracefully.
@@ -161,6 +162,7 @@ class RunExecutor:
                 ignore,
                 update_queue,
             )
+            self.merged_config = merged_config
 
             mutagen_mgr = self.mutagen_manager_factory()
             instance_details, compute_provider = self._phase_instance_provision(
@@ -382,10 +384,11 @@ class RunExecutor:
             instance_details["key_file"],
         )
 
+        ssh_username = ssh_info.username or merged_config.get("ssh_username", DEFAULT_SSH_USERNAME)
         ssh_manager = self.ssh_manager_factory(
             host=ssh_info.host,
             key_file=ssh_info.key_file,
-            username=merged_config.get("ssh_username", DEFAULT_SSH_USERNAME),
+            username=ssh_username,
             port=ssh_info.port,
         )
 

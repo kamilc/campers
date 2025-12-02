@@ -589,6 +589,7 @@ class MonitorController:
                     {"Key": "CampersSSHHost", "Value": "localhost"},
                     {"Key": "CampersSSHPort", "Value": str(port)},
                     {"Key": "CampersSSHKeyFile", "Value": str(key_file)},
+                    {"Key": "CampersSSHUsername", "Value": "ubuntu"},
                 ],
             )
         except Exception as exc:  # pylint: disable=broad-except

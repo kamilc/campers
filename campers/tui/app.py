@@ -275,6 +275,8 @@ class CampersTUI(App):
         config : dict[str, Any]
             Merged configuration data
         """
+        self.campers.merged_config = config
+
         if "instance_type" in config:
             try:
                 self.query_one(f"#{WidgetID.INSTANCE_TYPE}").update(

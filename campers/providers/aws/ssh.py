@@ -53,13 +53,22 @@ def get_aws_ssh_connection_info(
 
     ssh_host = _get_ssh_host_from_tags(instance_id)
     ssh_port = _get_ssh_port_from_tags(instance_id)
+    ssh_username = _get_ssh_username_from_tags(instance_id)
+    ssh_key_file = _get_ssh_key_file_from_tags(instance_id)
 
     if ssh_host is not None and ssh_port is not None:
+        effective_key_file = ssh_key_file if ssh_key_file else key_file
         logger.info(
-            "Using harness SSH configuration for instance %s: host=%s, port=%s",
-            instance_id, ssh_host, ssh_port
+            "Using harness SSH config for %s: host=%s, port=%s, username=%s, key=%s",
+            instance_id, ssh_host, ssh_port, ssh_username, effective_key_file
         )
-        return SSHConnectionInfo(host=ssh_host, port=ssh_port, key_file=key_file)
+        return SSHConnectionInfo(
+            host=ssh_host,
+            port=ssh_port,
+            key_file=effective_key_file,
+            username=ssh_username,
+            tag_key_file=ssh_key_file
+        )
 
     if public_ip:
         logger.info(
@@ -131,8 +140,61 @@ def _get_ssh_port_from_tags(instance_id: str) -> int | None:
     return None
 
 
+def _get_ssh_username_from_tags(instance_id: str) -> str | None:
+    """Get SSH username from instance CampersSSHUsername tag.
+
+    Parameters
+    ----------
+    instance_id : str
+        EC2 instance ID
+
+    Returns
+    -------
+    str | None
+        SSH username from tag, or None if not found
+    """
+    try:
+        username = _get_instance_tag_value(instance_id, "CampersSSHUsername")
+        logger.debug("Retrieved CampersSSHUsername tag for %s: %s", instance_id, username)
+        return username
+    except Exception as e:
+        logger.debug(
+            "Failed to retrieve CampersSSHUsername tag for instance %s: %s",
+            instance_id, e, exc_info=True
+        )
+        return None
+
+
+def _get_ssh_key_file_from_tags(instance_id: str) -> str | None:
+    """Get SSH key file path from instance CampersSSHKeyFile tag.
+
+    Parameters
+    ----------
+    instance_id : str
+        EC2 instance ID
+
+    Returns
+    -------
+    str | None
+        SSH key file path from tag, or None if not found
+    """
+    try:
+        key_file = _get_instance_tag_value(instance_id, "CampersSSHKeyFile")
+        logger.debug("Retrieved CampersSSHKeyFile tag for %s: %s", instance_id, key_file)
+        return key_file
+    except Exception as e:
+        logger.debug(
+            "Failed to retrieve CampersSSHKeyFile tag for instance %s: %s",
+            instance_id, e, exc_info=True
+        )
+        return None
+
+
 def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
     """Retrieve a specific tag value from an EC2 instance.
+
+    Includes automatic retry logic to handle eventual consistency in distributed systems
+    where tags may not be immediately available after instance creation or tagging.
 
     Parameters
     ----------
@@ -144,13 +206,15 @@ def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
     Returns
     -------
     str | None
-        Tag value, or None if not found
+        Tag value, or None if not found after retries
 
     Raises
     ------
     Exception
-        If EC2 API call fails
+        If EC2 API call fails permanently
     """
+    import time
+
     endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
     region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 
@@ -164,22 +228,50 @@ def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
         endpoint_url=endpoint_url,
         region_name=region
     )
-    response = ec2_client.describe_instances(InstanceIds=[instance_id])
 
-    if not response["Reservations"]:
-        logger.debug("No reservations found for instance %s", instance_id)
-        return None
+    max_retries = 60
+    retry_delay_sec = 0.1
 
-    instance = response["Reservations"][0]["Instances"][0]
-    tags = instance.get("Tags", [])
+    for attempt in range(max_retries):
+        try:
+            response = ec2_client.describe_instances(InstanceIds=[instance_id])
 
-    logger.debug("Instance %s has %d tags: %s", instance_id, len(tags), tags)
+            if not response["Reservations"]:
+                logger.debug("No reservations found for instance %s", instance_id)
+                return None
 
-    for tag in tags:
-        if tag.get("Key") == tag_key:
-            value = tag.get("Value")
-            logger.debug("Found tag %s=%s for instance %s", tag_key, value, instance_id)
-            return value
+            instance = response["Reservations"][0]["Instances"][0]
+            tags = instance.get("Tags", [])
 
-    logger.debug("Tag %s not found for instance %s", tag_key, instance_id)
+            logger.debug(
+                "Instance %s has %d tags (attempt %d/%d): %s",
+                instance_id, len(tags), attempt + 1, max_retries, tags
+            )
+
+            for tag in tags:
+                if tag.get("Key") == tag_key:
+                    value = tag.get("Value")
+                    logger.debug("Found tag %s=%s for instance %s", tag_key, value, instance_id)
+                    return value
+
+            if attempt < max_retries - 1:
+                logger.debug(
+                    "Tag %s not found for instance %s on attempt %d/%d; retrying in %.0fms",
+                    tag_key, instance_id, attempt + 1, max_retries, retry_delay_sec * 1000
+                )
+                time.sleep(retry_delay_sec)
+            else:
+                logger.debug("Tag %s not found for instance %s after %d attempts", tag_key, instance_id, max_retries)
+                return None
+
+        except Exception as e:
+            logger.debug(
+                "Error fetching tags for instance %s on attempt %d/%d: %s",
+                instance_id, attempt + 1, max_retries, e
+            )
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay_sec)
+            else:
+                raise
+
     return None

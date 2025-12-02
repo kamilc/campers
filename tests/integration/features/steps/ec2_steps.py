@@ -139,7 +139,7 @@ def simulate_termination_timeout(context: Context) -> None:
         try:
             ec2_manager.terminate_instance(context.instance_id)
             context.exception = None
-        except RuntimeError as e:
+        except ProviderAPIError as e:
             context.exception = e
 
 

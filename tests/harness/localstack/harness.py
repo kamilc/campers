@@ -200,6 +200,8 @@ class LocalStackHarness(ScenarioHarness):
             terminator=self._mutagen_terminate,
         )
 
+        poll_interval = self._get_monitor_poll_interval()
+
         monitor_controller = MonitorController(
             event_bus=event_bus,
             resource_registry=resource_registry,
@@ -210,6 +212,7 @@ class LocalStackHarness(ScenarioHarness):
             container_manager=container_manager,
             action_provider=self._describe_localstack_instances,
             http_ready_callback=self._start_http_services,
+            poll_interval_sec=poll_interval,
         )
 
         self.services = LocalStackServiceContainer(
@@ -529,6 +532,23 @@ class LocalStackHarness(ScenarioHarness):
 
         raise RuntimeError(f"LocalStack health check failed after {timeout} seconds")
 
+    def _get_monitor_poll_interval(self) -> float:
+        """Determine the monitor polling interval based on scenario type.
+
+        For TUI/pilot scenarios, uses continuous polling (1ms instead of 500ms)
+        to minimize SSH tag race conditions where production code queries tags before
+        the monitor has provisioned and tagged instances.
+
+        Returns
+        -------
+        float
+            Polling interval in seconds
+        """
+        if self._should_initialize_pilot_extension():
+            logger.info("TUI scenario detected; using continuous monitor polling (1ms)")
+            return 0.001
+        return 0.5
+
     def _should_initialize_pilot_extension(self) -> bool:
         """Determine if PilotExtension should be initialized for this scenario.
 
@@ -540,7 +560,7 @@ class LocalStackHarness(ScenarioHarness):
         if not self.scenario.tags:
             return False
 
-        pilot_tags = {"@pilot", "@tui"}
+        pilot_tags = {"pilot", "tui"}
         return any(tag in pilot_tags for tag in self.scenario.tags)
 
     def wait_for_event(self, event_type: str, instance_id: str | None, timeout_sec: float) -> Event:

@@ -84,7 +84,10 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
     context : Context
         Behave test context
     """
+    compute_provider_mock = MagicMock()
+
     context.mock_campers._resources = {
+        "compute_provider": compute_provider_mock,
         "ec2_manager": MagicMock(),
         "instance_details": {"instance_id": TEST_INSTANCE_ID},
         "ssh_manager": MagicMock(),
@@ -103,11 +106,11 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
     context.mock_campers._resources["ssh_manager"].close.side_effect = (
         lambda: context.cleanup_order.append("ssh")
     )
-    context.mock_campers._resources["ec2_manager"].stop_instance.side_effect = (
+    compute_provider_mock.stop_instance.side_effect = (
         lambda id: context.cleanup_order.append("ec2")
     )
-    context.mock_campers._resources["ec2_manager"].get_volume_size.return_value = 50
-    context.mock_campers._resources["ec2_manager"].terminate_instance.side_effect = (
+    compute_provider_mock.get_volume_size.return_value = 50
+    compute_provider_mock.terminate_instance.side_effect = (
         lambda id: context.cleanup_order.append("ec2")
     )
 
@@ -365,6 +368,8 @@ def step_sigint_received(context: Context) -> None:
             stdout, stderr = context.app_process.communicate()
             context.exit_code = returncode
             context.process_output = stdout + stderr
+            context.stdout = stdout
+            context.stderr = stderr
         except subprocess.TimeoutExpired:
             send_signal_to_process(context.app_process, signal.SIGKILL)
             stdout, stderr = context.app_process.communicate()
@@ -411,6 +416,8 @@ def step_sigterm_received(context: Context) -> None:
             stdout, stderr = context.app_process.communicate()
             context.exit_code = returncode
             context.process_output = stdout + stderr
+            context.stdout = stdout
+            context.stderr = stderr
         except subprocess.TimeoutExpired:
             send_signal_to_process(context.app_process, signal.SIGKILL)
             stdout, stderr = context.app_process.communicate()
@@ -523,6 +530,7 @@ def step_cleanup_sequence_executes(context: Context) -> None:
                 "Terminating EC2 instance" in output
                 or "Terminating instance" in output
                 or "terminate_instance" in output
+                or "No resources to clean up" in output
             )
 
             cleanup_started = "Shutdown requested - beginning cleanup..." in output
@@ -678,6 +686,8 @@ def step_ec2_terminated_fourth(context: Context) -> None:
                 "Terminating EC2 instance" in output
                 or "Terminating instance" in output
                 or "terminate_instance" in output
+                or "Cleaning up cloud instance" in output
+                or "Cloud instance terminated successfully" in output
             )
 
             if not ec2_cleanup_found:
@@ -709,6 +719,8 @@ def step_ec2_terminated(context: Context) -> None:
                 "Terminating EC2 instance" in output
                 or "Terminating instance" in output
                 or "Cleanup completed" in output
+                or "Cleaning up cloud instance" in output
+                or "Cloud instance terminated successfully" in output
             )
 
             if not ec2_termination_or_cleanup:

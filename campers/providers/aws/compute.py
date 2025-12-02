@@ -934,7 +934,7 @@ class EC2Manager:
                 },
             )
         except WaiterError as e:
-            raise RuntimeError(f"Failed to terminate instance: {e}") from e
+            raise ProviderAPIError(f"Failed to terminate instance: {e}") from e
 
         if unique_id:
             try:

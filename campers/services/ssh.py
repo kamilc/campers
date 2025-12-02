@@ -38,11 +38,17 @@ class SSHConnectionInfo:
         SSH port number
     key_file : str
         SSH private key file path
+    username : str | None
+        SSH username (optional, defaults to system default)
+    tag_key_file : str | None
+        SSH key file from harness tags (optional, overrides key_file)
     """
 
     host: str
     port: int
     key_file: str
+    username: str | None = None
+    tag_key_file: str | None = None
 
 
 def get_ssh_connection_info(instance_id: str, public_ip: str, key_file: str) -> SSHConnectionInfo:

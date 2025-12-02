@@ -267,7 +267,9 @@ class Campers:
     def _cleanup_resources(
         self, signum: int | None = None, frame: types.FrameType | None = None
     ) -> None:
-        merged_config = getattr(self, "merged_config", None)
+        merged_config = None
+        if self._run_executor is not None:
+            merged_config = self._run_executor.merged_config
         if merged_config:
             self._cleanup_manager.config_dict = merged_config
 
