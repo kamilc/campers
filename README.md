@@ -74,6 +74,12 @@ playbooks:
       tasks:
         - pip: {name: [numpy, pandas, jupyter], state: present}
 
+  deep-learning:
+    - name: Install PyTorch & TensorBoard
+      hosts: all
+      tasks:
+        - pip: {name: [torch, torchvision, tensorboard], state: present}
+
 # Define your camps (machines)
 camps:
   # 1. Cheap dev environment
@@ -84,6 +90,11 @@ camps:
   # 2. Interactive experimentation (Jupyter)
   experiment:
     instance_type: g4dn.xlarge
+    # Use the Deep Learning AMI
+    ami:
+      query:
+        name: "Deep Learning AMI GPU TensorFlow*"
+        owner: "amazon"
     # Open Jupyter on your laptop's localhost:8888
     ports: [8888]
     ansible_playbooks: [python-setup]
@@ -94,7 +105,7 @@ camps:
     instance_type: p3.2xlarge
     # Forward TensorBoard to localhost:6006
     ports: [6006]
-    ansible_playbooks: [python-setup]
+    ansible_playbooks: [python-setup, deep-learning]
 
     # Run every time the instance starts (e.g., pull latest data)
     startup_script: |
