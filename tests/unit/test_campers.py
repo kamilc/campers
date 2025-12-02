@@ -1451,7 +1451,7 @@ def test_finally_block_calls_cleanup_if_not_already_done(campers_module) -> None
         mock_ssh_instance.execute_command.return_value = 0
         campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
-        campers_instance.run()
+        campers_instance.run(plain=True)
 
         assert campers_instance._cleanup_in_progress is False
         mock_ssh_instance.close.assert_called()
