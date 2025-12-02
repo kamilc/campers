@@ -780,7 +780,10 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
         common_test_ports = [48888, 48889, 48890, 48891, 6006]
         logger.info("Forcefully cleaning up test ports before scenario...")
-        cleanup_test_ports(common_test_ports)
+        try:
+            cleanup_test_ports(common_test_ports)
+        except RuntimeError as e:
+            logger.warning(f"Port cleanup failed (will retry), continuing with scenario: {e}")
 
         logger.info("Killing any lingering sshtunnel processes before scenario...")
         cleanup_sshtunnel_processes()
@@ -1490,7 +1493,10 @@ def after_all(context: Context) -> None:
 
     test_ports = [48888, 48889, 48890, 48891, 6006]
     logger.info("Performing forceful cleanup of test ports after all tests...")
-    cleanup_test_ports(test_ports)
+    try:
+        cleanup_test_ports(test_ports)
+    except RuntimeError as e:
+        logger.warning(f"Port cleanup failed in after_all, continuing cleanup: {e}")
 
     logger.info("Killing any lingering sshtunnel processes after all tests...")
     cleanup_sshtunnel_processes()
