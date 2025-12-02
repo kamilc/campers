@@ -166,4 +166,3 @@ export AWS_PROFILE=dev-account
 campers run
 # On remote: aws s3 ls (uses dev-account profile)
 ```
-```
