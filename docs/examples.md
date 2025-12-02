@@ -25,9 +25,6 @@ camps:
     instance_type: m5.2xlarge
     disk_size: 100
     
-    # Use a private subnet if your VPC is configured for it (advanced)
-    # subnet_id: subnet-xxxxxx
-    
     command: |
       echo "Connected to secure workstation in eu-central-1."
       echo "Data analysis can proceed without downloading PII."

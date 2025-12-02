@@ -89,3 +89,14 @@ One-time setup helper. Creates a default VPC and Security Group in the specified
 ```bash
 campers setup --region us-east-1
 ```
+
+## Global Options
+
+These options apply to most commands (especially `run`).
+
+| Option | Description |
+|--------|-------------|
+| `-v`, `--verbose` | Enable verbose logging (useful for debugging provisioning scripts). |
+| `--plain` | Disable the TUI and use simple text output (ideal for CI/CD pipelines). |
+
+## Exit Codes

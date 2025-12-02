@@ -144,6 +144,28 @@ ami:
   image_id: ami-0123456789abcdef0
 ```
 
+### SSH Configuration (`ssh_username`)
+
+By default, Campers assumes an Ubuntu AMI (`ssh_username: ubuntu`). If you use Amazon Linux or another distro, you must set the correct user.
+
+```yaml
+camps:
+  amazon-linux:
+    ssh_username: ec2-user
+    ami:
+      query: {name: "al2023-ami-*", owner: "amazon"}
+```
+
+### Network Security (`ssh_allowed_cidr`)
+
+By default, Campers opens SSH (port 22) to the world (`0.0.0.0/0`). You can restrict this to a specific IP range for better security.
+
+```yaml
+defaults:
+  # Only allow SSH from my corporate VPN
+  ssh_allowed_cidr: "203.0.113.0/24"
+```
+
 ### Lifecycle Scripts
 
 Campers has three distinct phases for running code:
