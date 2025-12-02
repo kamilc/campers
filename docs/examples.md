@@ -131,6 +131,7 @@ camps:
       sudo usermod -aG docker ubuntu
       
     command: docker compose up
+```
 
 ## Advanced: AWS Profile Support
 
