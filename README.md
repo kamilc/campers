@@ -95,6 +95,11 @@ camps:
     # Forward TensorBoard to localhost:6006
     ports: [6006]
     ansible_playbooks: [python-setup]
+
+    # Run every time the instance starts (e.g., pull latest data)
+    startup_script: |
+      dvc pull data/
+
     # Run background monitoring and main training script
     command: |
       tensorboard --logdir logs --port 6006 &
@@ -116,6 +121,17 @@ campers run training
 
 ### Full Control
 Since you get a standard Linux instance, you can run **multiple services** at once. You might use `supervisord` or `docker compose` to spin up Jupyter, TensorBoard, and a database simultaneously. Campers will automatically forward all the ports you specify.
+
+### Environment Forwarding
+Campers securely forwards your local environment variables (like API keys) to the remote instance. You can configure exactly which variables to send using regex filters:
+
+```yaml
+defaults:
+  # Only forward specific safe variables
+  env_filter:
+    - ^AWS_.*
+    - ^WANDB_API_KEY
+```
 
 ## Quick Start
 
