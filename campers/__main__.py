@@ -314,12 +314,9 @@ class Campers:
         with self._cleanup_lock:
             self._cleanup_manager.cleanup_in_progress = self._cleanup_in_progress
 
-        old_harness = os.environ.pop("CAMPERS_HARNESS_MANAGED", None)
         try:
             return self._cleanup_manager.cleanup_resources(signum=signum, _frame=frame)
         finally:
-            if old_harness is not None:
-                os.environ["CAMPERS_HARNESS_MANAGED"] = old_harness
             with self._cleanup_lock:
                 self._cleanup_in_progress = self._cleanup_manager.cleanup_in_progress
 
