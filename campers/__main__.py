@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import queue
 import sys
@@ -419,7 +420,7 @@ class Campers:
         with open(config_file, "w") as f:
             f.write(CONFIG_TEMPLATE)
 
-        print(f"Created {config_path} configuration file.")
+        logging.info(f"Created {config_path} configuration file.", extra={"stream": "stdout"})
 
 
 if __name__ == "__main__":

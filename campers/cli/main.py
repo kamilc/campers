@@ -166,7 +166,10 @@ class CampersCLI:
                             raise
 
                         error_msg = str(e)
-                        print(f"Configuration error: {error_msg}", file=sys.stderr)
+                        logging.error(
+                            f"Configuration error: {error_msg}",
+                            extra={"stream": "stderr"},
+                        )
                         sys.exit(2)
 
             cls._cached_class = CampersCLIImpl
@@ -193,7 +196,7 @@ def handle_credentials_error(debug_mode: bool) -> None:
     if debug_mode:
         raise
 
-    print(get_aws_credentials_error_message(), file=sys.stderr)
+    logging.error(get_aws_credentials_error_message(), extra={"stream": "stderr"})
     sys.exit(1)
 
 
@@ -221,24 +224,27 @@ def handle_value_error(error: ValueError, debug_mode: bool) -> None:
         match = re.search(r"in\s+region\s+(\S+)", error_msg)
         region = match.group(1) if match else "us-east-1"
 
-        print(f"No default VPC in {region}\n", file=sys.stderr)
-        print("Fix it:", file=sys.stderr)
-        print("  campers setup\n", file=sys.stderr)
-        print("Or manually:", file=sys.stderr)
-        print(f"  aws ec2 create-default-vpc --region {region}\n", file=sys.stderr)
-        print("Or use different region:", file=sys.stderr)
-        print("  campers run --region us-west-2", file=sys.stderr)
+        logging.error(f"No default VPC in {region}", extra={"stream": "stderr"})
+        logging.error("Fix it:", extra={"stream": "stderr"})
+        logging.error("  campers setup", extra={"stream": "stderr"})
+        logging.error("Or manually:", extra={"stream": "stderr"})
+        logging.error(f"  aws ec2 create-default-vpc --region {region}", extra={"stream": "stderr"})
+        logging.error("Or use different region:", extra={"stream": "stderr"})
+        logging.error("  campers run --region us-west-2", extra={"stream": "stderr"})
         sys.exit(1)
     elif "startup_script" in error_msg and "sync_paths" in error_msg:
-        print("Configuration error\n", file=sys.stderr)
-        print("startup_script requires sync_paths to be configured\n", file=sys.stderr)
-        print("Add sync_paths to your configuration:", file=sys.stderr)
-        print("  sync_paths:", file=sys.stderr)
-        print("    - local: ./src", file=sys.stderr)
-        print("      remote: /home/ubuntu/src", file=sys.stderr)
+        logging.error("Configuration error", extra={"stream": "stderr"})
+        logging.error(
+            "startup_script requires sync_paths to be configured",
+            extra={"stream": "stderr"},
+        )
+        logging.error("Add sync_paths to your configuration:", extra={"stream": "stderr"})
+        logging.error("  sync_paths:", extra={"stream": "stderr"})
+        logging.error("    - local: ./src", extra={"stream": "stderr"})
+        logging.error("      remote: /home/ubuntu/src", extra={"stream": "stderr"})
         sys.exit(1)
     else:
-        print(f"Configuration error: {error_msg}", file=sys.stderr)
+        logging.error(f"Configuration error: {error_msg}", extra={"stream": "stderr"})
         sys.exit(2)
 
 
@@ -264,49 +270,67 @@ def handle_api_error(error: ProviderAPIError, debug_mode: bool) -> None:
     error_msg = str(error)
 
     if error_code == "UnauthorizedOperation":
-        print("Insufficient IAM permissions\n", file=sys.stderr)
-        print(
+        logging.error("Insufficient IAM permissions", extra={"stream": "stderr"})
+        logging.error(
             "Your cloud credentials don't have the required permissions.",
-            file=sys.stderr,
+            extra={"stream": "stderr"},
         )
-        print("Contact your cloud administrator to grant:", file=sys.stderr)
-        print(
+        logging.error("Contact your cloud administrator to grant:", extra={"stream": "stderr"})
+        logging.error(
             "  - Compute permissions (DescribeInstances, RunInstances, TerminateInstances)",
-            file=sys.stderr,
+            extra={"stream": "stderr"},
         )
-        print("  - VPC permissions (DescribeVpcs, CreateDefaultVpc)", file=sys.stderr)
-        print(
+        logging.error(
+            "  - VPC permissions (DescribeVpcs, CreateDefaultVpc)",
+            extra={"stream": "stderr"},
+        )
+        logging.error(
             "  - Key Pair permissions (CreateKeyPair, DeleteKeyPair, DescribeKeyPairs)",
-            file=sys.stderr,
+            extra={"stream": "stderr"},
         )
-        print("  - Security Group permissions", file=sys.stderr)
+        logging.error("  - Security Group permissions", extra={"stream": "stderr"})
     elif error_code == "InvalidParameterValue" and "instance type" in error_msg.lower():
-        print("Invalid instance type\n", file=sys.stderr)
-        print("This usually means:", file=sys.stderr)
-        print("  - Instance type not available in this region", file=sys.stderr)
-        print("  - Typo in instance type name\n", file=sys.stderr)
-        print("Fix it:", file=sys.stderr)
-        print("  campers doctor", file=sys.stderr)
-        print("  campers run --instance-type t3.medium", file=sys.stderr)
+        logging.error("Invalid instance type", extra={"stream": "stderr"})
+        logging.error("This usually means:", extra={"stream": "stderr"})
+        logging.error("  - Instance type not available in this region", extra={"stream": "stderr"})
+        logging.error("  - Typo in instance type name", extra={"stream": "stderr"})
+        logging.error("Fix it:", extra={"stream": "stderr"})
+        logging.error("  campers doctor", extra={"stream": "stderr"})
+        logging.error("  campers run --instance-type t3.medium", extra={"stream": "stderr"})
     elif error_code in ["InstanceLimitExceeded", "RequestLimitExceeded"]:
-        print("Cloud quota exceeded\n", file=sys.stderr)
-        print("This usually means:", file=sys.stderr)
-        print("  - Too many instances running", file=sys.stderr)
-        print("  - Need to request quota increase\n", file=sys.stderr)
-        print("Fix it:", file=sys.stderr)
-        print("  https://console.aws.amazon.com/servicequotas/", file=sys.stderr)
-        print("  campers list", file=sys.stderr)
+        logging.error("Cloud quota exceeded", extra={"stream": "stderr"})
+        logging.error("This usually means:", extra={"stream": "stderr"})
+        logging.error("  - Too many instances running", extra={"stream": "stderr"})
+        logging.error("  - Need to request quota increase", extra={"stream": "stderr"})
+        logging.error("Fix it:", extra={"stream": "stderr"})
+        logging.error("  https://console.aws.amazon.com/servicequotas/", extra={"stream": "stderr"})
+        logging.error("  campers list", extra={"stream": "stderr"})
     elif error_code in ["ExpiredToken", "RequestExpired", "ExpiredTokenException"]:
-        print("Cloud credentials have expired\n", file=sys.stderr)
-        print("This usually means:", file=sys.stderr)
-        print("  - Your temporary credentials (STS) have expired", file=sys.stderr)
-        print("  - Your session token needs to be refreshed\n", file=sys.stderr)
-        print("Fix it:", file=sys.stderr)
-        print("  aws sso login           # If using AWS SSO", file=sys.stderr)
-        print("  aws configure           # Re-configure credentials", file=sys.stderr)
-        print("  # Or refresh your temporary credentials", file=sys.stderr)
+        logging.error("Cloud credentials have expired", extra={"stream": "stderr"})
+        logging.error("This usually means:", extra={"stream": "stderr"})
+        logging.error(
+            "  - Your temporary credentials (STS) have expired",
+            extra={"stream": "stderr"},
+        )
+        logging.error(
+            "  - Your session token needs to be refreshed",
+            extra={"stream": "stderr"},
+        )
+        logging.error("Fix it:", extra={"stream": "stderr"})
+        logging.error(
+            "  aws sso login           # If using AWS SSO",
+            extra={"stream": "stderr"},
+        )
+        logging.error(
+            "  aws configure           # Re-configure credentials",
+            extra={"stream": "stderr"},
+        )
+        logging.error(
+            "  # Or refresh your temporary credentials",
+            extra={"stream": "stderr"},
+        )
     else:
-        print(f"Cloud API error: {error_msg}", file=sys.stderr)
+        logging.error(f"Cloud API error: {error_msg}", extra={"stream": "stderr"})
 
     sys.exit(1)
 
@@ -327,15 +351,15 @@ def handle_ssh_error(debug_mode: bool) -> None:
     if debug_mode:
         raise
 
-    print("SSH connectivity error\n", file=sys.stderr)
-    print("This usually means:", file=sys.stderr)
-    print("  - Instance not yet ready", file=sys.stderr)
-    print("  - Security group blocking SSH", file=sys.stderr)
-    print("  - Network connectivity issues\n", file=sys.stderr)
-    print("Debugging steps:", file=sys.stderr)
-    print("  1. Wait 30-60 seconds and try again", file=sys.stderr)
-    print("  2. Check security group allows port 22", file=sys.stderr)
-    print("  3. Verify instance is running: campers list", file=sys.stderr)
+    logging.error("SSH connectivity error", extra={"stream": "stderr"})
+    logging.error("This usually means:", extra={"stream": "stderr"})
+    logging.error("  - Instance not yet ready", extra={"stream": "stderr"})
+    logging.error("  - Security group blocking SSH", extra={"stream": "stderr"})
+    logging.error("  - Network connectivity issues", extra={"stream": "stderr"})
+    logging.error("Debugging steps:", extra={"stream": "stderr"})
+    logging.error("  1. Wait 30-60 seconds and try again", extra={"stream": "stderr"})
+    logging.error("  2. Check security group allows port 22", extra={"stream": "stderr"})
+    logging.error("  3. Verify instance is running: campers list", extra={"stream": "stderr"})
     sys.exit(1)
 
 
@@ -357,7 +381,7 @@ def handle_runtime_error(error: RuntimeError, debug_mode: bool) -> None:
     if debug_mode:
         raise
 
-    print(f"Unexpected error: {error}", file=sys.stderr)
+    logging.error(f"Unexpected error: {error}", extra={"stream": "stderr"})
     sys.exit(1)
 
 

@@ -649,7 +649,9 @@ def run_tui_test_with_machine(
                                 final_status = "unknown"
                                 try:
                                     log_lines, log_text = extract_log_lines(app)
-                                    logger.info(f"Successfully extracted {len(log_lines)} log lines")
+                                    logger.info(
+                                        f"Successfully extracted {len(log_lines)} log lines"
+                                    )
                                 except Exception as log_extract_error:
                                     logger.info(
                                         f"Failed to extract log lines: {log_extract_error}. "
@@ -662,7 +664,7 @@ def run_tui_test_with_machine(
                                 except Exception as status_error:
                                     logger.warning(
                                         f"Failed to extract status widget: {status_error}",
-                                        exc_info=True
+                                        exc_info=True,
                                     )
                                     final_status = "extraction_failed"
 

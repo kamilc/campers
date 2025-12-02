@@ -116,13 +116,16 @@ class LifecycleManager:
                 "Ambiguous machine config '%s'; matches multiple instances.",
                 name_or_id,
             )
-            print(
+            logging.error(
                 f"Multiple instances found. Please use a specific instance ID to {operation_name}:",
-                file=sys.stderr,
+                extra={"stream": "stderr"},
             )
 
             for match in matches:
-                print(f"  {match['instance_id']} ({match['region']})", file=sys.stderr)
+                logging.error(
+                    f"  {match['instance_id']} ({match['region']})",
+                    extra={"stream": "stderr"},
+                )
 
             sys.exit(1)
 
@@ -155,7 +158,7 @@ class LifecycleManager:
             instances = compute_provider.list_instances(region_filter=region)
 
             if not instances:
-                print("No campers-managed instances found")
+                logging.info("No campers-managed instances found", extra={"stream": "stdout"})
                 return
 
             (
@@ -167,7 +170,7 @@ class LifecycleManager:
 
             try:
                 if not pricing_service.pricing_available:
-                    print("ℹ️  Pricing unavailable\n")
+                    logging.info("ℹ️  Pricing unavailable", extra={"stream": "stdout"})
 
                 total_monthly_cost = 0.0
                 costs_available = False
@@ -195,13 +198,13 @@ class LifecycleManager:
                     inst["volume_size"] = volume_size
 
                 if region:
-                    print(f"Instances in {region}:")
+                    logging.info(f"Instances in {region}:", extra={"stream": "stdout"})
                     header = (
                         f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} "
                         f"{'LAUNCHED':<12} {'COST/MONTH':<21}"
                     )
-                    print(header)
-                    print("-" * 100)
+                    logging.info(header, extra={"stream": "stdout"})
+                    logging.info("-" * 100, extra={"stream": "stdout"})
 
                     for inst in instances:
                         name = self.truncate_name(inst["camp_config"])
@@ -211,14 +214,14 @@ class LifecycleManager:
                             f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
                             f"{inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
                         )
-                        print(row)
+                        logging.info(row, extra={"stream": "stdout"})
                 else:
                     header = (
                         f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} "
                         f"{'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
                     )
-                    print(header)
-                    print("-" * 115)
+                    logging.info(header, extra={"stream": "stdout"})
+                    logging.info("-" * 115, extra={"stream": "stdout"})
 
                     for inst in instances:
                         name = self.truncate_name(inst["camp_config"])
@@ -229,19 +232,28 @@ class LifecycleManager:
                             f"{inst['region']:<15} {inst['instance_type']:<15} {launched:<12} "
                             f"{cost_str:<21}"
                         )
-                        print(row)
+                        logging.info(row, extra={"stream": "stdout"})
 
                 if costs_available:
-                    print(f"\nTotal estimated cost: {format_cost(total_monthly_cost)}")
+                    logging.info(
+                        f"Total estimated cost: {format_cost(total_monthly_cost)}",
+                        extra={"stream": "stdout"},
+                    )
             finally:
                 pricing_service.close()
 
         except ProviderCredentialsError:
-            print("Error: Cloud provider credentials not found. Please configure credentials.")
+            logging.error(
+                "Error: Cloud provider credentials not found. Please configure credentials.",
+                extra={"stream": "stderr"},
+            )
             raise
         except ProviderAPIError as e:
             if e.error_code == "UnauthorizedOperation":
-                print("Error: Insufficient cloud provider permissions to list instances.")
+                logging.error(
+                    "Error: Insufficient cloud provider permissions to list instances.",
+                    extra={"stream": "stderr"},
+                )
                 raise
 
             raise
@@ -273,7 +285,7 @@ class LifecycleManager:
             state = target.get("state", "unknown")
 
             if state == "stopped":
-                print("Instance already stopped")
+                logging.info("Instance already stopped", extra={"stream": "stdout"})
                 return
 
             if state == "stopping":
@@ -336,20 +348,30 @@ class LifecycleManager:
 
                 regional_manager.stop_instance(instance_id)
 
-                print(f"\nInstance {instance_id} has been successfully stopped.")
+                logging.info(
+                    f"Instance {instance_id} has been successfully stopped.",
+                    extra={"stream": "stdout"},
+                )
 
                 if running_cost is not None and stopped_cost is not None:
                     savings = running_cost - stopped_cost
                     savings_pct = (savings / running_cost * 100) if running_cost > 0 else 0
 
-                    print("\n💰 Cost Impact:")
-                    print(f"  Previous: {format_cost(running_cost)}")
-                    print(f"  New: {format_cost(stopped_cost)}")
-                    print(f"  Savings: {format_cost(savings)} (~{savings_pct:.0f}% reduction)")
+                    logging.info("\U0001F4B0 Cost Impact:", extra={"stream": "stdout"})
+                    logging.info(
+                        f"  Previous: {format_cost(running_cost)}", extra={"stream": "stdout"}
+                    )
+                    logging.info(f"  New: {format_cost(stopped_cost)}", extra={"stream": "stdout"})
+                    logging.info(
+                        f"  Savings: {format_cost(savings)} (~{savings_pct:.0f}% reduction)",
+                        extra={"stream": "stdout"},
+                    )
                 else:
-                    print("\n(Cost information unavailable)")
+                    logging.info("(Cost information unavailable)", extra={"stream": "stdout"})
 
-                print(f"\n  Restart with: campers start {instance_id}")
+                logging.info(
+                    f"Restart with: campers start {instance_id}", extra={"stream": "stdout"}
+                )
             finally:
                 pricing_service.close()
 
@@ -407,8 +429,8 @@ class LifecycleManager:
 
             if state == "running":
                 ip = target.get("public_ip", "N/A")
-                print("Instance already running")
-                print(f"  Public IP: {ip}")
+                logging.info("Instance already running", extra={"stream": "stdout"})
+                logging.info(f"  Public IP: {ip}", extra={"stream": "stdout"})
                 return
 
             if state == "pending":
@@ -477,20 +499,30 @@ class LifecycleManager:
                 instance_details = regional_manager.start_instance(instance_id)
 
                 new_ip = instance_details.get("public_ip", "N/A")
-                print(f"\nInstance {instance_id} has been successfully started.")
-                print(f"  Public IP: {new_ip}")
+                logging.info(
+                    f"Instance {instance_id} has been successfully started.",
+                    extra={"stream": "stdout"},
+                )
+                logging.info(f"  Public IP: {new_ip}", extra={"stream": "stdout"})
 
                 if stopped_cost is not None and running_cost is not None:
                     increase = running_cost - stopped_cost
 
-                    print("\n💰 Cost Impact:")
-                    print(f"  Previous: {format_cost(stopped_cost)}")
-                    print(f"  New: {format_cost(running_cost)}")
-                    print(f"  Increase: {format_cost(increase)}/month")
+                    logging.info("\U0001F4B0 Cost Impact:", extra={"stream": "stdout"})
+                    logging.info(
+                        f"  Previous: {format_cost(stopped_cost)}", extra={"stream": "stdout"}
+                    )
+                    logging.info(f"  New: {format_cost(running_cost)}", extra={"stream": "stdout"})
+                    logging.info(
+                        f"  Increase: {format_cost(increase)}/month", extra={"stream": "stdout"}
+                    )
                 else:
-                    print("\n(Cost information unavailable)")
+                    logging.info("(Cost information unavailable)", extra={"stream": "stdout"})
 
-                print("\n  To establish SSH/Mutagen/ports: campers run <machine>")
+                logging.info(
+                    "To establish SSH/Mutagen/ports: campers run <machine>",
+                    extra={"stream": "stdout"},
+                )
             finally:
                 pricing_service.close()
 
@@ -586,15 +618,24 @@ class LifecycleManager:
             else:
                 uptime_str = "Unknown"
 
-            print(f"Instance Information: {target.get('camp_config', 'N/A')}")
-            print(f"  Instance ID: {instance_id}")
-            print(f"  State: {target.get('state', 'Unknown')}")
-            print(f"  Instance Type: {target.get('instance_type', 'N/A')}")
-            print(f"  Region: {target['region']}")
-            print(f"  Launch Time: {launch_time_str}")
-            print(f"  Unique ID: {unique_id if unique_id else 'N/A'}")
-            print(f"  Key File: {key_file if key_file else 'N/A'}")
-            print(f"  Uptime: {uptime_str}")
+            logging.info(
+                f"Instance Information: {target.get('camp_config', 'N/A')}",
+                extra={"stream": "stdout"},
+            )
+            logging.info(f"  Instance ID: {instance_id}", extra={"stream": "stdout"})
+            logging.info(f"  State: {target.get('state', 'Unknown')}", extra={"stream": "stdout"})
+            logging.info(
+                f"  Instance Type: {target.get('instance_type', 'N/A')}", extra={"stream": "stdout"}
+            )
+            logging.info(f"  Region: {target['region']}", extra={"stream": "stdout"})
+            logging.info(f"  Launch Time: {launch_time_str}", extra={"stream": "stdout"})
+            logging.info(
+                f"  Unique ID: {unique_id if unique_id else 'N/A'}", extra={"stream": "stdout"}
+            )
+            logging.info(
+                f"  Key File: {key_file if key_file else 'N/A'}", extra={"stream": "stdout"}
+            )
+            logging.info(f"  Uptime: {uptime_str}", extra={"stream": "stdout"})
 
         except ProviderCredentialsError:
             self.log_and_print_error(
@@ -644,7 +685,10 @@ class LifecycleManager:
             regional_manager = self.compute_provider_factory(region=target["region"])
             regional_manager.terminate_instance(target["instance_id"])
 
-            print(f"Instance {target['instance_id']} has been successfully terminated.")
+            logging.info(
+                f"Instance {target['instance_id']} has been successfully terminated.",
+                extra={"stream": "stdout"},
+            )
         except RuntimeError as e:
             if target is not None:
                 self.log_and_print_error(

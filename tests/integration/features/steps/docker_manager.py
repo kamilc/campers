@@ -87,10 +87,14 @@ class EC2ContainerManager:
                         banner = sock.recv(1024)
                         sock.close()
                         if banner:
-                            logger.debug(f"SSH server ready on port {port} (attempt {attempt + 1}) - received banner")
+                            logger.debug(
+                                f"SSH server ready on port {port} (attempt {attempt + 1}) - received banner"
+                            )
                             return True
                     except Exception as e:
-                        logger.debug(f"SSH banner read failed on port {port} (attempt {attempt + 1}): {e}")
+                        logger.debug(
+                            f"SSH banner read failed on port {port} (attempt {attempt + 1}): {e}"
+                        )
                         sock.close()
                 else:
                     sock.close()

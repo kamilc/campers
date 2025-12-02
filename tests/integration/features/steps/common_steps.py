@@ -12,6 +12,7 @@ from pathlib import Path
 from behave import given, then, when
 from behave.runner import Context
 from botocore.exceptions import ClientError
+from campers.logging import StreamFormatter, StreamRoutingFilter
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,19 @@ def execute_command_direct(
     root_logger = logging.getLogger()
     original_log_level = root_logger.level
     root_logger.setLevel(logging.INFO)
+
+    stdout_handler = logging.StreamHandler(stdout_capture)
+    stdout_handler.setFormatter(StreamFormatter("%(message)s"))
+    stdout_handler.addFilter(StreamRoutingFilter("stdout"))
+
+    stderr_handler = logging.StreamHandler(stderr_capture)
+    stderr_handler.setFormatter(StreamFormatter("%(message)s"))
+    stderr_handler.addFilter(StreamRoutingFilter("stderr"))
+
+    original_handlers = root_logger.handlers[:]
+    root_logger.handlers = []
+    root_logger.addHandler(stdout_handler)
+    root_logger.addHandler(stderr_handler)
 
     def timeout_handler(signum, frame):
         raise TimeoutError(f"Command '{command}' execution timed out after 180 seconds")
@@ -184,6 +198,7 @@ def execute_command_direct(
         signal.signal(signal.SIGALRM, old_handler)
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+        root_logger.handlers = original_handlers
         root_logger.setLevel(original_log_level)
         context.stdout = stdout_capture.getvalue()
         context.stderr = stderr_capture.getvalue()

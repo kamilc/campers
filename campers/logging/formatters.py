@@ -4,10 +4,13 @@ import logging
 
 
 class StreamFormatter(logging.Formatter):
-    """Logging formatter that prepends stream tags based on extra parameter."""
+    """Logging formatter that returns just the message without prefixes."""
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format log record with stream prefix if present.
+        """Format log record.
+
+        Stream routing is handled by StreamRoutingFilter, so the formatter
+        just returns the formatted message without any prefix.
 
         Parameters
         ----------
@@ -17,14 +20,6 @@ class StreamFormatter(logging.Formatter):
         Returns
         -------
         str
-            Formatted log message with optional stream prefix
+            Formatted log message
         """
-        msg = super().format(record)
-        stream = getattr(record, "stream", None)
-
-        if stream == "stdout":
-            return f"[stdout] {msg}"
-        elif stream == "stderr":
-            return f"[stderr] {msg}"
-
-        return msg
+        return super().format(record)

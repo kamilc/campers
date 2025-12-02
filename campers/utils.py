@@ -4,7 +4,6 @@ import fcntl
 import logging
 import os
 import subprocess
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -154,7 +153,7 @@ def format_time_ago(dt: datetime) -> str:
 
 
 def log_and_print_error(message: str, *args: Any) -> None:
-    """Log error message and print to stderr.
+    """Log error message to stderr via logging.
 
     Parameters
     ----------
@@ -163,9 +162,7 @@ def log_and_print_error(message: str, *args: Any) -> None:
     *args : Any
         Format arguments for message
     """
-    logging.error(message, *args)
-    formatted_msg = message % args if args else message
-    print(f"Error: {formatted_msg}", file=sys.stderr)
+    logging.error(message, *args, extra={"stream": "stderr"})
 
 
 def truncate_name(name: str, max_width: int = DEFAULT_NAME_COLUMN_WIDTH) -> str:

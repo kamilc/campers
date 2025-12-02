@@ -106,12 +106,10 @@ def setup_mock_resources_with_cleanup_tracking(context: Context) -> None:
     context.mock_campers._resources["ssh_manager"].close.side_effect = (
         lambda: context.cleanup_order.append("ssh")
     )
-    compute_provider_mock.stop_instance.side_effect = (
-        lambda id: context.cleanup_order.append("ec2")
-    )
+    compute_provider_mock.stop_instance.side_effect = lambda id: context.cleanup_order.append("ec2")
     compute_provider_mock.get_volume_size.return_value = 50
-    compute_provider_mock.terminate_instance.side_effect = (
-        lambda id: context.cleanup_order.append("ec2")
+    compute_provider_mock.terminate_instance.side_effect = lambda id: context.cleanup_order.append(
+        "ec2"
     )
 
 

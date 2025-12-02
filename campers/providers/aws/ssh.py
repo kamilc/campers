@@ -60,21 +60,22 @@ def get_aws_ssh_connection_info(
         effective_key_file = ssh_key_file if ssh_key_file else key_file
         logger.info(
             "Using harness SSH config for %s: host=%s, port=%s, username=%s, key=%s",
-            instance_id, ssh_host, ssh_port, ssh_username, effective_key_file
+            instance_id,
+            ssh_host,
+            ssh_port,
+            ssh_username,
+            effective_key_file,
         )
         return SSHConnectionInfo(
             host=ssh_host,
             port=ssh_port,
             key_file=effective_key_file,
             username=ssh_username,
-            tag_key_file=ssh_key_file
+            tag_key_file=ssh_key_file,
         )
 
     if public_ip:
-        logger.info(
-            "Using public IP for instance %s: host=%s, port=22",
-            instance_id, public_ip
-        )
+        logger.info("Using public IP for instance %s: host=%s, port=22", instance_id, public_ip)
         return SSHConnectionInfo(host=public_ip, port=22, key_file=key_file)
 
     raise ValueError(
@@ -104,7 +105,9 @@ def _get_ssh_host_from_tags(instance_id: str) -> str | None:
     except Exception as e:
         logger.debug(
             "Failed to retrieve CampersSSHHost tag for instance %s: %s",
-            instance_id, e, exc_info=True
+            instance_id,
+            e,
+            exc_info=True,
         )
         return None
 
@@ -129,13 +132,14 @@ def _get_ssh_port_from_tags(instance_id: str) -> int | None:
             return int(port_str)
     except (ValueError, TypeError) as e:
         logger.debug(
-            "Failed to parse CampersSSHPort tag for instance %s: %s",
-            instance_id, e, exc_info=True
+            "Failed to parse CampersSSHPort tag for instance %s: %s", instance_id, e, exc_info=True
         )
     except Exception as e:
         logger.debug(
             "Failed to retrieve CampersSSHPort tag for instance %s: %s",
-            instance_id, e, exc_info=True
+            instance_id,
+            e,
+            exc_info=True,
         )
     return None
 
@@ -160,7 +164,9 @@ def _get_ssh_username_from_tags(instance_id: str) -> str | None:
     except Exception as e:
         logger.debug(
             "Failed to retrieve CampersSSHUsername tag for instance %s: %s",
-            instance_id, e, exc_info=True
+            instance_id,
+            e,
+            exc_info=True,
         )
         return None
 
@@ -185,7 +191,9 @@ def _get_ssh_key_file_from_tags(instance_id: str) -> str | None:
     except Exception as e:
         logger.debug(
             "Failed to retrieve CampersSSHKeyFile tag for instance %s: %s",
-            instance_id, e, exc_info=True
+            instance_id,
+            e,
+            exc_info=True,
         )
         return None
 
@@ -220,14 +228,13 @@ def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
 
     logger.debug(
         "Fetching instance tags: endpoint=%s, region=%s, instance_id=%s, tag_key=%s",
-        endpoint_url, region, instance_id, tag_key
+        endpoint_url,
+        region,
+        instance_id,
+        tag_key,
     )
 
-    ec2_client = boto3.client(
-        "ec2",
-        endpoint_url=endpoint_url,
-        region_name=region
-    )
+    ec2_client = boto3.client("ec2", endpoint_url=endpoint_url, region_name=region)
 
     max_retries = 60
     retry_delay_sec = 0.1
@@ -245,7 +252,11 @@ def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
 
             logger.debug(
                 "Instance %s has %d tags (attempt %d/%d): %s",
-                instance_id, len(tags), attempt + 1, max_retries, tags
+                instance_id,
+                len(tags),
+                attempt + 1,
+                max_retries,
+                tags,
             )
 
             for tag in tags:
@@ -257,17 +268,29 @@ def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
             if attempt < max_retries - 1:
                 logger.debug(
                     "Tag %s not found for instance %s on attempt %d/%d; retrying in %.0fms",
-                    tag_key, instance_id, attempt + 1, max_retries, retry_delay_sec * 1000
+                    tag_key,
+                    instance_id,
+                    attempt + 1,
+                    max_retries,
+                    retry_delay_sec * 1000,
                 )
                 time.sleep(retry_delay_sec)
             else:
-                logger.debug("Tag %s not found for instance %s after %d attempts", tag_key, instance_id, max_retries)
+                logger.debug(
+                    "Tag %s not found for instance %s after %d attempts",
+                    tag_key,
+                    instance_id,
+                    max_retries,
+                )
                 return None
 
         except Exception as e:
             logger.debug(
                 "Error fetching tags for instance %s on attempt %d/%d: %s",
-                instance_id, attempt + 1, max_retries, e
+                instance_id,
+                attempt + 1,
+                max_retries,
+                e,
             )
             if attempt < max_retries - 1:
                 time.sleep(retry_delay_sec)

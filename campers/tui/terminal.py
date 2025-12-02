@@ -70,7 +70,7 @@ def detect_terminal_background() -> TerminalBackground:
                         response += char
                         if response.endswith("\033\\") or response.endswith("\007"):
                             break
-                    except (OSError, IOError):
+                    except OSError:
                         break
 
             if match := re.search(

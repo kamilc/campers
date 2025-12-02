@@ -95,20 +95,15 @@ class SetupManager:
         try:
             sts_client = boto3.client("sts", region_name=effective_region)
             sts_client.get_caller_identity()
-            logger.info("AWS credentials found")
-            print("AWS credentials found")
+            logger.info("AWS credentials found", extra={"stream": "stdout"})
             return True
         except NoCredentialsError:
-            logger.info("AWS credentials not found\n")
-            logger.info("Fix it:")
-            logger.info("  aws configure")
-            print("AWS credentials not found")
-            print("Fix it:")
-            print("  aws configure")
+            logger.error("AWS credentials not found", extra={"stream": "stderr"})
+            logger.error("Fix it:", extra={"stream": "stderr"})
+            logger.error("  aws configure", extra={"stream": "stderr"})
             return False
         except ClientError:
-            logger.info("AWS credentials found")
-            print("AWS credentials found")
+            logger.info("AWS credentials found", extra={"stream": "stdout"})
             return True
         finally:
             if sts_client:
@@ -223,7 +218,10 @@ class SetupManager:
             for attr in response.get("AccountAttributes", []):
                 if attr["AttributeName"] == "max-instances":
                     max_instances = attr["AttributeValues"][0]["AttributeValue"]
-                    logger.info(f"Cloud instance limit: {max_instances} instances")
+                    logger.info(
+                        f"Cloud instance limit: {max_instances} instances",
+                        extra={"stream": "stdout"},
+                    )
 
             instances = ec2_client.describe_instances()
             running_count = sum(
@@ -232,7 +230,10 @@ class SetupManager:
                 for inst in r["Instances"]
                 if inst["State"]["Name"] in ["running", "pending"]
             )
-            logger.info(f"Currently running cloud instances: {running_count}")
+            logger.info(
+                f"Currently running cloud instances: {running_count}",
+                extra={"stream": "stdout"},
+            )
 
         except ClientError as e:
             logging.warning("Could not check service quotas: %s", e)
@@ -251,11 +252,14 @@ class SetupManager:
             response = ec2_client.describe_availability_zones()
             zones = response.get("AvailabilityZones", [])
 
-            logger.info(f"\nRegional availability in {effective_region}:")
+            logger.info(
+                f"Regional availability in {effective_region}:",
+                extra={"stream": "stdout"},
+            )
             for zone in zones:
                 status = zone["State"]
                 zone_name = zone["ZoneName"]
-                logger.info(f"  {zone_name}: {status}")
+                logger.info(f"  {zone_name}: {status}", extra={"stream": "stdout"})
 
         except ClientError as e:
             logging.warning("Could not check regional availability: %s", e)
@@ -297,8 +301,10 @@ class SetupManager:
         """
         effective_region = self.get_effective_region(region)
 
-        logger.info(f"Checking AWS prerequisites for {effective_region}...\n")
-        print(f"Checking AWS prerequisites for {effective_region}...")
+        logger.info(
+            f"Checking AWS prerequisites for {effective_region}...",
+            extra={"stream": "stdout"},
+        )
 
         if not self.check_aws_credentials(effective_region):
             sys.exit(1)
@@ -309,46 +315,63 @@ class SetupManager:
             check_result = self.check_infrastructure(ec2_client, effective_region)
 
             if not check_result.vpc_exists:
-                logger.info(f"No default VPC found in {effective_region}\n")
+                logger.info(
+                    f"No default VPC found in {effective_region}",
+                    extra={"stream": "stdout"},
+                )
 
                 response = input("Create default VPC now? (y/n): ")
 
                 if response.lower() == "y":
                     try:
                         ec2_client.create_default_vpc()
-                        logger.info(f"Default VPC created in {effective_region}")
-                        print(f"Default VPC created in {effective_region}")
+                        logger.info(
+                            f"Default VPC created in {effective_region}",
+                            extra={"stream": "stdout"},
+                        )
                     except ClientError as e:
                         error_code = e.response.get("Error", {}).get("Code", "")
                         if error_code == "DefaultVpcAlreadyExists":
-                            logger.info(f"Default VPC created in {effective_region}")
-                            print(f"Default VPC created in {effective_region}")
+                            logger.info(
+                                f"Default VPC created in {effective_region}",
+                                extra={"stream": "stdout"},
+                            )
                         else:
-                            logger.info(f"\nFailed to create VPC: {e}")
-                            logger.info("\nManual creation:")
-                            logger.info(f"  aws ec2 create-default-vpc --region {effective_region}")
-                            print(f"\nFailed to create VPC: {e}")
-                            print("\nManual creation:")
-                            print(f"  aws ec2 create-default-vpc --region {effective_region}")
+                            logger.error(f"Failed to create VPC: {e}", extra={"stream": "stderr"})
+                            logger.error("Manual creation:", extra={"stream": "stderr"})
+                            logger.error(
+                                f"  aws ec2 create-default-vpc --region {effective_region}",
+                                extra={"stream": "stderr"},
+                            )
                             sys.exit(1)
                 else:
-                    logger.info("\nSkipping VPC creation.")
-                    logger.info("You can create it later with:")
-                    logger.info(f"  aws ec2 create-default-vpc --region {effective_region}")
+                    logger.info("Skipping VPC creation.", extra={"stream": "stdout"})
+                    logger.info("You can create it later with:", extra={"stream": "stdout"})
+                    logger.info(
+                        f"  aws ec2 create-default-vpc --region {effective_region}",
+                        extra={"stream": "stdout"},
+                    )
                     return
             else:
-                logger.info(f"Default VPC exists in {effective_region}")
-                print(f"Default VPC exists in {effective_region}")
+                logger.info(
+                    f"Default VPC exists in {effective_region}",
+                    extra={"stream": "stdout"},
+                )
 
             if check_result.missing_permissions:
                 missing_perms = ", ".join(check_result.missing_permissions)
-                logger.info(f"Missing IAM permissions: {missing_perms}")
-                logger.info("\nSome operations may fail without these permissions.")
+                logger.info(
+                    f"Missing IAM permissions: {missing_perms}",
+                    extra={"stream": "stdout"},
+                )
+                logger.info(
+                    "Some operations may fail without these permissions.",
+                    extra={"stream": "stdout"},
+                )
             else:
-                logger.info("IAM permissions verified")
+                logger.info("IAM permissions verified", extra={"stream": "stdout"})
 
-            logger.info("\nSetup complete! Run: campers run")
-            print("Setup complete!")
+            logger.info("Setup complete! Run: campers run", extra={"stream": "stdout"})
         finally:
             ec2_client.close()
 
@@ -367,8 +390,7 @@ class SetupManager:
         """
         effective_region = self.get_effective_region(region)
 
-        logger.info("Running diagnostics for %s...", effective_region)
-        print(f"Running diagnostics for {effective_region}...")
+        logger.info("Running diagnostics for %s...", effective_region, extra={"stream": "stdout"})
 
         if not self.check_aws_credentials(effective_region):
             sys.exit(1)
@@ -380,38 +402,34 @@ class SetupManager:
 
             if not check_result.vpc_exists:
                 message = f"No default VPC in {effective_region}"
-                logger.info(message)
-                print(message)
-                print("Fix it:")
-                print("  campers setup")
-                print("Or manually:")
-                print(f"  aws ec2 create-default-vpc --region {effective_region}")
-                logger.info("Fix it:")
-                logger.info("  campers setup")
-                logger.info("Or manually:")
-                logger.info("  aws ec2 create-default-vpc --region %s", effective_region)
+                logger.info(message, extra={"stream": "stdout"})
+                logger.info("Fix it:", extra={"stream": "stdout"})
+                logger.info("  campers setup", extra={"stream": "stdout"})
+                logger.info("Or manually:", extra={"stream": "stdout"})
+                logger.info(
+                    f"  aws ec2 create-default-vpc --region {effective_region}",
+                    extra={"stream": "stdout"},
+                )
             else:
                 message = f"Default VPC exists in {effective_region}"
-                logger.info(message)
-                print(message)
+                logger.info(message, extra={"stream": "stdout"})
 
             if check_result.missing_permissions:
                 perms_str = ", ".join(check_result.missing_permissions)
-                logger.info("Missing IAM permissions: %s", perms_str)
-                print(f"Missing IAM permissions: {perms_str}")
-                logger.info("Required permissions:")
-                print("Required permissions:")
+                logger.info(
+                    "Missing IAM permissions: %s",
+                    perms_str,
+                    extra={"stream": "stdout"},
+                )
+                logger.info("Required permissions:", extra={"stream": "stdout"})
                 for perm in check_result.missing_permissions:
-                    logger.info("  - %s", perm)
-                    print(f"  - {perm}")
+                    logger.info("  - %s", perm, extra={"stream": "stdout"})
             else:
-                logger.info("IAM permissions verified")
-                print("IAM permissions verified")
+                logger.info("IAM permissions verified", extra={"stream": "stdout"})
 
             self.check_service_quotas(ec2_client, effective_region)
             self.check_regional_availability(ec2_client, effective_region)
 
-            logger.info("Diagnostics complete.")
-            print("Diagnostics complete.")
+            logger.info("Diagnostics complete.", extra={"stream": "stdout"})
         finally:
             ec2_client.close()
