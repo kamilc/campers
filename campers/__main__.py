@@ -27,7 +27,7 @@ from campers.services.ssh import SSHManager  # noqa: E402
 from campers.services.sync import MutagenManager  # noqa: E402
 from campers.templates import CONFIG_TEMPLATE  # noqa: E402
 from campers.tui import CampersTUI  # noqa: E402
-from campers.utils import log_and_print_error, truncate_name  # noqa: E402
+from campers.utils import truncate_name  # noqa: E402
 
 
 class Campers:
@@ -126,7 +126,6 @@ class Campers:
             self._lifecycle_manager = LifecycleManager(
                 config_loader=self._config_loader,
                 compute_provider_factory=self.compute_provider_factory,
-                log_and_print_error=log_and_print_error,
                 truncate_name=truncate_name,
             )
         return self._lifecycle_manager
@@ -409,9 +408,10 @@ class Campers:
         config_file = Path(config_path)
 
         if config_file.exists() and not force:
-            log_and_print_error(
+            logging.error(
                 "%s already exists. Use --force to overwrite.",
                 config_path,
+                extra={"stream": "stderr"},
             )
             sys.exit(1)
 

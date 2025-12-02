@@ -23,8 +23,6 @@ class LifecycleManager:
         Configuration loader instance
     compute_provider_factory : Callable[..., ComputeProvider]
         Factory function to create compute provider instances
-    log_and_print_error : Callable[[str, *Any], None]
-        Function to log and print errors to stderr
     truncate_name : Callable[[str, int], str]
         Function to truncate instance names for display
     """
@@ -33,12 +31,10 @@ class LifecycleManager:
         self,
         config_loader: ConfigLoader,
         compute_provider_factory: Callable[..., ComputeProvider],
-        log_and_print_error: Callable[..., None],
         truncate_name: Callable[[str, int], str],
     ) -> None:
         self.config_loader = config_loader
         self.compute_provider_factory = compute_provider_factory
-        self.log_and_print_error = log_and_print_error
         self.truncate_name = truncate_name
 
     def _get_pricing_service_and_functions(
@@ -108,7 +104,11 @@ class LifecycleManager:
         )
 
         if not matches:
-            self.log_and_print_error("No campers-managed instances matched '%s'.", name_or_id)
+            logging.error(
+                "No campers-managed instances matched '%s'.",
+                name_or_id,
+                extra={"stream": "stderr"},
+            )
             sys.exit(1)
 
         if len(matches) > 1:
@@ -289,26 +289,29 @@ class LifecycleManager:
                 return
 
             if state == "stopping":
-                self.log_and_print_error(
+                logging.error(
                     "Instance %s is already stopping. Please wait for it to reach stopped state.",
                     instance_id,
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
             if state in ("terminated", "shutting-down"):
-                self.log_and_print_error(
+                logging.error(
                     "Cannot stop instance %s - it is %s.",
                     instance_id,
                     state,
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
             if state not in ("running", "pending"):
-                self.log_and_print_error(
+                logging.error(
                     "Instance %s is in state '%s' and cannot be stopped. "
                     "Valid states for stopping: running, pending",
                     instance_id,
                     state,
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
@@ -377,28 +380,39 @@ class LifecycleManager:
 
         except RuntimeError as e:
             if target is not None:
-                self.log_and_print_error(
+                logging.error(
                     "Failed to stop instance %s: %s",
                     target["instance_id"],
                     str(e),
+                    extra={"stream": "stderr"},
                 )
             else:
-                self.log_and_print_error("Failed to stop instance: %s", str(e))
+                logging.error(
+                    "Failed to stop instance: %s",
+                    str(e),
+                    extra={"stream": "stderr"},
+                )
 
             sys.exit(1)
         except ProviderCredentialsError:
-            self.log_and_print_error(
-                "Cloud provider credentials not configured. Please set up credentials."
+            logging.error(
+                "Cloud provider credentials not configured. Please set up credentials.",
+                extra={"stream": "stderr"},
             )
             sys.exit(1)
         except ProviderAPIError as e:
             if e.error_code == "UnauthorizedOperation":
-                self.log_and_print_error(
-                    "Insufficient cloud provider permissions to perform this operation."
+                logging.error(
+                    "Insufficient cloud provider permissions to perform this operation.",
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
-            self.log_and_print_error("Cloud provider API error: %s", e)
+            logging.error(
+                "Cloud provider API error: %s",
+                e,
+                extra={"stream": "stderr"},
+            )
             sys.exit(1)
 
     def start(self, name_or_id: str, region: str | None = None) -> None:
@@ -434,7 +448,7 @@ class LifecycleManager:
                 return
 
             if state == "pending":
-                self.log_and_print_error(
+                logging.error(
                     (
                         "Instance is not in stopped state (Instance ID: %s, "
                         "Current state: %s). Please wait for instance to reach "
@@ -442,23 +456,26 @@ class LifecycleManager:
                     ),
                     instance_id,
                     state,
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
             if state in ("terminated", "shutting-down"):
-                self.log_and_print_error(
+                logging.error(
                     "Cannot start instance %s - it is %s.",
                     instance_id,
                     state,
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
             if state != "stopped":
-                self.log_and_print_error(
+                logging.error(
                     "Instance is not in stopped state (Instance ID: %s, Current state: %s). "
                     "Valid state for starting: stopped",
                     instance_id,
                     state,
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
@@ -528,28 +545,39 @@ class LifecycleManager:
 
         except RuntimeError as e:
             if target is not None:
-                self.log_and_print_error(
+                logging.error(
                     "Failed to start instance %s: %s",
                     target["instance_id"],
                     str(e),
+                    extra={"stream": "stderr"},
                 )
             else:
-                self.log_and_print_error("Failed to start instance: %s", str(e))
+                logging.error(
+                    "Failed to start instance: %s",
+                    str(e),
+                    extra={"stream": "stderr"},
+                )
 
             sys.exit(1)
         except ProviderCredentialsError:
-            self.log_and_print_error(
-                "Cloud provider credentials not configured. Please set up credentials."
+            logging.error(
+                "Cloud provider credentials not configured. Please set up credentials.",
+                extra={"stream": "stderr"},
             )
             sys.exit(1)
         except ProviderAPIError as e:
             if e.error_code == "UnauthorizedOperation":
-                self.log_and_print_error(
-                    "Insufficient cloud provider permissions to perform this operation."
+                logging.error(
+                    "Insufficient cloud provider permissions to perform this operation.",
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
-            self.log_and_print_error("Cloud provider API error: %s", e)
+            logging.error(
+                "Cloud provider API error: %s",
+                e,
+                extra={"stream": "stderr"},
+            )
             sys.exit(1)
 
     def info(self, name_or_id: str, region: str | None = None) -> None:
@@ -638,18 +666,24 @@ class LifecycleManager:
             logging.info(f"  Uptime: {uptime_str}", extra={"stream": "stdout"})
 
         except ProviderCredentialsError:
-            self.log_and_print_error(
-                "Cloud provider credentials not configured. Please set up credentials."
+            logging.error(
+                "Cloud provider credentials not configured. Please set up credentials.",
+                extra={"stream": "stderr"},
             )
             sys.exit(1)
         except ProviderAPIError as e:
             if e.error_code == "UnauthorizedOperation":
-                self.log_and_print_error(
-                    "Insufficient cloud provider permissions to perform this operation."
+                logging.error(
+                    "Insufficient cloud provider permissions to perform this operation.",
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
-            self.log_and_print_error("Cloud provider API error: %s", e)
+            logging.error(
+                "Cloud provider API error: %s",
+                e,
+                extra={"stream": "stderr"},
+            )
             sys.exit(1)
 
     def destroy(self, name_or_id: str, region: str | None = None) -> None:
@@ -691,26 +725,37 @@ class LifecycleManager:
             )
         except RuntimeError as e:
             if target is not None:
-                self.log_and_print_error(
+                logging.error(
                     "Failed to terminate instance %s: %s",
                     target["instance_id"],
                     str(e),
+                    extra={"stream": "stderr"},
                 )
             else:
-                self.log_and_print_error("Failed to terminate instance: %s", str(e))
+                logging.error(
+                    "Failed to terminate instance: %s",
+                    str(e),
+                    extra={"stream": "stderr"},
+                )
 
             sys.exit(1)
         except ProviderCredentialsError:
-            self.log_and_print_error(
-                "Cloud provider credentials not configured. Please set up credentials."
+            logging.error(
+                "Cloud provider credentials not configured. Please set up credentials.",
+                extra={"stream": "stderr"},
             )
             sys.exit(1)
         except ProviderAPIError as e:
             if e.error_code == "UnauthorizedOperation":
-                self.log_and_print_error(
-                    "Insufficient cloud provider permissions to perform this operation."
+                logging.error(
+                    "Insufficient cloud provider permissions to perform this operation.",
+                    extra={"stream": "stderr"},
                 )
                 sys.exit(1)
 
-            self.log_and_print_error("Cloud provider API error: %s", e)
+            logging.error(
+                "Cloud provider API error: %s",
+                e,
+                extra={"stream": "stderr"},
+            )
             sys.exit(1)

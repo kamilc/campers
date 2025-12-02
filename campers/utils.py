@@ -7,7 +7,6 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from campers.constants import (
     DEFAULT_NAME_COLUMN_WIDTH,
@@ -150,19 +149,6 @@ def format_time_ago(dt: datetime) -> str:
     else:
         days = int(delta.total_seconds() / SECONDS_PER_DAY)
         return f"{days}d ago"
-
-
-def log_and_print_error(message: str, *args: Any) -> None:
-    """Log error message to stderr via logging.
-
-    Parameters
-    ----------
-    message : str
-        Error message with optional format placeholders
-    *args : Any
-        Format arguments for message
-    """
-    logging.error(message, *args, extra={"stream": "stderr"})
 
 
 def truncate_name(name: str, max_width: int = DEFAULT_NAME_COLUMN_WIDTH) -> str:

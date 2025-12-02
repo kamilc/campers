@@ -12,6 +12,7 @@ from pathlib import Path
 from behave import given, then, when
 from behave.runner import Context
 from botocore.exceptions import ClientError
+
 from campers.logging import StreamFormatter, StreamRoutingFilter
 
 logger = logging.getLogger(__name__)
