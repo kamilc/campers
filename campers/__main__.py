@@ -67,7 +67,18 @@ class Campers:
         self._setup_manager_cache: object | None = None
 
         self._signal_manager = SignalManager(self)
-        self._signal_manager.register()
+        if not self._is_test_environment():
+            self._signal_manager.register()
+
+    def _is_test_environment(self) -> bool:
+        """Check if running in a test environment.
+
+        Returns
+        -------
+        bool
+            True if running under pytest or in test mode, False otherwise
+        """
+        return "pytest" in sys.modules or os.environ.get("CAMPERS_TEST_MODE") == "1"
 
     @property
     def compute_provider_factory(self) -> Callable[[str], ComputeProvider]:
@@ -118,6 +129,31 @@ class Campers:
                 truncate_name=truncate_name,
             )
         return self._lifecycle_manager
+
+    @property
+    def merged_config(self) -> dict[str, Any] | None:
+        """Get the merged configuration from the run executor."""
+        if self._run_executor is None:
+            return None
+        return self._run_executor.merged_config
+
+    @merged_config.setter
+    def merged_config(self, value: dict[str, Any] | None) -> None:
+        """Set the merged configuration on the run executor."""
+        if self._run_executor is None:
+            self._run_executor = RunExecutor(
+                config_loader=self._config_loader,
+                compute_provider_factory=self.compute_provider_factory,
+                ssh_manager_factory=self._ssh_manager_factory,
+                resources=self._resources,
+                resources_lock=self._resources_lock,
+                cleanup_in_progress_getter=lambda: self.cleanup_in_progress,
+                cleanup_event=self._cleanup_manager.cleanup_event,
+                update_queue=self._update_queue,
+                mutagen_manager_factory=self._mutagen_manager_factory,
+                portforward_manager_factory=self._portforward_manager_factory,
+            )
+        self._run_executor.merged_config = value
 
     @property
     def setup_manager(self) -> object:

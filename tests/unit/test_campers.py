@@ -1146,8 +1146,16 @@ def test_campers_init_cleanup_state(campers_module) -> None:
 
 
 def test_signal_handlers_registered_during_run(campers_module) -> None:
-    """Test that SIGINT and SIGTERM handlers are registered at module load time."""
+    """Test that signal handlers are NOT registered during test execution.
+
+    Signal handlers are intentionally disabled during unit tests to prevent
+    test framework signals (like timeout signals) from triggering cleanup
+    that calls sys.exit(), which would crash the test suite.
+    """
     import signal
+
+    original_sigint = signal.getsignal(signal.SIGINT)
+    original_sigterm = signal.getsignal(signal.SIGTERM)
 
     campers_module()
 
@@ -1155,12 +1163,8 @@ def test_signal_handlers_registered_during_run(campers_module) -> None:
     sigterm_handler = signal.getsignal(signal.SIGTERM)
 
     try:
-        assert sigint_handler is not None
-        assert sigterm_handler is not None
-        assert callable(sigint_handler)
-        assert callable(sigterm_handler)
-        assert sigint_handler != signal.default_int_handler
-        assert sigterm_handler != signal.SIG_DFL
+        assert sigint_handler == original_sigint
+        assert sigterm_handler == original_sigterm
 
     finally:
         signal.signal(signal.SIGINT, sigint_handler)
