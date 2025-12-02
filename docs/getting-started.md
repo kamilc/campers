@@ -81,6 +81,30 @@ When you are done, you have two choices:
 *   **Stop** (Ctrl+C or `campers stop`): Shuts down the instance. Data is preserved. You pay only for EBS storage (~$0.05/GB/month).
 *   **Destroy** (`campers destroy`): Terminates the instance and deletes the disk. Costs stop completely.
 
+## Pro Tip: Configuration with Ansible
+
+Campers supports simple shell scripts (`setup_script`), but for robust environments, we recommend **Ansible**.
+
+Ansible is a popular tool for automating software installation. It is:
+- **Idempotent:** You can run it 100 times, and it only changes what needs to be changed.
+- **Declarative:** You say "I want PostgreSQL installed," not "How to install PostgreSQL."
+
+Example `campers.yaml` using Ansible:
+
+```yaml
+playbooks:
+  web-server:
+    - name: Install Nginx
+      hosts: all
+      become: true
+      tasks:
+        - apt: {name: nginx, state: present}
+
+camps:
+  web:
+    ansible_playbooks: [web-server]
+```
+
 ## Optional: VS Code Remote SSH
 
 Campers is designed to let you **edit locally** while Mutagen syncs changes instantly. This gives you the fastest possible typing latency.

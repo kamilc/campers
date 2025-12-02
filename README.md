@@ -56,8 +56,66 @@ If you are compiling large C++ or Rust projects, you can provision a high-core i
 - **Mutagen Sync**: Uses Mutagen for high-performance, conflict-aware file synchronization.
 - **Automatic Port Forwarding**: Tunnels remote ports to your local machine based on your configuration.
 - **Ansible Integration**: Supports running Ansible playbooks to configure the instance on startup.
-- **Cost Control**: Encourages an ephemeral workflow where instances are destroyed when not in use.
+- **Cost Control:** Encourages an ephemeral workflow where instances are destroyed when not in use.
 - **TUI Dashboard**: A terminal interface to monitor logs, sync status, and instance health.
+
+## Simple Configuration
+
+Campers uses a single YAML file to define your infrastructure and provisioning. Here is a complete example:
+
+```yaml
+# campers.yml
+
+# Define reusable Ansible playbooks (idempotent setup)
+playbooks:
+  python-setup:
+    - name: Install Python Tools
+      hosts: all
+      tasks:
+        - pip: {name: [numpy, pandas, jupyter], state: present}
+
+# Define your camps (machines)
+camps:
+  # 1. Cheap dev environment
+  dev:
+    instance_type: t3.medium
+    command: bash
+
+  # 2. Interactive experimentation (Jupyter)
+  experiment:
+    instance_type: g4dn.xlarge
+    # Open Jupyter on your laptop's localhost:8888
+    ports: [8888]
+    ansible_playbooks: [python-setup]
+    command: jupyter lab --ip=0.0.0.0 --port=8888
+
+  # 3. Heavy training job (TensorBoard)
+  training:
+    instance_type: p3.2xlarge
+    # Forward TensorBoard to localhost:6006
+    ports: [6006]
+    ansible_playbooks: [python-setup]
+    # Run background monitoring and main training script
+    command: |
+      tensorboard --logdir logs --port 6006 &
+      python train_model.py
+```
+
+**How you use them:**
+
+```bash
+# Start the cheap coding environment
+campers run dev
+
+# Switch to the GPU machine for notebooks
+campers run experiment
+
+# Launch the heavy training job
+campers run training
+```
+
+### Full Control
+Since you get a standard Linux instance, you can run **multiple services** at once. You might use `supervisord` or `docker compose` to spin up Jupyter, TensorBoard, and a database simultaneously. Campers will automatically forward all the ports you specify.
 
 ## Quick Start
 
