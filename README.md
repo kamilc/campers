@@ -138,19 +138,17 @@ campers run experiment
 # Launch the heavy training job
 campers run training
 
-# Check status of all your camps
+# Check status of all your camps (showing estimated monthly costs)
 campers list
+# ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
+# ┃ NAME               ┃ INSTANCE-ID  ┃ STATUS     ┃ REGION         ┃ COST/MONTH           ┃
+# ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
+# │ campers-dev        │ i-0abc123def │ running    │ us-east-1      │ $29.95/month         │
+# │ campers-experiment │ i-0def456abc │ stopped    │ us-east-1      │ $4.00/month          │
+# └────────────────────┴──────────────┴────────────┴────────────────┴──────────────────────┘
 ```
 
-**Example Output:**
-```text
-┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
-┃ NAME               ┃ INSTANCE-ID  ┃ STATUS     ┃ REGION         ┃ COST/MONTH           ┃
-┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
-│ campers-dev        │ i-0abc123def │ running    │ us-east-1      │ $29.95/month         │
-│ campers-experiment │ i-0def456abc │ stopped    │ us-east-1      │ $4.00/month          │
-└────────────────────┴──────────────┴────────────┴────────────────┴──────────────────────┘
-```
+### Full Control
 
 ### Full Control
 Since you get a standard Linux instance, you can run **multiple services** at once. You might use `supervisord` or `docker compose` to spin up Jupyter, TensorBoard, and a database simultaneously. Campers will automatically forward all the ports you specify.
