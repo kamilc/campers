@@ -4,6 +4,10 @@
   <img src="docs/assets/campers.png" alt="Campers" width="400">
 </p>
 
+<h3 align="center">
+  Local development experience. Remote cloud resources.
+</h3>
+
 Campers is a command-line tool that manages disposable remote development environments on the cloud (currently AWS EC2). It allows you to offload heavy computation to the cloud while keeping your local development workflow intact.
 
 It bridges the gap between your local machine and a cloud instance by handling provisioning, file synchronization, and network tunneling automatically.
