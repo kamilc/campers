@@ -10,8 +10,53 @@ import boto3
 from behave import given, then, when
 from behave.runner import Context
 
+from tests.integration.features.environment import LogCapture
+
+import re
+
 TEST_AMI_ID = "ami-12345678"
 """Test AMI ID used for creating mock EC2 instances in BDD tests."""
+
+INSTANCE_ROW_PATTERN = re.compile(r"^\S+\s+i-[\w]+\s+(running|stopped|stopping)\s+")
+"""Pattern to match instance table rows in output."""
+
+
+def extract_instance_rows(stdout: str) -> list[str]:
+    """Extract instance table rows from output, filtering out log lines.
+
+    Parameters
+    ----------
+    stdout : str
+        Raw output from campers list command
+
+    Returns
+    -------
+    list[str]
+        List of instance table rows
+    """
+    lines = stdout.strip().split("\n")
+    data_lines = []
+
+    for line in lines:
+        if not line:
+            continue
+        if line.startswith("Instances in"):
+            continue
+        if line.startswith("NAME"):
+            continue
+        if line.startswith("-"):
+            continue
+        if re.search(r"^(INFO|ERROR|WARNING|DEBUG):", line):
+            continue
+        if "has root volume size" in line:
+            continue
+        if "Failed to fetch" in line:
+            continue
+
+        if INSTANCE_ROW_PATTERN.search(line):
+            data_lines.append(line)
+
+    return data_lines
 
 
 def create_test_instance(
@@ -139,6 +184,7 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
         Optional region filter
     """
     from unittest.mock import patch
+    import logging
 
     if context.region_patches is not None and context.region_patches:
         for patch_obj in context.region_patches:
@@ -146,9 +192,11 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
 
     campers = context.campers_module.Campers()
 
-    captured_output = StringIO()
-    original_stdout = sys.stdout
-    sys.stdout = captured_output
+    log_handler = LogCapture()
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_handler)
+    original_level = root_logger.level
+    root_logger.setLevel(logging.INFO)
 
     try:
         if context.mock_time_instances is not None and context.mock_time_instances:
@@ -160,18 +208,28 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
                 mock_volume.return_value = 0
                 campers.list(region=region)
         else:
+            import logging as py_logging
+
+            py_logging.debug(f"DEBUG: context.instances = {context.instances}")
             campers.list(region=region)
 
-        context.stdout = captured_output.getvalue()
+        output_lines = []
+        for record in log_handler.records:
+            output_lines.append(record.getMessage())
+        context.stdout = "\n".join(output_lines)
         context.exit_code = 0
         context.stderr = ""
     except Exception as e:
         context.exception = e
-        context.stdout = captured_output.getvalue()
+        output_lines = []
+        for record in log_handler.records:
+            output_lines.append(record.getMessage())
+        context.stdout = "\n".join(output_lines)
         context.stderr = str(e)
         context.exit_code = 1
     finally:
-        sys.stdout = original_stdout
+        root_logger.removeHandler(log_handler)
+        root_logger.setLevel(original_level)
 
         if context.region_patches is not None and context.region_patches:
             for patch_obj in context.region_patches:
@@ -214,16 +272,7 @@ def step_output_displays_count(context: Context, count: int) -> None:
     count : int
         Expected number of instances in output
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) == count, (
         f"Expected {count} instances but got {len(data_lines)}: {data_lines}"
@@ -285,9 +334,12 @@ def step_output_displays_header(context: Context, header: str) -> None:
         Header text to verify
     """
     lines = context.stdout.strip().split("\n")
-    first_line = lines[0] if lines else ""
 
-    assert header in first_line, f"Expected header '{header}' but got: {first_line}"
+    for line in lines:
+        if header in line:
+            return
+
+    assert False, f"Expected header '{header}' not found in output: {context.stdout}"
 
 
 @then("instances are sorted by launch time descending")
@@ -299,16 +351,7 @@ def step_instances_sorted_by_launch_time(context: Context) -> None:
     context : Context
         Behave test context
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) >= 2, "Need at least 2 instances to verify sorting"
 
@@ -408,16 +451,7 @@ def step_instance_shows_name(context: Context, instance_id: str, expected_name: 
     expected_name : str
         Expected name to verify
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     actual_instance_id = context.test_instance_id_mapping.get(instance_id, instance_id)
 
@@ -567,16 +601,7 @@ def step_first_instance_shows_time(context: Context, time_str: str) -> None:
     time_str : str
         Expected time string
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) >= 1, "No instances found in output"
 
@@ -595,16 +620,7 @@ def step_second_instance_shows_time(context: Context, time_str: str) -> None:
     time_str : str
         Expected time string
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) >= 2, "Less than 2 instances found in output"
 
@@ -623,16 +639,7 @@ def step_third_instance_shows_time(context: Context, time_str: str) -> None:
     time_str : str
         Expected time string
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) >= 3, "Less than 3 instances found in output"
 
@@ -809,16 +816,7 @@ def step_all_instances_displayed(context: Context, count: int) -> None:
     count : int
         Expected instance count
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) == count, f"Expected {count} instances but got {len(data_lines)}"
 
@@ -832,16 +830,7 @@ def step_status_column_shows_correct_state(context: Context) -> None:
     context : Context
         Behave test context
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) > 0, "No instances found in output"
 
@@ -925,16 +914,7 @@ def step_camp_config_truncated(context: Context, length: int) -> None:
     length : int
         Expected truncation length
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) > 0, "No instances found"
 

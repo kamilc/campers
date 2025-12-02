@@ -45,7 +45,7 @@ Scenario: Instance without public IP raises error
   And camp "private-box" has command "echo test"
   When I run campers command "run private-box"
   Then command fails with ValueError
-  And error message contains "does not have a public IP address"
+  And error message contains "does not have SSH connection details"
 
 @smoke @localstack @pilot @timeout_300
 Scenario: Execute command via TUI with real SSH
