@@ -66,6 +66,12 @@ Campers uses a single YAML file to define your infrastructure and provisioning. 
 ```yaml
 # campers.yml
 
+# Define reusable variables to keep config clean
+vars:
+  project_name: my-ml-project
+  # Use standard linux paths
+  remote_path: /home/ubuntu/${project_name}
+
 # Define reusable Ansible playbooks (idempotent setup)
 playbooks:
   python-setup:
@@ -85,7 +91,8 @@ camps:
   # 1. Cheap dev environment
   dev:
     instance_type: t3.medium
-    command: bash
+    # Uses variable defined above
+    command: cd ${remote_path} && bash
 
   # 2. Interactive experimentation (Jupyter)
   experiment:
@@ -109,10 +116,12 @@ camps:
 
     # Run every time the instance starts (e.g., pull latest data)
     startup_script: |
+      cd ${remote_path}
       dvc pull data/
 
     # Run background monitoring and main training script
     command: |
+      cd ${remote_path}
       tensorboard --logdir logs --port 6006 &
       python train_model.py
 ```
@@ -128,6 +137,19 @@ campers run experiment
 
 # Launch the heavy training job
 campers run training
+
+# Check status of all your camps
+campers list
+```
+
+**Example Output:**
+```text
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
+┃ NAME               ┃ INSTANCE-ID  ┃ STATUS     ┃ REGION         ┃ COST/MONTH           ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
+│ campers-dev        │ i-0abc123def │ running    │ us-east-1      │ $29.95/month         │
+│ campers-experiment │ i-0def456abc │ stopped    │ us-east-1      │ $4.00/month          │
+└────────────────────┴──────────────┴────────────┴────────────────┴──────────────────────┘
 ```
 
 ### Full Control
