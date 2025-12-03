@@ -919,12 +919,12 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     campers_ssh_logger.setLevel(logging.DEBUG)
 
     if is_localstack_scenario or "dry_run" in scenario.tags:
-        campers_portforward_logger = logging.getLogger("campers.portforward")
+        campers_portforward_logger = logging.getLogger("campers.services.portforward")
         campers_portforward_logger.addHandler(log_handler)
         campers_portforward_logger.setLevel(logging.INFO)
         campers_portforward_logger.propagate = True
 
-        campers_sync_logger = logging.getLogger("campers.sync")
+        campers_sync_logger = logging.getLogger("campers.services.sync")
         campers_sync_logger.addHandler(log_handler)
         campers_sync_logger.setLevel(logging.INFO)
         campers_sync_logger.propagate = True
@@ -1200,10 +1200,10 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
             campers_ssh_logger = logging.getLogger("campers.ssh")
             campers_ssh_logger.removeHandler(context.log_handler)
 
-            campers_portforward_logger = logging.getLogger("campers.portforward")
+            campers_portforward_logger = logging.getLogger("campers.services.portforward")
             campers_portforward_logger.removeHandler(context.log_handler)
 
-            campers_sync_logger = logging.getLogger("campers.sync")
+            campers_sync_logger = logging.getLogger("campers.services.sync")
             campers_sync_logger.removeHandler(context.log_handler)
 
             root_logger = logging.getLogger()

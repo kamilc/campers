@@ -8,14 +8,17 @@ import subprocess
 import sys
 import unittest.mock
 from pathlib import Path
+from typing import Any
 
 from behave import given, then, when
 from behave.runner import Context
 from botocore.exceptions import ClientError
 
 from campers.logging import StreamFormatter, StreamRoutingFilter
+from campers.services.portforward import PortForwardManager
 
 logger = logging.getLogger(__name__)
+portforward_logger = logging.getLogger("campers.services.portforward")
 
 
 def execute_command_direct(
@@ -98,6 +101,36 @@ def execute_command_direct(
 
         manager = context.fake_ec2_managers[region]
         return manager
+
+    def mock_validate_key_file(self: Any, key_file: str) -> None:
+        logger.debug("Mocked: validate_key_file skipped for %s", key_file)
+
+    def mock_create_tunnels(
+        self: Any,
+        ports: list[int],
+        host: str,
+        key_file: str,
+        username: str = "ubuntu",
+        ssh_port: int = 22,
+    ) -> None:
+        for port in ports:
+            portforward_logger.info("Creating SSH tunnel for port %s...", port)
+            portforward_logger.info(
+                "SSH tunnel established: localhost:%s -> remote:%s", port, port
+            )
+
+    def mock_stop_all_tunnels(self: Any) -> None:
+        for port in getattr(self, "ports", []):
+            portforward_logger.info("Stopping SSH tunnel for port %s...", port)
+
+    portforward_patchers = [
+        unittest.mock.patch.object(PortForwardManager, "validate_key_file", mock_validate_key_file),
+        unittest.mock.patch.object(PortForwardManager, "create_tunnels", mock_create_tunnels),
+        unittest.mock.patch.object(PortForwardManager, "stop_all_tunnels", mock_stop_all_tunnels),
+    ]
+
+    for patcher in portforward_patchers:
+        patcher.start()
 
     try:
         campers = Campers(
@@ -195,6 +228,8 @@ def execute_command_direct(
         logger.error("Command execution failed: %s", e, exc_info=True)
 
     finally:
+        for patcher in portforward_patchers:
+            patcher.stop()
         signal.alarm(0)
         signal.signal(signal.SIGALRM, old_handler)
         sys.stdout = old_stdout

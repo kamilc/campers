@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 import boto3
 
+from campers.providers.aws.constants import TAG_FETCH_RETRY_DELAY, TAG_FETCH_RETRY_MAX
+
 if TYPE_CHECKING:
     from campers.services.ssh import SSHConnectionInfo
 
@@ -236,10 +238,7 @@ def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
 
     ec2_client = boto3.client("ec2", endpoint_url=endpoint_url, region_name=region)
 
-    max_retries = 60
-    retry_delay_sec = 0.1
-
-    for attempt in range(max_retries):
+    for attempt in range(TAG_FETCH_RETRY_MAX):
         try:
             response = ec2_client.describe_instances(InstanceIds=[instance_id])
 
@@ -255,7 +254,7 @@ def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
                 instance_id,
                 len(tags),
                 attempt + 1,
-                max_retries,
+                TAG_FETCH_RETRY_MAX,
                 tags,
             )
 
@@ -265,22 +264,22 @@ def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
                     logger.debug("Found tag %s=%s for instance %s", tag_key, value, instance_id)
                     return value
 
-            if attempt < max_retries - 1:
+            if attempt < TAG_FETCH_RETRY_MAX - 1:
                 logger.debug(
                     "Tag %s not found for instance %s on attempt %d/%d; retrying in %.0fms",
                     tag_key,
                     instance_id,
                     attempt + 1,
-                    max_retries,
-                    retry_delay_sec * 1000,
+                    TAG_FETCH_RETRY_MAX,
+                    TAG_FETCH_RETRY_DELAY * 1000,
                 )
-                time.sleep(retry_delay_sec)
+                time.sleep(TAG_FETCH_RETRY_DELAY)
             else:
                 logger.debug(
                     "Tag %s not found for instance %s after %d attempts",
                     tag_key,
                     instance_id,
-                    max_retries,
+                    TAG_FETCH_RETRY_MAX,
                 )
                 return None
 
@@ -289,11 +288,11 @@ def _get_instance_tag_value(instance_id: str, tag_key: str) -> str | None:
                 "Error fetching tags for instance %s on attempt %d/%d: %s",
                 instance_id,
                 attempt + 1,
-                max_retries,
+                TAG_FETCH_RETRY_MAX,
                 e,
             )
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay_sec)
+            if attempt < TAG_FETCH_RETRY_MAX - 1:
+                time.sleep(TAG_FETCH_RETRY_DELAY)
             else:
                 raise
 

@@ -41,6 +41,20 @@ Provides time for instance metadata to propagate while avoiding
 excessive API calls to EC2 describe operations.
 """
 
+TAG_FETCH_RETRY_MAX = 150
+"""Maximum number of retry attempts when fetching instance tags.
+
+Used when polling for EC2 instance tags that may not be immediately
+available after instance creation, particularly in LocalStack environments.
+"""
+
+TAG_FETCH_RETRY_DELAY = 0.1
+"""Delay in seconds between tag fetch retry attempts.
+
+Short delay for rapid polling when waiting for tags to propagate.
+Combined with TAG_FETCH_RETRY_MAX, provides up to 15 seconds of polling.
+"""
+
 DEFAULT_REGION = "us-east-1"
 """Default AWS region for instance provisioning.
 

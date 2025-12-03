@@ -330,6 +330,8 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
             def mock_validate_key_file(self, key_file: str) -> None:
                 logger.debug("Mocked: validate_key_file skipped for %s", key_file)
 
+            portforward_logger = logging.getLogger("campers.services.portforward")
+
             def mock_create_tunnels(
                 self,
                 ports: list[int],
@@ -339,12 +341,14 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 ssh_port: int = 22,
             ) -> None:
                 for port in ports:
-                    logging.info("Creating SSH tunnel for port %s...", port)
-                    logging.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
+                    portforward_logger.info("Creating SSH tunnel for port %s...", port)
+                    portforward_logger.info(
+                        "SSH tunnel established: localhost:%s -> remote:%s", port, port
+                    )
 
             def mock_stop_all_tunnels(self) -> None:
                 for port in getattr(self, "ports", []):
-                    logging.info("Stopping SSH tunnel for port %s...", port)
+                    portforward_logger.info("Stopping SSH tunnel for port %s...", port)
 
             with (
                 patch.object(MutagenManager, "check_mutagen_installed", mock_check_mutagen),
