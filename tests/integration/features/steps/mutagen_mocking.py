@@ -342,9 +342,11 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
             ) -> None:
                 for port in ports:
                     portforward_logger.info("Creating SSH tunnel for port %s...", port)
+                for port in ports:
                     portforward_logger.info(
                         "SSH tunnel established: localhost:%s -> remote:%s", port, port
                     )
+                self.ports = ports
 
             def mock_stop_all_tunnels(self) -> None:
                 for port in getattr(self, "ports", []):
@@ -361,4 +363,4 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
             ):
                 yield
         except ImportError as e:
-            raise RuntimeError(f"Failed to import MutagenManager: {e}")
+            raise RuntimeError(f"Failed to import MutagenManager: {e}") from e

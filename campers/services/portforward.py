@@ -126,7 +126,6 @@ class PortForwardManager:
                     port,
                     PRIVILEGED_PORT_THRESHOLD,
                 )
-        self.validate_key_file(key_file)
 
         if os.getenv("CAMPERS_TEST_MODE") == "1":
             for port in ports:
@@ -137,6 +136,8 @@ class PortForwardManager:
 
             self.ports = ports
             return
+
+        self.validate_key_file(key_file)
 
         remote_binds = [("localhost", port) for port in ports]
         local_binds = [("localhost", port) for port in ports]

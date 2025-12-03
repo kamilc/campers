@@ -115,9 +115,9 @@ def execute_command_direct(
     ) -> None:
         for port in ports:
             portforward_logger.info("Creating SSH tunnel for port %s...", port)
-            portforward_logger.info(
-                "SSH tunnel established: localhost:%s -> remote:%s", port, port
-            )
+        for port in ports:
+            portforward_logger.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
+        self.ports = ports
 
     def mock_stop_all_tunnels(self: Any) -> None:
         for port in getattr(self, "ports", []):
