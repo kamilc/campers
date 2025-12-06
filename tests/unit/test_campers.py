@@ -1513,10 +1513,10 @@ def test_format_time_ago_raises_on_naive_datetime(campers_module) -> None:
         format_time_ago(dt)
 
 
-def test_list_command_all_regions(campers_module, aws_credentials) -> None:
+def test_list_command_all_regions(campers_module, aws_credentials, caplog) -> None:
     """Test list command displays instances from all regions."""
+    import logging
     from datetime import datetime
-    from io import StringIO
     from unittest.mock import MagicMock, patch
 
     campers_instance = campers_module()
@@ -1543,16 +1543,14 @@ def test_list_command_all_regions(campers_module, aws_credentials) -> None:
 
     mock_ec2_class = MagicMock(return_value=mock_ec2_manager)
 
-    captured_output = StringIO()
-
-    with patch("sys.stdout", captured_output):
+    with caplog.at_level(logging.INFO):
         with (
             patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
             patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
         ):
             campers_instance.list()
 
-    output = captured_output.getvalue()
+    output = caplog.text
     assert "NAME" in output
     assert "INSTANCE-ID" in output
     assert "STATUS" in output
@@ -1566,10 +1564,10 @@ def test_list_command_all_regions(campers_module, aws_credentials) -> None:
     assert "Instances in" not in output
 
 
-def test_list_command_filtered_region(campers_module, aws_credentials) -> None:
+def test_list_command_filtered_region(campers_module, aws_credentials, caplog) -> None:
     """Test list command displays instances from specific region."""
+    import logging
     from datetime import datetime
-    from io import StringIO
     from unittest.mock import MagicMock, patch
 
     campers_instance = campers_module()
@@ -1596,9 +1594,7 @@ def test_list_command_filtered_region(campers_module, aws_credentials) -> None:
         ]
     }
 
-    captured_output = StringIO()
-
-    with patch("sys.stdout", captured_output):
+    with caplog.at_level(logging.INFO):
         with (
             patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
             patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
@@ -1606,7 +1602,7 @@ def test_list_command_filtered_region(campers_module, aws_credentials) -> None:
         ):
             campers_instance.list(region="us-east-1")
 
-    output = captured_output.getvalue()
+    output = caplog.text
     assert "Instances in us-east-1:" in output
     assert "NAME" in output
     assert "INSTANCE-ID" in output
@@ -1617,9 +1613,9 @@ def test_list_command_filtered_region(campers_module, aws_credentials) -> None:
     assert "i-test1" in output
 
 
-def test_list_command_no_instances(campers_module, aws_credentials) -> None:
+def test_list_command_no_instances(campers_module, aws_credentials, caplog) -> None:
     """Test list command displays message when no instances exist."""
-    from io import StringIO
+    import logging
     from unittest.mock import MagicMock, patch
 
     campers_instance = campers_module()
@@ -1627,19 +1623,22 @@ def test_list_command_no_instances(campers_module, aws_credentials) -> None:
     mock_ec2_manager = MagicMock()
     mock_ec2_manager.list_instances.return_value = []
 
-    captured_output = StringIO()
+    mock_ec2_class = MagicMock(return_value=mock_ec2_manager)
 
-    with patch("sys.stdout", captured_output):
-        with patch("campers.providers.aws.compute.EC2Manager", return_value=mock_ec2_manager):
+    with caplog.at_level(logging.INFO):
+        with (
+            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
+            patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
+        ):
             campers_instance.list()
 
-    output = captured_output.getvalue()
+    output = caplog.text
     assert "No campers-managed instances found" in output
 
 
-def test_list_command_no_credentials(campers_module) -> None:
+def test_list_command_no_credentials(campers_module, caplog) -> None:
     """Test list command handles missing cloud provider credentials."""
-    from io import StringIO
+    import logging
     from unittest.mock import MagicMock, patch
 
     from campers.providers.exceptions import ProviderCredentialsError
@@ -1653,9 +1652,7 @@ def test_list_command_no_credentials(campers_module) -> None:
 
     mock_ec2_class = MagicMock(return_value=mock_ec2_manager)
 
-    captured_output = StringIO()
-
-    with patch("sys.stdout", captured_output):
+    with caplog.at_level(logging.ERROR):
         with (
             patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
             patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
@@ -1663,13 +1660,13 @@ def test_list_command_no_credentials(campers_module) -> None:
             with pytest.raises(ProviderCredentialsError):
                 campers_instance.list()
 
-    output = captured_output.getvalue()
-    assert "Error: Cloud provider credentials not found" in output
+    output = caplog.text
+    assert "Cloud provider credentials not found" in output
 
 
-def test_list_command_permission_error(campers_module, aws_credentials) -> None:
+def test_list_command_permission_error(campers_module, aws_credentials, caplog) -> None:
     """Test list command handles permission errors."""
-    from io import StringIO
+    import logging
     from unittest.mock import MagicMock, patch
 
     from campers.providers.exceptions import ProviderAPIError
@@ -1684,9 +1681,7 @@ def test_list_command_permission_error(campers_module, aws_credentials) -> None:
 
     mock_ec2_class = MagicMock(return_value=mock_ec2_manager)
 
-    captured_output = StringIO()
-
-    with patch("sys.stdout", captured_output):
+    with caplog.at_level(logging.ERROR):
         with (
             patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
             patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
@@ -1694,8 +1689,8 @@ def test_list_command_permission_error(campers_module, aws_credentials) -> None:
             with pytest.raises(ProviderAPIError):
                 campers_instance.list()
 
-    output = captured_output.getvalue()
-    assert "Error: Insufficient cloud provider permissions" in output
+    output = caplog.text
+    assert "Insufficient cloud provider permissions" in output
 
 
 def test_list_command_invalid_region(campers_module, aws_credentials) -> None:
@@ -2209,8 +2204,9 @@ def test_stop_command_multiple_matches_requires_id(campers_module) -> None:
     assert exc_info.value.code == 1
 
 
-def test_stop_command_displays_storage_cost(campers_module) -> None:
+def test_stop_command_displays_storage_cost(campers_module, caplog) -> None:
     """Test stop() displays storage cost in output."""
+    import logging
     from unittest.mock import MagicMock, patch
 
     campers_instance = campers_module()
@@ -2235,15 +2231,13 @@ def test_stop_command_displays_storage_cost(campers_module) -> None:
 
     campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
-    with (
-        patch("builtins.print") as mock_print,
-        patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_cost,
-    ):
-        mock_cost.side_effect = [100.0, 50.0]
-        campers_instance.stop("i-test123")
+    with caplog.at_level(logging.INFO):
+        with patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_cost:
+            mock_cost.side_effect = [100.0, 50.0]
+            campers_instance.stop("i-test123")
 
-    print_output = [call[0][0] for call in mock_print.call_args_list]
-    assert any("cost" in str(output).lower() for output in print_output)
+    output = caplog.text
+    assert "cost" in output.lower()
 
 
 def test_start_command_success(campers_module) -> None:
@@ -2346,9 +2340,10 @@ def test_start_command_multiple_matches_requires_id(campers_module) -> None:
     assert exc_info.value.code == 1
 
 
-def test_start_command_displays_new_ip(campers_module) -> None:
+def test_start_command_displays_new_ip(campers_module, caplog) -> None:
     """Test start() displays new IP in output."""
-    from unittest.mock import MagicMock, patch
+    import logging
+    from unittest.mock import MagicMock
 
     campers_instance = campers_module()
     campers_instance._config_loader = MagicMock()
@@ -2372,11 +2367,11 @@ def test_start_command_displays_new_ip(campers_module) -> None:
 
     campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
-    with patch("builtins.print") as mock_print:
+    with caplog.at_level(logging.INFO):
         campers_instance.start("i-test123")
 
-    print_output = [call[0][0] for call in mock_print.call_args_list]
-    assert any("203.0.113.1" in str(output) for output in print_output)
+    output = caplog.text
+    assert "203.0.113.1" in output
 
 
 def test_destroy_command_success(campers_module) -> None:
