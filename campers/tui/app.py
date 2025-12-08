@@ -474,7 +474,12 @@ class CampersTUI(App):
             self.worker_exit_code = 1
         except Exception as e:
             logging.error("Unexpected error during execution: %s", str(e), exc_info=True)
-            error_message = f"Unexpected error: {str(e)}"
+            exc_type = type(e).__name__
+            exc_msg = str(e)
+            if exc_msg:
+                error_message = f"{exc_type}: {exc_msg}"
+            else:
+                error_message = f"{exc_type} (run with -v for details)"
             self.worker_exit_code = 1
         finally:
             has_resources = bool(self.campers._resources)

@@ -381,7 +381,13 @@ def handle_runtime_error(error: RuntimeError, debug_mode: bool) -> None:
     if debug_mode:
         raise
 
-    logging.error(f"Unexpected error: {error}", extra={"stream": "stderr"})
+    exc_type = type(error).__name__
+    exc_msg = str(error)
+    if exc_msg:
+        error_text = f"{exc_type}: {exc_msg}"
+    else:
+        error_text = f"{exc_type} (run with --debug for details)"
+    logging.error(error_text, extra={"stream": "stderr"})
     sys.exit(1)
 
 

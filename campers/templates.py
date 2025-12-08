@@ -123,6 +123,7 @@ camps:
     ignore:
       - "*.pyc"
       - __pycache__
+      - .venv/
       - data/
       - models/
       - "*.parquet"
