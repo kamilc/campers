@@ -481,17 +481,17 @@ class TestConfigLoader:
         with pytest.raises(ValueError, match="ports must be a list"):
             loader.validate_config(config)
 
-    def test_validate_config_ports_non_integer_elements(self) -> None:
+    def test_validate_config_ports_invalid_string_format(self) -> None:
         config = {
             "region": "us-east-1",
             "instance_type": "t3.medium",
             "disk_size": 50,
-            "ports": [8888, "6006"],
+            "ports": [8888, "invalid"],
         }
 
         loader = ConfigLoader()
 
-        with pytest.raises(ValueError, match="ports entries must be integers"):
+        with pytest.raises(ValueError, match="Invalid port"):
             loader.validate_config(config)
 
     def test_validate_config_ports_out_of_range(self) -> None:

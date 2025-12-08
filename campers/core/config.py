@@ -297,14 +297,15 @@ class ConfigLoader:
                 self._validate_single_port_entry(port, is_port_singular=False)
 
     def _validate_single_port_entry(
-        self, port: int | tuple[int, int], is_port_singular: bool = True
+        self, port: int | str | tuple[int, int], is_port_singular: bool = True
     ) -> None:
         """Validate a single port entry from configuration.
 
         Parameters
         ----------
-        port : int | tuple[int, int]
-            Port specification - can be integer or tuple of two integers
+        port : int | str | tuple[int, int]
+            Port specification - can be integer, string (e.g., "8888" or "6006:6007"),
+            or tuple of two integers
         is_port_singular : bool, optional
             True if validating singular "port" field, False for "ports" list, by default True
 
@@ -313,6 +314,42 @@ class ConfigLoader:
         ValueError
             If port is invalid
         """
+        if isinstance(port, str):
+            if is_port_singular:
+                raise ValueError("port must be an integer, got string")
+            if ":" in port:
+                parts = port.split(":")
+                if len(parts) != 2:
+                    raise ValueError(
+                        f"Invalid port mapping: {port}. Expected format 'remote:local'"
+                    )
+                try:
+                    remote, local = int(parts[0]), int(parts[1])
+                    for p in (remote, local):
+                        if not (1 <= p <= 65535):
+                            raise ValueError(
+                                "ports entries must be between 1 and 65535"
+                            )
+                except ValueError as e:
+                    if "invalid literal" in str(e):
+                        raise ValueError(
+                            f"Invalid port mapping: {port}. Both ports must be integers"
+                        ) from None
+                    raise
+            else:
+                try:
+                    p = int(port)
+                    if not (1 <= p <= 65535):
+                        raise ValueError("ports entries must be between 1 and 65535")
+                except ValueError as e:
+                    if "invalid literal" in str(e):
+                        raise ValueError(
+                            f"Invalid port: {port}. "
+                            f"Must be an integer or 'remote:local' format"
+                        ) from None
+                    raise
+            return
+
         if isinstance(port, tuple):
             if not is_port_singular:
                 if len(port) != 2:
