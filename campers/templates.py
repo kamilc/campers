@@ -76,6 +76,10 @@ defaults:
   instance_type: t3.medium
   disk_size: 50
 
+  sync:
+    local: .
+    remote: ${remote_dir}
+
   ports:
     - 8888
 
