@@ -914,7 +914,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     campers_ec2_logger.addHandler(log_handler)
     campers_ec2_logger.setLevel(logging.DEBUG)
 
-    campers_ssh_logger = logging.getLogger("campers.ssh")
+    campers_ssh_logger = logging.getLogger("campers.services.ssh")
     campers_ssh_logger.addHandler(log_handler)
     campers_ssh_logger.setLevel(logging.DEBUG)
 

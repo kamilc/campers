@@ -191,12 +191,14 @@ class EC2ContainerManager:
                     "-C",
                     f"test-key-{instance_id}",
                 ]
+                input_data = "y\n"
                 logger.debug(f"Running SSH key generation command: {' '.join(cmd)}")
                 result = subprocess.run(
                     cmd,
                     check=True,
                     capture_output=True,
                     text=True,
+                    input=input_data,
                 )
                 logger.debug(f"SSH key generation stdout: {result.stdout}")
                 logger.debug(f"SSH key generation stderr: {result.stderr}")
@@ -394,27 +396,32 @@ exec /init
             )
 
         if not block_ssh:
-            ssh_health_start = time.time()
-            logger.info(f"Waiting for SSH server to be ready on localhost:{port}...")
+            ssh_delay = int(os.environ.get("CAMPERS_SSH_DELAY_SECONDS", "0"))
 
-            ssh_timeout = timeout - (time.time() - start_time)
-            ssh_deadline = time.time() + ssh_timeout
-
-            while time.time() < ssh_deadline:
-                if self.is_ssh_server_ready(port, max_attempts=1):
-                    ssh_ready_elapsed = time.time() - ssh_health_start
-                    total_elapsed = time.time() - start_time
-                    logger.info(
-                        f"SSH server ready on port {port} after {ssh_ready_elapsed:.1f}s (total: {total_elapsed:.1f}s)"
-                    )
-
-                    logger.info("Waiting for SSH authentication subsystem to initialize...")
-                    time.sleep(2)
-
-                    break
-                time.sleep(0.5)
+            if ssh_delay > 0:
+                logger.info(f"Skipping SSH readiness check (SSH delay of {ssh_delay}s configured for retry testing)")
             else:
-                raise TimeoutError(f"SSH server not responding on port {port} after {timeout}s")
+                ssh_health_start = time.time()
+                logger.info(f"Waiting for SSH server to be ready on localhost:{port}...")
+
+                ssh_timeout = timeout - (time.time() - start_time)
+                ssh_deadline = time.time() + ssh_timeout
+
+                while time.time() < ssh_deadline:
+                    if self.is_ssh_server_ready(port, max_attempts=1):
+                        ssh_ready_elapsed = time.time() - ssh_health_start
+                        total_elapsed = time.time() - start_time
+                        logger.info(
+                            f"SSH server ready on port {port} after {ssh_ready_elapsed:.1f}s (total: {total_elapsed:.1f}s)"
+                        )
+
+                        logger.info("Waiting for SSH authentication subsystem to initialize...")
+                        time.sleep(2)
+
+                        break
+                    time.sleep(0.5)
+                else:
+                    raise TimeoutError(f"SSH server not responding on port {port} after {timeout}s")
 
         if not block_ssh:
             logger.info(

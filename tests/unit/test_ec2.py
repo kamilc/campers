@@ -789,6 +789,8 @@ def test_stop_instance_waiter_timeout(ec2_manager, cleanup_keys, registered_ami)
 
 def test_stop_instance_api_error(ec2_manager, cleanup_keys, registered_ami):
     """Test stop_instance handles ClientError from API."""
+    from campers.providers.exceptions import ProviderAPIError
+
     config = {
         "instance_type": "t3.medium",
         "disk_size": 50,
@@ -813,7 +815,7 @@ def test_stop_instance_api_error(ec2_manager, cleanup_keys, registered_ami):
             "StopInstances",
         )
 
-        with pytest.raises(ClientError):
+        with pytest.raises(ProviderAPIError):
             ec2_manager.stop_instance(instance_id)
 
 

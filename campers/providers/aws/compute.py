@@ -690,25 +690,28 @@ class EC2Manager:
         ------
         RuntimeError
             If instance fails to reach stopped state within timeout
+        ProviderAPIError
+            If AWS API call fails
         """
         logger.info("Stopping instance %s...", instance_id)
 
-        self.ec2_client.stop_instances(InstanceIds=[instance_id])
+        with handle_aws_errors():
+            self.ec2_client.stop_instances(InstanceIds=[instance_id])
 
-        try:
-            waiter = self.ec2_client.get_waiter("instance_stopped")
-            waiter.wait(
-                InstanceIds=[instance_id],
-                WaiterConfig={
-                    "Delay": WAITER_DELAY_SECONDS,
-                    "MaxAttempts": WAITER_MAX_ATTEMPTS_LONG,
-                },
-            )
-        except WaiterError as e:
-            raise RuntimeError(f"Failed to stop instance: {e}") from e
+            try:
+                waiter = self.ec2_client.get_waiter("instance_stopped")
+                waiter.wait(
+                    InstanceIds=[instance_id],
+                    WaiterConfig={
+                        "Delay": WAITER_DELAY_SECONDS,
+                        "MaxAttempts": WAITER_MAX_ATTEMPTS_LONG,
+                    },
+                )
+            except WaiterError as e:
+                raise RuntimeError(f"Failed to stop instance: {e}") from e
 
-        response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-        instance = extract_instance_from_response(response)
+            response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
+            instance = extract_instance_from_response(response)
 
         logger.info("Instance %s stopped", instance_id)
         return {

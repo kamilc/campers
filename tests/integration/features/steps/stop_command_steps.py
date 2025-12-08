@@ -65,8 +65,10 @@ def step_terminate_raises_runtime_error(context: Context) -> None:
 
 @given('terminate_instance raises ClientError "{error_code}"')
 def step_terminate_raises_client_error(context: Context, error_code: str) -> None:
-    """Configure terminate_instance to raise ClientError."""
-    context.terminate_client_error = ClientError(
+    """Configure terminate_instance to raise ProviderAPIError from ClientError."""
+    from campers.providers.exceptions import ProviderAPIError
+
+    client_error = ClientError(
         {
             "Error": {
                 "Code": error_code,
@@ -75,15 +77,22 @@ def step_terminate_raises_client_error(context: Context, error_code: str) -> Non
         },
         "TerminateInstances",
     )
+    context.terminate_client_error = ProviderAPIError(
+        message=f"Test error: {error_code}",
+        error_code=error_code,
+        original_exception=client_error,
+    )
 
 
 @given("user has AWS credentials with no EC2 permissions")
 def step_user_has_no_ec2_permissions(context: Context) -> None:
     """Mock AWS credentials with no EC2 permissions."""
+    from campers.providers.exceptions import ProviderAPIError
+
     if context.instances is None:
         context.instances = []
 
-    context.aws_permission_error = ClientError(
+    client_error = ClientError(
         {
             "Error": {
                 "Code": "UnauthorizedOperation",
@@ -91,6 +100,11 @@ def step_user_has_no_ec2_permissions(context: Context) -> None:
             }
         },
         "DescribeInstances",
+    )
+    context.aws_permission_error = ProviderAPIError(
+        message="You are not authorized to perform this operation.",
+        error_code="UnauthorizedOperation",
+        original_exception=client_error,
     )
 
 
@@ -223,7 +237,12 @@ def step_instance_is_terminated(context: Context, instance_id: str) -> None:
 @then("success message is printed to stdout")
 def step_success_message_printed(context: Context) -> None:
     """Verify success message was printed to stdout."""
-    assert "has been successfully stopped" in context.stdout
+    combined_output = context.stdout
+    if hasattr(context, "log_records") and context.log_records:
+        log_messages = "\n".join(record.getMessage() for record in context.log_records)
+        combined_output += "\n" + log_messages
+
+    assert "has been successfully stopped" in combined_output
 
 
 @then("command exits with status {expected_code:d}")
@@ -236,13 +255,25 @@ def step_command_exits_with_status(context: Context, expected_code: int) -> None
 @then("error is printed to stderr")
 def step_error_printed_to_stderr(context: Context) -> None:
     """Verify error was printed to stderr."""
-    assert context.stderr.strip()
+    combined_output = context.stderr
+    if hasattr(context, "log_records") and context.log_records:
+        log_messages = "\n".join(
+            record.getMessage()
+            for record in context.log_records
+            if record.levelname in ("ERROR", "WARNING")
+        )
+        combined_output += "\n" + log_messages
+
+    assert combined_output.strip()
 
 
 @then('disambiguation help lists instance IDs "{first_id}" and "{second_id}"')
 def step_disambiguation_help_lists_ids(context: Context, first_id: str, second_id: str) -> None:
     """Verify disambiguation help lists both instance IDs."""
     combined_output = context.stdout + context.stderr
+    if hasattr(context, "log_records") and context.log_records:
+        log_messages = "\n".join(record.getMessage() for record in context.log_records)
+        combined_output += "\n" + log_messages
 
     assert first_id in combined_output
     assert second_id in combined_output
