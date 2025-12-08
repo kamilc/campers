@@ -53,10 +53,18 @@ def get_aws_ssh_connection_info(
 
     logger.info("get_aws_ssh_connection_info: instance_id=%s, public_ip=%r", instance_id, public_ip)
 
-    ssh_host = _get_ssh_host_from_tags(instance_id)
-    ssh_port = _get_ssh_port_from_tags(instance_id)
-    ssh_username = _get_ssh_username_from_tags(instance_id)
-    ssh_key_file = _get_ssh_key_file_from_tags(instance_id)
+    endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
+
+    if endpoint_url:
+        ssh_host = _get_ssh_host_from_tags(instance_id)
+        ssh_port = _get_ssh_port_from_tags(instance_id)
+        ssh_username = _get_ssh_username_from_tags(instance_id)
+        ssh_key_file = _get_ssh_key_file_from_tags(instance_id)
+    else:
+        ssh_host = None
+        ssh_port = None
+        ssh_username = None
+        ssh_key_file = None
 
     if ssh_host is not None and ssh_port is not None:
         effective_key_file = ssh_key_file if ssh_key_file else key_file
