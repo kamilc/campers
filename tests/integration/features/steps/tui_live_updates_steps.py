@@ -128,19 +128,19 @@ def step_mutagen_status_with_files_received(context: Context, state: str, file_c
     context.mutagen_files = file_count
 
 
-@then('mutagen widget displays state "{state}"')
-def step_mutagen_widget_displays_state(context: Context, state: str) -> None:
-    """Verify mutagen widget displays expected state.
+@then('file sync widget displays state "{state}"')
+def step_file_sync_widget_displays_state(context: Context, state: str) -> None:
+    """Verify file sync widget displays expected state.
 
     Parameters
     ----------
     context : Context
         Behave context
     state : str
-        Expected mutagen state
+        Expected file sync state
     """
 
-    async def verify_mutagen_state() -> None:
+    async def verify_file_sync_state() -> None:
         CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_campers = context.campers_module.Campers()
@@ -163,15 +163,15 @@ def step_mutagen_widget_displays_state(context: Context, state: str) -> None:
             widget = app.query_one("#mutagen-widget", Static)
             content = str(widget.render())
             assert state in content.lower(), (
-                f"Expected state '{state}' in mutagen widget, got: {content}"
+                f"Expected state '{state}' in file sync widget, got: {content}"
             )
 
-    asyncio.run(verify_mutagen_state())
+    asyncio.run(verify_file_sync_state())
 
 
-@then('mutagen widget displays "{expected_text}"')
-def step_mutagen_widget_displays_text(context: Context, expected_text: str) -> None:
-    """Verify mutagen widget displays expected text.
+@then('file sync widget displays "{expected_text}"')
+def step_file_sync_widget_displays_text(context: Context, expected_text: str) -> None:
+    """Verify file sync widget displays expected text.
 
     Parameters
     ----------
@@ -181,7 +181,7 @@ def step_mutagen_widget_displays_text(context: Context, expected_text: str) -> N
         Expected text in widget
     """
 
-    async def verify_mutagen_text() -> None:
+    async def verify_file_sync_text() -> None:
         CampersTUI = context.campers_module.CampersTUI
         update_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         mock_campers = context.campers_module.Campers()
@@ -206,10 +206,10 @@ def step_mutagen_widget_displays_text(context: Context, expected_text: str) -> N
             widget = app.query_one("#mutagen-widget", Static)
             content = str(widget.render())
             assert expected_text.lower() in content.lower(), (
-                f"Expected text '{expected_text}' in mutagen widget, got: {content}"
+                f"Expected text '{expected_text}' in file sync widget, got: {content}"
             )
 
-    asyncio.run(verify_mutagen_text())
+    asyncio.run(verify_file_sync_text())
 
 
 @when('mutagen status event with state "{state}" is received')

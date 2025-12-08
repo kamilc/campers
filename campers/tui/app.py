@@ -118,7 +118,7 @@ class CampersTUI(App):
             yield Static("Region: loading...", id=WidgetID.REGION)
             yield Static("Camp Name: loading...", id=WidgetID.CAMP_NAME)
             yield Static("Command: loading...", id=WidgetID.COMMAND)
-            yield Static("Mutagen: Not syncing", id=WidgetID.MUTAGEN)
+            yield Static("File sync: Not syncing", id=WidgetID.MUTAGEN)
         with Container(id="log-panel"):
             yield Log()
 
@@ -244,11 +244,11 @@ class CampersTUI(App):
         files_synced = payload.get("files_synced")
 
         if state == "not_configured":
-            display_text = "Mutagen: Not syncing"
+            display_text = "File sync: Not syncing"
         elif files_synced is not None:
-            display_text = f"Mutagen: {state} ({files_synced} files)"
+            display_text = f"File sync: {state} ({files_synced} files)"
         else:
-            display_text = f"Mutagen: {state}"
+            display_text = f"File sync: {state}"
 
         try:
             self.query_one(f"#{WidgetID.MUTAGEN}").update(display_text)

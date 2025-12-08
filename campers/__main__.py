@@ -215,6 +215,10 @@ class Campers:
 
             exit_code = app.run()
 
+            if exit_code == 130 and self._abort_requested:
+                sys.stderr.write("Stopping instance, please wait...\n")
+                sys.stderr.flush()
+
             return {
                 "exit_code": exit_code if exit_code is not None else 0,
                 "tui_mode": True,
