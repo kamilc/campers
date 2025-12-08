@@ -138,6 +138,21 @@ def step_config_with_ports(context: Context, ports_list: str) -> None:
     defaults["ports"] = ports
 
 
+@given('config file with port mapping "{port_mapping}"')
+def step_config_with_port_mapping(context: Context, port_mapping: str) -> None:
+    """Add port mapping to defaults configuration.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    port_mapping : str
+        Port mapping string in format "remote:local" (e.g., "6006:6007")
+    """
+    defaults = ensure_defaults_section(context)
+    defaults["ports"] = [port_mapping]
+
+
 @given("config file with no ports specified")
 def step_config_no_ports(context: Context) -> None:
     """Ensure defaults have no ports configured."""

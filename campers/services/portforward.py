@@ -74,8 +74,8 @@ class PortForwardManager:
     ----------
     tunnel : SSHTunnelForwarder | None
         Single SSH tunnel forwarder instance for all ports
-    ports : list[int]
-        List of ports managed by the forwarder
+    ports : list[tuple[int, int]]
+        List of (remote_port, local_port) tuples managed by the forwarder
     """
 
     def __init__(self) -> None:
@@ -85,7 +85,7 @@ class PortForwardManager:
         Tunnels are created and managed through the create_tunnels() method.
         """
         self.tunnel: SSHTunnelForwarder | None = None
-        self.ports: list[int] = []
+        self.ports: list[tuple[int, int]] = []
 
     def validate_key_file(self, key_file: str) -> None:
         """Validate SSH key file exists and is accessible.
@@ -115,7 +115,7 @@ class PortForwardManager:
 
     def create_tunnels(
         self,
-        ports: list[int],
+        ports: list[tuple[int, int]],
         host: str,
         key_file: str,
         username: str = DEFAULT_SSH_USERNAME,
@@ -125,8 +125,9 @@ class PortForwardManager:
 
         Parameters
         ----------
-        ports : list[int]
-            List of ports to forward
+        ports : list[tuple[int, int]]
+            List of (remote_port, local_port) tuples to forward.
+            Remote port is on the EC2 instance, local port is on the local machine.
         host : str
             Remote host IP address
         key_file : str
@@ -152,38 +153,44 @@ class PortForwardManager:
         if not ports:
             return
 
-        for port in ports:
-            validate_port(port)
-            if port < PRIVILEGED_PORT_THRESHOLD:
+        for remote_port, local_port in ports:
+            validate_port(remote_port)
+            validate_port(local_port)
+
+            if local_port < PRIVILEGED_PORT_THRESHOLD:
                 logger.warning(
-                    "Port %s is a privileged port (< %s). "
+                    "Local port %s is a privileged port (< %s). "
                     "Root privileges may be required on the local machine.",
-                    port,
+                    local_port,
                     PRIVILEGED_PORT_THRESHOLD,
                 )
 
-        for port in ports:
-            if is_port_in_use(port):
-                raise PortInUseError(port)
+        for _remote_port, local_port in ports:
+            if is_port_in_use(local_port):
+                raise PortInUseError(local_port)
 
         if os.getenv("CAMPERS_TEST_MODE") == "1":
-            for port in ports:
-                logger.info("Creating SSH tunnel for port %s...", port)
+            for remote_port, local_port in ports:
+                logger.info("Creating SSH tunnel for port %s...", remote_port)
 
-            for port in ports:
-                logger.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
+            for remote_port, local_port in ports:
+                logger.info(
+                    "SSH tunnel established: localhost:%s -> remote:%s",
+                    local_port,
+                    remote_port,
+                )
 
             self.ports = ports
             return
 
         self.validate_key_file(key_file)
 
-        remote_binds = [("localhost", port) for port in ports]
-        local_binds = [("localhost", port) for port in ports]
+        remote_binds = [("localhost", remote_port) for remote_port, _local_port in ports]
+        local_binds = [("localhost", local_port) for _remote_port, local_port in ports]
 
         try:
-            for port in ports:
-                logger.info("Creating SSH tunnel for port %s...", port)
+            for remote_port, _local_port in ports:
+                logger.info("Creating SSH tunnel for port %s...", remote_port)
 
             tunnel = SSHTunnelForwarder(
                 ssh_address_or_host=(host, ssh_port),
@@ -199,8 +206,12 @@ class PortForwardManager:
             self.tunnel = tunnel
             self.ports = ports
 
-            for port in ports:
-                logger.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
+            for remote_port, local_port in ports:
+                logger.info(
+                    "SSH tunnel established: localhost:%s -> remote:%s",
+                    local_port,
+                    remote_port,
+                )
 
         except (
             BaseSSHTunnelForwarderError,
@@ -213,8 +224,8 @@ class PortForwardManager:
     def stop_all_tunnels(self) -> None:
         """Stop the SSH tunnel forwarder."""
         if self.tunnel:
-            for port in self.ports:
-                logger.info("Stopping SSH tunnel for port %s...", port)
+            for remote_port, _local_port in self.ports:
+                logger.info("Stopping SSH tunnel for port %s...", remote_port)
 
             try:
                 self.tunnel.stop()

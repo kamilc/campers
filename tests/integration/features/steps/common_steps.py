@@ -107,21 +107,23 @@ def execute_command_direct(
 
     def mock_create_tunnels(
         self: Any,
-        ports: list[int],
+        ports: list[tuple[int, int]],
         host: str,
         key_file: str,
         username: str = "ubuntu",
         ssh_port: int = 22,
     ) -> None:
-        for port in ports:
-            portforward_logger.info("Creating SSH tunnel for port %s...", port)
-        for port in ports:
-            portforward_logger.info("SSH tunnel established: localhost:%s -> remote:%s", port, port)
+        for remote_port, _local_port in ports:
+            portforward_logger.info("Creating SSH tunnel for port %s...", remote_port)
+        for remote_port, local_port in ports:
+            portforward_logger.info(
+                "SSH tunnel established: localhost:%s -> remote:%s", local_port, remote_port
+            )
         self.ports = ports
 
     def mock_stop_all_tunnels(self: Any) -> None:
-        for port in getattr(self, "ports", []):
-            portforward_logger.info("Stopping SSH tunnel for port %s...", port)
+        for remote_port, _local_port in getattr(self, "ports", []):
+            portforward_logger.info("Stopping SSH tunnel for port %s...", remote_port)
 
     portforward_patchers = [
         unittest.mock.patch.object(PortForwardManager, "validate_key_file", mock_validate_key_file),

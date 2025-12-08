@@ -46,13 +46,13 @@ def test_create_tunnels_success_single_port(
     mock_tunnel_forwarder.return_value = mock_tunnel
 
     port_forward_manager.create_tunnels(
-        ports=[8888],
+        ports=[(8888, 8888)],
         host="203.0.113.1",
         key_file="/tmp/test.pem",
         username="ubuntu",
     )
 
-    mock_validate_port.assert_called_once_with(8888)
+    assert mock_validate_port.call_count == 2
     mock_validate_key_file.assert_called_once_with("/tmp/test.pem")
     mock_tunnel_forwarder.assert_called_once_with(
         ssh_address_or_host=("203.0.113.1", 22),
@@ -63,7 +63,7 @@ def test_create_tunnels_success_single_port(
     )
     mock_tunnel.start.assert_called_once()
     assert port_forward_manager.tunnel == mock_tunnel
-    assert port_forward_manager.ports == [8888]
+    assert port_forward_manager.ports == [(8888, 8888)]
 
 
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
@@ -83,13 +83,13 @@ def test_create_tunnels_success_multiple_ports(
     mock_tunnel_forwarder.return_value = mock_tunnel
 
     port_forward_manager.create_tunnels(
-        ports=[8888, 8889, 8890],
+        ports=[(8888, 8888), (8889, 8889), (8890, 8890)],
         host="203.0.113.1",
         key_file="/tmp/test.pem",
         username="ubuntu",
     )
 
-    assert mock_validate_port.call_count == 3
+    assert mock_validate_port.call_count == 6
     mock_validate_key_file.assert_called_once_with("/tmp/test.pem")
 
     mock_tunnel_forwarder.assert_called_once()
@@ -108,7 +108,7 @@ def test_create_tunnels_success_multiple_ports(
     mock_tunnel.start.assert_called_once()
 
     assert port_forward_manager.tunnel == mock_tunnel
-    assert port_forward_manager.ports == [8888, 8889, 8890]
+    assert port_forward_manager.ports == [(8888, 8888), (8889, 8889), (8890, 8890)]
 
     expected_info_calls = [
         call("Creating SSH tunnel for port %s...", 8888),
@@ -138,7 +138,7 @@ def test_create_tunnels_default_username(
     mock_tunnel_forwarder.return_value = mock_tunnel
 
     port_forward_manager.create_tunnels(
-        ports=[8888],
+        ports=[(8888, 8888)],
         host="203.0.113.1",
         key_file="/tmp/test.pem",
     )
@@ -163,7 +163,7 @@ def test_create_tunnels_failure_raises_runtime_error(
 
     with pytest.raises(RuntimeError, match=r"Failed to create SSH tunnels"):
         port_forward_manager.create_tunnels(
-            ports=[8888, 8889],
+            ports=[(8888, 8888), (8889, 8889)],
             host="203.0.113.1",
             key_file="/tmp/test.pem",
         )
@@ -190,7 +190,7 @@ def test_create_tunnels_start_failure_raises_runtime_error(
 
     with pytest.raises(RuntimeError, match=r"Failed to create SSH tunnels"):
         port_forward_manager.create_tunnels(
-            ports=[8888, 8889],
+            ports=[(8888, 8888), (8889, 8889)],
             host="203.0.113.1",
             key_file="/tmp/test.pem",
         )
@@ -230,7 +230,7 @@ def test_stop_all_tunnels_success(
     mock_tunnel = MagicMock()
 
     port_forward_manager.tunnel = mock_tunnel
-    port_forward_manager.ports = [8888, 8889]
+    port_forward_manager.ports = [(8888, 8888), (8889, 8889)]
 
     port_forward_manager.stop_all_tunnels()
 
@@ -255,7 +255,7 @@ def test_stop_all_tunnels_handles_exceptions(
     mock_tunnel.stop.side_effect = OSError("Stop failed")
 
     port_forward_manager.tunnel = mock_tunnel
-    port_forward_manager.ports = [8888]
+    port_forward_manager.ports = [(8888, 8888)]
 
     port_forward_manager.stop_all_tunnels()
 
@@ -302,7 +302,7 @@ def test_create_tunnels_localhost_binding(
     mock_tunnel_forwarder.return_value = mock_tunnel
 
     port_forward_manager.create_tunnels(
-        ports=[8888],
+        ports=[(8888, 8888)],
         host="203.0.113.1",
         key_file="/tmp/test.pem",
     )
@@ -330,7 +330,7 @@ def test_create_tunnels_custom_ssh_port(
     mock_tunnel_forwarder.return_value = mock_tunnel
 
     port_forward_manager.create_tunnels(
-        ports=[8888],
+        ports=[(8888, 8888)],
         host="203.0.113.1",
         key_file="/tmp/test.pem",
         ssh_port=2222,
@@ -347,7 +347,7 @@ def test_stop_all_tunnels_multiple_times_idempotent(
     """Test calling stop_all_tunnels() multiple times is idempotent."""
     mock_tunnel = MagicMock()
     port_forward_manager.tunnel = mock_tunnel
-    port_forward_manager.ports = [8888]
+    port_forward_manager.ports = [(8888, 8888)]
 
     port_forward_manager.stop_all_tunnels()
     assert port_forward_manager.tunnel is None
@@ -376,7 +376,7 @@ def test_port_already_in_use_error(
 
     with pytest.raises(RuntimeError, match=r"Failed to create SSH tunnels"):
         port_forward_manager.create_tunnels(
-            ports=[8888],
+            ports=[(8888, 8888)],
             host="203.0.113.1",
             key_file="/tmp/test.pem",
         )
@@ -401,7 +401,7 @@ def test_authentication_failure_invalid_key(
 
     with pytest.raises(RuntimeError, match=r"Failed to create SSH tunnels"):
         port_forward_manager.create_tunnels(
-            ports=[8888],
+            ports=[(8888, 8888)],
             host="203.0.113.1",
             key_file="/tmp/test.pem",
         )
@@ -426,7 +426,7 @@ def test_sshtunnel_base_error_handling(
 
     with pytest.raises(RuntimeError, match=r"Failed to create SSH tunnels"):
         port_forward_manager.create_tunnels(
-            ports=[8888],
+            ports=[(8888, 8888)],
             host="203.0.113.1",
             key_file="/tmp/test.pem",
         )
@@ -435,6 +435,7 @@ def test_sshtunnel_base_error_handling(
     assert port_forward_manager.ports == []
 
 
+@patch("campers.services.portforward.is_port_in_use", return_value=False)
 @patch("campers.services.portforward.PortForwardManager.validate_key_file")
 @patch("campers.services.portforward.validate_port")
 @patch("campers.services.portforward.logger")
@@ -444,6 +445,7 @@ def test_create_tunnels_multiple_ports_different_values(
     mock_logger: MagicMock,
     mock_validate_port: MagicMock,
     mock_validate_key_file: MagicMock,
+    mock_is_port_in_use: MagicMock,
     port_forward_manager: PortForwardManager,
 ) -> None:
     """Test creating tunnels with different port values."""
@@ -452,7 +454,7 @@ def test_create_tunnels_multiple_ports_different_values(
     mock_tunnel_forwarder.return_value = mock_tunnel
 
     port_forward_manager.create_tunnels(
-        ports=[8080, 5000, 9000],
+        ports=[(8080, 8080), (5000, 5000), (9000, 9000)],
         host="203.0.113.1",
         key_file="/tmp/test.pem",
     )
@@ -469,4 +471,4 @@ def test_create_tunnels_multiple_ports_different_values(
         ("localhost", 9000),
     ]
 
-    assert port_forward_manager.ports == [8080, 5000, 9000]
+    assert port_forward_manager.ports == [(8080, 8080), (5000, 5000), (9000, 9000)]

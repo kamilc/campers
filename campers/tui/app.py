@@ -267,11 +267,18 @@ class CampersTUI(App):
         Parameters
         ----------
         payload : dict[str, Any]
-            Dictionary containing 'ports' list and 'status' string
+            Dictionary containing 'ports' list of (remote, local) tuples and 'status' string
         """
         ports = payload.get("ports", [])
         if ports:
-            port_str = ", ".join(f"{p} -> {p}" for p in ports)
+            port_strings = []
+            for p in ports:
+                if isinstance(p, (list, tuple)) and len(p) == 2:
+                    remote_port, local_port = p
+                    port_strings.append(f"{remote_port} -> {local_port}")
+                else:
+                    port_strings.append(f"{p} -> {p}")
+            port_str = ", ".join(port_strings)
             text = f"Port forwarding: {port_str}"
         else:
             text = "Port forwarding: none"

@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from campers.cli import apply_cli_overrides
+from campers.cli import apply_cli_overrides, normalize_ports_config
 from campers.constants import CLEANUP_TIMEOUT_SECONDS, DEFAULT_SSH_USERNAME, SYNC_TIMEOUT
 from campers.core.config import ConfigLoader
 from campers.core.interfaces import ComputeProvider
@@ -310,6 +310,8 @@ class RunExecutor:
             )
 
         self._validate_sync_paths_config(merged_config.get("sync_paths"))
+
+        merged_config["ports"] = normalize_ports_config(merged_config.get("ports"))
 
         self._validate_ports_available(merged_config.get("ports"))
 
@@ -891,25 +893,25 @@ class RunExecutor:
                 f"sync_paths entry must have both 'local' and 'remote' keys. Got: {sync_config}"
             )
 
-    def _validate_ports_available(self, ports: list[int] | None) -> None:
+    def _validate_ports_available(self, ports: list[tuple[int, int]] | None) -> None:
         """Validate that local ports are available for forwarding.
 
         Parameters
         ----------
-        ports : list[int] | None
-            List of ports to validate for availability
+        ports : list[tuple[int, int]] | None
+            List of (remote_port, local_port) tuples to validate for availability
 
         Raises
         ------
         PortInUseError
-            If any port is already in use on localhost
+            If any local port is already in use on localhost
         """
         if not ports:
             return
 
-        for port in ports:
-            if is_port_in_use(port):
-                raise PortInUseError(port)
+        for _remote_port, local_port in ports:
+            if is_port_in_use(local_port):
+                raise PortInUseError(local_port)
 
     def _get_playbook_references(self, config: dict[str, Any]) -> list[str]:
         """Extract playbook names from config.

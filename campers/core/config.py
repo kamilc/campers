@@ -273,27 +273,89 @@ class ConfigLoader:
         ------
         ValueError
             If port configuration is invalid
+
+        Notes
+        -----
+        Ports can be specified as:
+        - Integer: same port for remote and local (e.g., 8888)
+        - String with colon: remote:local mapping (e.g., "6006:6007")
         """
         if "port" in config and "ports" in config:
             raise ValueError("cannot specify both port and ports")
 
         if "port" in config:
-            if not isinstance(config["port"], int):
-                raise ValueError("port must be an integer")
+            if not isinstance(config["port"], (int, str)):
+                raise ValueError("port must be an integer or string")
 
-            if not (1 <= config["port"] <= 65535):
-                raise ValueError("port must be between 1 and 65535")
+            self._validate_single_port_entry(config["port"])
 
         if "ports" in config:
             if not isinstance(config["ports"], list):
                 raise ValueError("ports must be a list")
 
             for port in config["ports"]:
-                if not isinstance(port, int):
-                    raise ValueError("ports entries must be integers")
+                self._validate_single_port_entry(port)
 
-                if not (1 <= port <= 65535):
-                    raise ValueError("ports entries must be between 1 and 65535")
+    def _validate_single_port_entry(self, port: int | str) -> None:
+        """Validate a single port entry from configuration.
+
+        Parameters
+        ----------
+        port : int | str
+            Port specification - can be integer or string with optional colon
+
+        Raises
+        ------
+        ValueError
+            If port is invalid
+        """
+        if isinstance(port, int):
+            if not (1 <= port <= 65535):
+                raise ValueError(f"port {port} must be between 1 and 65535")
+            return
+
+        if isinstance(port, str):
+            port_str = port.strip()
+
+            if ":" in port_str:
+                parts = port_str.split(":")
+
+                if len(parts) != 2:
+                    raise ValueError(
+                        f"Invalid port mapping: '{port_str}'. "
+                        f"Expected format: 'remote:local' (e.g., '6006:6007')"
+                    )
+
+                for part in parts:
+                    try:
+                        port_val = int(part.strip())
+                    except ValueError:
+                        raise ValueError(
+                            f"Invalid port mapping: '{port_str}'. "
+                            f"Both ports must be numeric"
+                        ) from None
+
+                    if not (1 <= port_val <= 65535):
+                        raise ValueError(
+                            f"Invalid port value: {port_val}. "
+                            f"Port must be between 1 and 65535"
+                        )
+            else:
+                try:
+                    port_val = int(port_str)
+                except ValueError:
+                    raise ValueError(
+                        f"Invalid port value: '{port_str}' is not numeric"
+                    ) from None
+
+                if not (1 <= port_val <= 65535):
+                    raise ValueError(
+                        f"Invalid port value: {port_val}. "
+                        f"Port must be between 1 and 65535"
+                    )
+            return
+
+        raise ValueError(f"ports entries must be integers or strings, got {type(port)}")
 
     def _validate_sync_paths(self, config: dict[str, Any]) -> None:
         """Validate sync_paths configuration.

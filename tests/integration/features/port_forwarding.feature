@@ -101,13 +101,13 @@ Scenario: Port forwarding lifecycle via TUI
 @smoke @dry_run
 Scenario: Test mode simulates SSH tunnels
   Given CAMPERS_TEST_MODE is "1"
-  And config file with ports [48888, 6006]
+  And config file with ports [48888, 48892]
   When I run campers command "run -c 'echo test'"
   Then SSH tunnel creation is skipped
   And status message "Creating SSH tunnel for port 48888..." is logged
   And status message "SSH tunnel established: localhost:48888 -> remote:48888" is logged
-  And status message "Creating SSH tunnel for port 6006..." is logged
-  And status message "SSH tunnel established: localhost:6006 -> remote:6006" is logged
+  And status message "Creating SSH tunnel for port 48892..." is logged
+  And status message "SSH tunnel established: localhost:48892 -> remote:48892" is logged
 
 @smoke @dry_run
 Scenario: Localhost-only binding for security
@@ -116,3 +116,22 @@ Scenario: Localhost-only binding for security
   Then status message "Creating SSH tunnel for port 48888..." is logged
   And status message "SSH tunnel established: localhost:48888 -> remote:48888" is logged
 
+@smoke @dry_run
+Scenario: Port mapping with different local and remote ports
+  Given CAMPERS_TEST_MODE is "1"
+  And config file with port mapping "46006:46007"
+  When I run campers command "run -c 'echo test'"
+  Then SSH tunnel creation is skipped
+  And status message "Creating SSH tunnel for port 46006..." is logged
+  And status message "SSH tunnel established: localhost:46007 -> remote:46006" is logged
+
+@smoke @dry_run
+Scenario: Mixed port specifications with same and different ports
+  Given CAMPERS_TEST_MODE is "1"
+  And config file with ports ["48888", "46006:46007"]
+  When I run campers command "run -c 'echo test'"
+  Then SSH tunnel creation is skipped
+  And status message "Creating SSH tunnel for port 48888..." is logged
+  And status message "SSH tunnel established: localhost:48888 -> remote:48888" is logged
+  And status message "Creating SSH tunnel for port 46006..." is logged
+  And status message "SSH tunnel established: localhost:46007 -> remote:46006" is logged
