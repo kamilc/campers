@@ -301,7 +301,7 @@ class CampersTUI(App):
         config : dict[str, Any]
             Merged configuration data
         """
-        self.campers.merged_config = config
+        self.campers._merged_config_prop = config
 
         if "instance_type" in config:
             try:

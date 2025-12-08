@@ -82,7 +82,7 @@ class Campers:
         return "pytest" in sys.modules or os.environ.get("CAMPERS_TEST_MODE") == "1"
 
     @property
-    def compute_provider_factory(self) -> Callable[[str], ComputeProvider]:
+    def _compute_provider_factory(self) -> Callable[[str], ComputeProvider]:
         """Get the compute provider factory."""
         if self._compute_provider_factory_override is not None:
             return self._compute_provider_factory_override
@@ -97,21 +97,21 @@ class Campers:
         )
 
     @property
-    def cleanup_in_progress(self) -> bool:
+    def _cleanup_in_progress_prop(self) -> bool:
         """Get cleanup in progress status."""
         return self._cleanup_in_progress
 
     @property
-    def run_executor(self) -> RunExecutor:
+    def _run_executor_prop(self) -> RunExecutor:
         """Get the run executor instance."""
         if self._run_executor is None:
             self._run_executor = RunExecutor(
                 config_loader=self._config_loader,
-                compute_provider_factory=self.compute_provider_factory,
+                compute_provider_factory=self._compute_provider_factory,
                 ssh_manager_factory=self._ssh_manager_factory,
                 resources=self._resources,
                 resources_lock=self._resources_lock,
-                cleanup_in_progress_getter=lambda: self.cleanup_in_progress,
+                cleanup_in_progress_getter=lambda: self._cleanup_in_progress_prop,
                 cleanup_event=self._cleanup_manager.cleanup_event,
                 update_queue=self._update_queue,
                 mutagen_manager_factory=self._mutagen_manager_factory,
@@ -120,34 +120,34 @@ class Campers:
         return self._run_executor
 
     @property
-    def lifecycle_manager(self) -> LifecycleManager:
+    def _lifecycle_manager_prop(self) -> LifecycleManager:
         """Get the lifecycle manager instance."""
         if self._lifecycle_manager is None:
             self._lifecycle_manager = LifecycleManager(
                 config_loader=self._config_loader,
-                compute_provider_factory=self.compute_provider_factory,
+                compute_provider_factory=self._compute_provider_factory,
                 truncate_name=truncate_name,
             )
         return self._lifecycle_manager
 
     @property
-    def merged_config(self) -> dict[str, Any] | None:
+    def _merged_config_prop(self) -> dict[str, Any] | None:
         """Get the merged configuration from the run executor."""
         if self._run_executor is None:
             return None
         return self._run_executor.merged_config
 
-    @merged_config.setter
-    def merged_config(self, value: dict[str, Any] | None) -> None:
+    @_merged_config_prop.setter
+    def _merged_config_prop(self, value: dict[str, Any] | None) -> None:
         """Set the merged configuration on the run executor."""
         if self._run_executor is None:
             self._run_executor = RunExecutor(
                 config_loader=self._config_loader,
-                compute_provider_factory=self.compute_provider_factory,
+                compute_provider_factory=self._compute_provider_factory,
                 ssh_manager_factory=self._ssh_manager_factory,
                 resources=self._resources,
                 resources_lock=self._resources_lock,
-                cleanup_in_progress_getter=lambda: self.cleanup_in_progress,
+                cleanup_in_progress_getter=lambda: self._cleanup_in_progress_prop,
                 cleanup_event=self._cleanup_manager.cleanup_event,
                 update_queue=self._update_queue,
                 mutagen_manager_factory=self._mutagen_manager_factory,
@@ -156,7 +156,7 @@ class Campers:
         self._run_executor.merged_config = value
 
     @property
-    def setup_manager(self) -> object:
+    def _setup_manager_prop(self) -> object:
         """Get the setup manager instance (lazy-loaded from provider).
 
         Returns
@@ -257,7 +257,7 @@ class Campers:
         update_queue: queue.Queue | None = None,
         verbose: bool = False,
     ) -> dict[str, Any] | str:
-        return self.run_executor.execute(
+        return self._run_executor_prop.execute(
             camp_name=camp_name,
             command=command,
             instance_type=instance_type,
@@ -288,7 +288,7 @@ class Campers:
         dict[str, Any]
             Instance details including ID, IP address, and metadata
         """
-        return self.run_executor.get_or_create_instance(instance_name, config)
+        return self._run_executor_prop.get_or_create_instance(instance_name, config)
 
     def _sync_cleanup_manager_resources(self) -> None:
         """Ensure cleanup manager uses the current resources dictionary.
@@ -343,7 +343,7 @@ class Campers:
         str
             The complete command with directory change prefix
         """
-        return self.run_executor.build_command_in_directory(working_dir, command)
+        return self._run_executor_prop.build_command_in_directory(working_dir, command)
 
     def _truncate_name(self, name: str) -> str:
         """Truncate instance name to maximum allowed length.
@@ -373,32 +373,32 @@ class Campers:
         ProviderError
             If the region is not valid for the provider
         """
-        compute_provider = self.compute_provider_factory(region)
+        compute_provider = self._compute_provider_factory(region)
         compute_provider.validate_region(region)
 
     def list(self, region: str | None = None) -> None:
         """List all managed instances."""
-        return self.lifecycle_manager.list(region=region)
+        return self._lifecycle_manager_prop.list(region=region)
 
     def stop(self, name_or_id: str, region: str | None = None) -> None:
         """Stop a managed instance."""
-        return self.lifecycle_manager.stop(name_or_id=name_or_id, region=region)
+        return self._lifecycle_manager_prop.stop(name_or_id=name_or_id, region=region)
 
     def start(self, name_or_id: str, region: str | None = None) -> None:
         """Start a managed instance."""
-        return self.lifecycle_manager.start(name_or_id=name_or_id, region=region)
+        return self._lifecycle_manager_prop.start(name_or_id=name_or_id, region=region)
 
     def info(self, name_or_id: str, region: str | None = None) -> None:
         """Get information about a managed instance."""
-        return self.lifecycle_manager.info(name_or_id=name_or_id, region=region)
+        return self._lifecycle_manager_prop.info(name_or_id=name_or_id, region=region)
 
     def destroy(self, name_or_id: str, region: str | None = None) -> None:
         """Destroy a managed instance."""
-        return self.lifecycle_manager.destroy(name_or_id=name_or_id, region=region)
+        return self._lifecycle_manager_prop.destroy(name_or_id=name_or_id, region=region)
 
     def setup(self, region: str | None = None) -> None:
         """Set up cloud environment and validate configuration."""
-        return self.setup_manager.setup(region=region)
+        return self._setup_manager_prop.setup(region=region)
 
     def doctor(self, region: str | None = None) -> None:
         """Diagnose cloud environment and configuration issues.
@@ -408,7 +408,7 @@ class Campers:
         region : str | None
             Cloud region to diagnose, or None for default region
         """
-        return self.setup_manager.doctor(region=region)
+        return self._setup_manager_prop.doctor(region=region)
 
     def init(self, force: bool = False) -> None:
         """Create a default campers.yaml configuration file."""

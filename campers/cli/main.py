@@ -73,7 +73,7 @@ class CampersCLI:
             Campers = get_campers_base_class()
 
             class CampersCLIImpl(Campers):
-                """CLI wrapper implementation for Campers."""
+                """Cloud remote development environment manager."""
 
                 def __init__(
                     self,
