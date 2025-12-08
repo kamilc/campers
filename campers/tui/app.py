@@ -348,7 +348,11 @@ class CampersTUI(App):
             except queue.Empty:
                 break
 
-        if not self.campers._abort_requested and not self.campers._cleanup_in_progress:
+        if (
+            not self.campers._abort_requested
+            and not self.campers._cleanup_in_progress
+            and self.campers._resources
+        ):
             self.campers._cleanup_resources()
 
     def run_campers_logic(self) -> None:
@@ -435,6 +439,8 @@ class CampersTUI(App):
             error_message = f"Unexpected error: {str(e)}"
             self.worker_exit_code = 1
         finally:
+            has_resources = bool(self.campers._resources)
+
             if error_message:
                 self.fatal_error_message = error_message
                 logging.error(error_message)
@@ -446,14 +452,18 @@ class CampersTUI(App):
                         )
                     except queue.Full:
                         logging.warning("TUI update queue full, dropping error status update")
-                    time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
+
+                    if has_resources:
+                        time.sleep(TUI_STATUS_UPDATE_PROCESSING_DELAY)
 
             if self.campers._abort_requested:
                 self.worker_exit_code = 130
-            elif not self.campers._cleanup_in_progress:
+            elif not self.campers._cleanup_in_progress and has_resources:
                 self.campers._cleanup_resources()
 
-            time.sleep(0.5)
+            if has_resources:
+                time.sleep(0.5)
+
             self.call_from_thread(self.exit, self.worker_exit_code)
 
     def on_key(self, event: events.Key) -> None:
