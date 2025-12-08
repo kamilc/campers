@@ -284,78 +284,66 @@ class ConfigLoader:
             raise ValueError("cannot specify both port and ports")
 
         if "port" in config:
-            if not isinstance(config["port"], (int, str)):
-                raise ValueError("port must be an integer or string")
+            if not isinstance(config["port"], int):
+                raise ValueError("port must be an integer")
 
-            self._validate_single_port_entry(config["port"])
+            self._validate_single_port_entry(config["port"], is_port_singular=True)
 
         if "ports" in config:
             if not isinstance(config["ports"], list):
                 raise ValueError("ports must be a list")
 
             for port in config["ports"]:
-                self._validate_single_port_entry(port)
+                self._validate_single_port_entry(port, is_port_singular=False)
 
-    def _validate_single_port_entry(self, port: int | str) -> None:
+    def _validate_single_port_entry(
+        self, port: int | tuple[int, int], is_port_singular: bool = True
+    ) -> None:
         """Validate a single port entry from configuration.
 
         Parameters
         ----------
-        port : int | str
-            Port specification - can be integer or string with optional colon
+        port : int | tuple[int, int]
+            Port specification - can be integer or tuple of two integers
+        is_port_singular : bool, optional
+            True if validating singular "port" field, False for "ports" list, by default True
 
         Raises
         ------
         ValueError
             If port is invalid
         """
-        if isinstance(port, int):
-            if not (1 <= port <= 65535):
-                raise ValueError(f"port {port} must be between 1 and 65535")
-            return
-
-        if isinstance(port, str):
-            port_str = port.strip()
-
-            if ":" in port_str:
-                parts = port_str.split(":")
-
-                if len(parts) != 2:
+        if isinstance(port, tuple):
+            if not is_port_singular:
+                if len(port) != 2:
                     raise ValueError(
-                        f"Invalid port mapping: '{port_str}'. "
-                        f"Expected format: 'remote:local' (e.g., '6006:6007')"
+                        f"Invalid port mapping: {port}. "
+                        f"Expected tuple of two integers (remote, local)"
                     )
 
-                for part in parts:
-                    try:
-                        port_val = int(part.strip())
-                    except ValueError:
+                for port_val in port:
+                    if not isinstance(port_val, int):
                         raise ValueError(
-                            f"Invalid port mapping: '{port_str}'. "
-                            f"Both ports must be numeric"
-                        ) from None
+                            f"Invalid port mapping: {port}. "
+                            f"Both ports must be integers"
+                        )
 
                     if not (1 <= port_val <= 65535):
                         raise ValueError(
-                            f"Invalid port value: {port_val}. "
-                            f"Port must be between 1 and 65535"
+                            "ports entries must be between 1 and 65535"
                         )
+                return
             else:
-                try:
-                    port_val = int(port_str)
-                except ValueError:
-                    raise ValueError(
-                        f"Invalid port value: '{port_str}' is not numeric"
-                    ) from None
+                raise ValueError("port must be an integer, got tuple")
 
-                if not (1 <= port_val <= 65535):
-                    raise ValueError(
-                        f"Invalid port value: {port_val}. "
-                        f"Port must be between 1 and 65535"
-                    )
+        if isinstance(port, int):
+            if not (1 <= port <= 65535):
+                port_prefix = "ports entries" if not is_port_singular else "port"
+                raise ValueError(f"{port_prefix} must be between 1 and 65535")
             return
 
-        raise ValueError(f"ports entries must be integers or strings, got {type(port)}")
+        port_type = "port" if is_port_singular else "ports entries"
+        raise ValueError(f"{port_type} must be integers")
 
     def _validate_sync_paths(self, config: dict[str, Any]) -> None:
         """Validate sync_paths configuration.

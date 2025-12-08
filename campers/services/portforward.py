@@ -170,7 +170,7 @@ class PortForwardManager:
                 raise PortInUseError(local_port)
 
         if os.getenv("CAMPERS_TEST_MODE") == "1":
-            for remote_port, local_port in ports:
+            for remote_port, _local_port in ports:
                 logger.info("Creating SSH tunnel for port %s...", remote_port)
 
             for remote_port, local_port in ports:

@@ -307,6 +307,7 @@ def test_run_with_sync_paths_creates_mutagen_session(campers_module) -> None:
         campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
+        mock_mutagen_instance.get_sync_status.return_value = "watching"
         mock_mutagen.return_value = mock_mutagen_instance
         campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
@@ -315,7 +316,7 @@ def test_run_with_sync_paths_creates_mutagen_session(campers_module) -> None:
         mock_mutagen_instance.check_mutagen_installed.assert_called_once()
         mock_mutagen_instance.cleanup_orphaned_session.assert_called_once()
         mock_mutagen_instance.create_sync_session.assert_called_once()
-        mock_mutagen_instance.wait_for_initial_sync.assert_called_once()
+        mock_mutagen_instance.get_sync_status.assert_called()
         mock_mutagen_instance.terminate_session.assert_called_once()
         assert result["instance_id"] == "i-test123"
 
@@ -634,7 +635,7 @@ def test_run_with_port_forwarding_creates_tunnels(campers_module) -> None:
         result = campers_instance.run()
 
         mock_portforward_instance.create_tunnels.assert_called_once_with(
-            ports=[8888, 8080],
+            ports=[(8888, 8888), (8080, 8080)],
             host="203.0.113.1",
             key_file="/tmp/test.pem",
             username="ubuntu",

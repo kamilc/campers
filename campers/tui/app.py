@@ -244,17 +244,25 @@ class CampersTUI(App):
         Parameters
         ----------
         payload : dict[str, Any]
-            Mutagen status payload containing 'state' and optionally 'files_synced'
+            Mutagen status payload containing 'status_text' or legacy 'state' and 'files_synced'
         """
-        state = payload.get("state", "unknown")
-        files_synced = payload.get("files_synced")
+        status_text = payload.get("status_text")
 
-        if state == "not_configured":
-            display_text = "File sync: Not syncing"
-        elif files_synced is not None:
-            display_text = f"File sync: {state} ({files_synced} files)"
+        if status_text is not None:
+            if status_text == "idle":
+                display_text = "File sync: idle"
+            else:
+                display_text = f"File sync: {status_text}"
         else:
-            display_text = f"File sync: {state}"
+            state = payload.get("state", "unknown")
+            files_synced = payload.get("files_synced")
+
+            if state == "not_configured":
+                display_text = "File sync: Not syncing"
+            elif files_synced is not None:
+                display_text = f"File sync: {state} ({files_synced} files)"
+            else:
+                display_text = f"File sync: {state}"
 
         try:
             self.query_one(f"#{WidgetID.MUTAGEN}").update(display_text)

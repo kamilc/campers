@@ -88,22 +88,29 @@ def apply_timeout_mock_if_needed(context: Context) -> list:
                     session_name,
                 )
 
+            def mock_get_sync_status(self, session_name: str) -> str:
+                return "Watching for changes"
+
             patcher = patch.object(
                 MutagenManager, "wait_for_initial_sync", mock_wait_for_initial_sync
             )
             create_patcher = patch.object(MutagenManager, "create_sync_session", mock_create)
             terminate_patcher = patch.object(MutagenManager, "terminate_session", mock_terminate)
+            status_patcher = patch.object(MutagenManager, "get_sync_status", mock_get_sync_status)
 
             patcher.start()
             create_patcher.start()
             terminate_patcher.start()
+            status_patcher.start()
 
             if not hasattr(context, "mutagen_patchers"):
                 context.mutagen_patchers = []
-            context.mutagen_patchers.extend([patcher, create_patcher, terminate_patcher])
+            context.mutagen_patchers.extend(
+                [patcher, create_patcher, terminate_patcher, status_patcher]
+            )
 
             logger.debug("Timeout mock applied successfully")
-            return [patcher, create_patcher, terminate_patcher]
+            return [patcher, create_patcher, terminate_patcher, status_patcher]
         except ImportError as e:
             logger.error(f"Failed to import MutagenManager for timeout mock: {e}")
             return []
@@ -157,6 +164,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 original_create = MutagenManager.create_sync_session
                 original_wait = MutagenManager.wait_for_initial_sync
                 original_terminate = MutagenManager.terminate_session
+                original_get_status = MutagenManager.get_sync_status
 
                 def wrapped_create(  # type: ignore[override]
                     self,
@@ -235,19 +243,35 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                             exc,
                         )
 
+                def wrapped_get_sync_status(self, session_name: str) -> str:
+                    try:
+                        return original_get_status(self, session_name)
+                    except Exception as exc:
+                        logger.debug(
+                            "Mutagen get_sync_status failed (%s); returning unknown",
+                            exc,
+                        )
+                        return "Unknown"
+
                 create_patcher = patch.object(MutagenManager, "create_sync_session", wrapped_create)
                 wait_patcher = patch.object(MutagenManager, "wait_for_initial_sync", wrapped_wait)
                 terminate_patcher = patch.object(
                     MutagenManager, "terminate_session", wrapped_terminate
                 )
+                status_patcher = patch.object(
+                    MutagenManager, "get_sync_status", wrapped_get_sync_status
+                )
 
                 create_patcher.start()
                 wait_patcher.start()
                 terminate_patcher.start()
+                status_patcher.start()
 
                 if not hasattr(context, "mutagen_patchers"):
                     context.mutagen_patchers = []
-                context.mutagen_patchers.extend([create_patcher, wait_patcher, terminate_patcher])
+                context.mutagen_patchers.extend(
+                    [create_patcher, wait_patcher, terminate_patcher, status_patcher]
+                )
             except ImportError as exc:  # pragma: no cover
                 logger.warning("Failed to import MutagenManager: %s", exc)
             except Exception as exc:  # pragma: no cover
@@ -324,6 +348,10 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
             logger.debug("Mocked: Waiting for Mutagen sync")
             return True
 
+        def mock_get_sync_status(self, *args: Any, **kwargs: Any) -> str:
+            logger.debug("Mocked: Getting Mutagen sync status")
+            return "Watching for changes"
+
         try:
             from campers.services.sync import MutagenManager
 
@@ -357,6 +385,7 @@ def mutagen_mocked(context: Context) -> Generator[None, None, None]:
                 patch.object(MutagenManager, "create_sync_session", mock_create_sync_session),
                 patch.object(MutagenManager, "terminate_session", mock_terminate_session),
                 patch.object(MutagenManager, "wait_for_initial_sync", mock_wait_for_sync),
+                patch.object(MutagenManager, "get_sync_status", mock_get_sync_status),
                 patch.object(PortForwardManager, "validate_key_file", mock_validate_key_file),
                 patch.object(PortForwardManager, "create_tunnels", mock_create_tunnels),
                 patch.object(PortForwardManager, "stop_all_tunnels", mock_stop_all_tunnels),

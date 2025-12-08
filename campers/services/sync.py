@@ -400,6 +400,55 @@ Host {host}
                 temp_key_path.unlink()
             raise
 
+    def get_sync_status(self, session_name: str) -> str:
+        """Get the current sync status from Mutagen.
+
+        Extracts the "Status:" line from mutagen sync list output and
+        combines it with "Staged entries:" information if available.
+
+        Parameters
+        ----------
+        session_name : str
+            Name of sync session to query
+
+        Returns
+        -------
+        str
+            Formatted status string (e.g., "Watching for changes" or
+            "Staging files on beta (Staged entries (alpha): 45)")
+            Returns "Unknown" if the status cannot be determined.
+        """
+        try:
+            result = subprocess.run(
+                ["mutagen", "sync", "list", session_name],
+                capture_output=True,
+                text=True,
+                timeout=SYNC_STATUS_CHECK_TIMEOUT_SECONDS,
+            )
+
+            if result.returncode != 0:
+                return "Unknown"
+
+            status_line = None
+            entries_line = None
+
+            for line in result.stdout.split("\n"):
+                stripped = line.strip()
+                if stripped.startswith("Status:"):
+                    status_line = stripped.replace("Status:", "").strip()
+                elif stripped.startswith("Staged entries") and entries_line is None:
+                    entries_line = stripped
+
+            if status_line:
+                if entries_line:
+                    return f"{status_line} ({entries_line})"
+                return status_line
+
+            return "Unknown"
+
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError):
+            return "Unknown"
+
     def wait_for_initial_sync(self, session_name: str, timeout: int = 300) -> None:
         """Wait for Mutagen initial sync to complete.
 

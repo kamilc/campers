@@ -252,12 +252,26 @@ def mock_portforward_manager(campers_module):
 
 
 @pytest.fixture
+def mock_port_availability() -> Generator[None, None, None]:
+    """Mock is_port_in_use to always return False (ports available).
+
+    Yields
+    ------
+    None
+        Control back to test with mocked port availability check
+    """
+    with patch("campers.core.run_executor.is_port_in_use", return_value=False):
+        yield
+
+
+@pytest.fixture
 def campers(
     campers_module: Any,
     mock_ec2_manager: MagicMock,
     mock_ssh_manager: MagicMock,
     mock_mutagen_manager: MagicMock,
     mock_portforward_manager: MagicMock,
+    mock_port_availability: None,
 ) -> Any:
     """Create Campers instance with all managers mocked.
 

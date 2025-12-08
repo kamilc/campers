@@ -297,3 +297,86 @@ def test_create_sync_session_invalid_host(mutagen_manager) -> None:
             key_file="/tmp/test.pem",
             username="ubuntu",
         )
+
+
+def test_get_sync_status_watching(mutagen_manager) -> None:
+    """Test getting sync status when watching for changes."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="Name: campers-123\nStatus: Watching for changes\nAlpha:\n    Connected: Yes",
+        )
+
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Watching for changes"
+        mock_run.assert_called_once_with(
+            ["mutagen", "sync", "list", "campers-123"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+
+def test_get_sync_status_with_staged_entries(mutagen_manager) -> None:
+    """Test getting sync status with staged entries."""
+    with patch("subprocess.run") as mock_run:
+        stdout = (
+            "Name: campers-123\nStatus: Staging files on beta\n"
+            "Staged entries (alpha): 45\nStaged entries (beta): 0"
+        )
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=stdout,
+        )
+
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Staging files on beta (Staged entries (alpha): 45)"
+
+
+def test_get_sync_status_command_failure(mutagen_manager) -> None:
+    """Test getting sync status when command fails."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1)
+
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"
+
+
+def test_get_sync_status_timeout(mutagen_manager) -> None:
+    """Test getting sync status when command times out."""
+    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("mutagen", 10)):
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"
+
+
+def test_get_sync_status_subprocess_error(mutagen_manager) -> None:
+    """Test getting sync status when subprocess error occurs."""
+    with patch("subprocess.run", side_effect=subprocess.SubprocessError("error")):
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"
+
+
+def test_get_sync_status_os_error(mutagen_manager) -> None:
+    """Test getting sync status when OS error occurs."""
+    with patch("subprocess.run", side_effect=OSError("error")):
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"
+
+
+def test_get_sync_status_no_status_line(mutagen_manager) -> None:
+    """Test getting sync status when Status line is missing."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="Name: campers-123\nAlpha:\n    Connected: Yes",
+        )
+
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"

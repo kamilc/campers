@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import Any
 
 from campers.cli import apply_cli_overrides, normalize_ports_config
-from campers.constants import CLEANUP_TIMEOUT_SECONDS, DEFAULT_SSH_USERNAME, SYNC_TIMEOUT
+from campers.constants import (
+    CLEANUP_TIMEOUT_SECONDS,
+    DEFAULT_SSH_USERNAME,
+    SYNC_STATUS_POLL_INTERVAL_SECONDS,
+    SYNC_TIMEOUT,
+)
 from campers.core.config import ConfigLoader
 from campers.core.interfaces import ComputeProvider
 from campers.services.ansible import AnsibleManager
@@ -526,23 +531,35 @@ class RunExecutor:
 
             logging.info("Waiting for initial file sync to complete...")
 
+            start_time = time.time()
+            sync_complete = False
+
+            while time.time() - start_time < SYNC_TIMEOUT and not sync_complete:
+                if self.cleanup_in_progress_getter():
+                    logging.info("Cleanup requested, aborting file sync polling")
+                    break
+
+                status_text = mutagen_mgr.get_sync_status(mutagen_session_name)
+                is_complete = "watching" in status_text.lower()
+
+                self._send_queue_update(
+                    update_queue,
+                    {"type": "mutagen_status", "payload": {"status_text": status_text}},
+                )
+
+                if is_complete:
+                    sync_complete = True
+                else:
+                    time.sleep(SYNC_STATUS_POLL_INTERVAL_SECONDS)
+
+            if sync_complete:
+                logging.info("File sync completed")
+            else:
+                logging.warning("File sync did not complete within timeout")
+
             self._send_queue_update(
                 update_queue,
-                {
-                    "type": "mutagen_status",
-                    "payload": {"state": "syncing", "files_synced": 0},
-                },
-            )
-
-            mutagen_mgr.wait_for_initial_sync(mutagen_session_name, timeout=SYNC_TIMEOUT)
-            logging.info("File sync completed")
-
-            self._send_queue_update(
-                update_queue,
-                {
-                    "type": "mutagen_status",
-                    "payload": {"state": "idle"},
-                },
+                {"type": "mutagen_status", "payload": {"status_text": "idle"}},
             )
 
     def _phase_ansible_provisioning(
