@@ -430,6 +430,53 @@ class Campers:
 
         logging.info(f"Created {config_path} configuration file.", extra={"stream": "stdout"})
 
+    def validate(self, camp_name: str | None = None) -> None:
+        """Validate configuration file without running.
+
+        Parameters
+        ----------
+        camp_name : str | None
+            Optional camp name to validate specific camp configuration.
+            If not provided, validates all camps in the config.
+        """
+        try:
+            raw_config = self._config_loader.load_config()
+        except FileNotFoundError as e:
+            logging.error(str(e), extra={"stream": "stderr"})
+            sys.exit(1)
+
+        camps = raw_config.get("camps", {})
+
+        if camp_name:
+            if camp_name not in camps:
+                available = list(camps.keys()) if camps else []
+                logging.error(
+                    f"Camp '{camp_name}' not found. Available camps: {available}",
+                    extra={"stream": "stderr"},
+                )
+                sys.exit(1)
+            camps_to_validate = [camp_name]
+        else:
+            camps_to_validate = list(camps.keys()) if camps else [None]
+
+        errors = []
+
+        for name in camps_to_validate:
+            try:
+                merged = self._config_loader.get_camp_config(raw_config, name)
+                self._config_loader.validate_config(merged)
+                label = f"camp '{name}'" if name else "defaults"
+                logging.info(f"✓ {label}", extra={"stream": "stdout"})
+            except ValueError as e:
+                label = f"camp '{name}'" if name else "defaults"
+                errors.append((label, str(e)))
+                logging.error(f"✗ {label}: {e}", extra={"stream": "stderr"})
+
+        if errors:
+            sys.exit(1)
+
+        logging.info("Configuration valid.", extra={"stream": "stdout"})
+
 
 if __name__ == "__main__":
     main()
