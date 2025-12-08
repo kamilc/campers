@@ -219,6 +219,10 @@ class Campers:
                 sys.stderr.write("Stopping instance, please wait...\n")
                 sys.stderr.flush()
 
+            if app.fatal_error_message:
+                sys.stderr.write(f"\nError: {app.fatal_error_message}\n")
+                sys.stderr.flush()
+
             return {
                 "exit_code": exit_code if exit_code is not None else 0,
                 "tui_mode": True,

@@ -17,7 +17,7 @@ from campers.constants import CLEANUP_TIMEOUT_SECONDS, DEFAULT_SSH_USERNAME, SYN
 from campers.core.config import ConfigLoader
 from campers.core.interfaces import ComputeProvider
 from campers.services.ansible import AnsibleManager
-from campers.services.portforward import PortForwardManager
+from campers.services.portforward import PortForwardManager, PortInUseError, is_port_in_use
 from campers.services.ssh import SSHManager, get_ssh_connection_info
 from campers.services.sync import MutagenManager
 from campers.utils import generate_instance_name
@@ -301,6 +301,8 @@ class RunExecutor:
             )
 
         self._validate_sync_paths_config(merged_config.get("sync_paths"))
+
+        self._validate_ports_available(merged_config.get("ports"))
 
         self._send_queue_update(update_queue, {"type": "merged_config", "payload": merged_config})
 
@@ -871,6 +873,26 @@ class RunExecutor:
             raise ValueError(
                 f"sync_paths entry must have both 'local' and 'remote' keys. Got: {sync_config}"
             )
+
+    def _validate_ports_available(self, ports: list[int] | None) -> None:
+        """Validate that local ports are available for forwarding.
+
+        Parameters
+        ----------
+        ports : list[int] | None
+            List of ports to validate for availability
+
+        Raises
+        ------
+        PortInUseError
+            If any port is already in use on localhost
+        """
+        if not ports:
+            return
+
+        for port in ports:
+            if is_port_in_use(port):
+                raise PortInUseError(port)
 
     def _get_playbook_references(self, config: dict[str, Any]) -> list[str]:
         """Extract playbook names from config.

@@ -59,6 +59,8 @@ class CampersTUI(App):
         Original logging handlers to restore on exit
     worker_exit_code : int
         Exit code from worker thread
+    fatal_error_message : str | None
+        Error message to display after TUI exits, if any fatal error occurred
     """
 
     CSS = TUI_CSS
@@ -97,6 +99,7 @@ class CampersTUI(App):
         self.instance_start_time: datetime | None = None
         self.last_ctrl_c_time: float = 0.0
         self.log_widget: Log | None = None
+        self.fatal_error_message: str | None = None
         self.styles.background = self.terminal_bg
 
     def compose(self) -> ComposeResult:
@@ -433,6 +436,7 @@ class CampersTUI(App):
             self.worker_exit_code = 1
         finally:
             if error_message:
+                self.fatal_error_message = error_message
                 logging.error(error_message)
 
                 if self._update_queue is not None:

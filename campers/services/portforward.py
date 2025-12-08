@@ -23,6 +23,7 @@ specific exception handling. Falls back to OSError for port binding issues.
 
 import logging
 import os
+import socket
 from pathlib import Path
 
 import paramiko
@@ -32,6 +33,38 @@ from campers.constants import DEFAULT_SSH_PORT, DEFAULT_SSH_USERNAME, PRIVILEGED
 from campers.services.validation import validate_port
 
 logger = logging.getLogger(__name__)
+
+
+class PortInUseError(RuntimeError):
+    """Raised when a local port is already in use by another process."""
+
+    def __init__(self, port: int) -> None:
+        self.port = port
+        super().__init__(
+            f"Port {port} is already in use on localhost. "
+            f"Stop the process using this port or choose a different port."
+        )
+
+
+def is_port_in_use(port: int, host: str = "localhost") -> bool:
+    """Check if a local port is already in use.
+
+    Parameters
+    ----------
+    port : int
+        Port number to check
+    host : str
+        Host to check (default: localhost)
+
+    Returns
+    -------
+    bool
+        True if port is in use, False otherwise
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.1)
+        result = sock.connect_ex((host, port))
+        return result == 0
 
 
 class PortForwardManager:
@@ -105,6 +138,8 @@ class PortForwardManager:
 
         Raises
         ------
+        PortInUseError
+            If a local port is already in use by another process
         RuntimeError
             If tunnel creation fails
 
@@ -126,6 +161,10 @@ class PortForwardManager:
                     port,
                     PRIVILEGED_PORT_THRESHOLD,
                 )
+
+        for port in ports:
+            if is_port_in_use(port):
+                raise PortInUseError(port)
 
         if os.getenv("CAMPERS_TEST_MODE") == "1":
             for port in ports:
