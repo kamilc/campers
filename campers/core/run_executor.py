@@ -656,6 +656,14 @@ class RunExecutor:
                     username=merged_config.get("ssh_username", DEFAULT_SSH_USERNAME),
                     ssh_port=pf_info.port,
                 )
+
+                self._send_queue_update(
+                    self.update_queue,
+                    {
+                        "type": "portforward_status",
+                        "payload": {"ports": merged_config["ports"], "status": "active"},
+                    },
+                )
             except RuntimeError as e:
                 logging.error("Port forwarding failed: %s", e)
                 with self.resources_lock:

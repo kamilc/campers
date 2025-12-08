@@ -122,6 +122,7 @@ class CampersTUI(App):
             yield Static("Camp Name: loading...", id=WidgetID.CAMP_NAME)
             yield Static("Command: loading...", id=WidgetID.COMMAND)
             yield Static("File sync: Not syncing", id=WidgetID.MUTAGEN)
+            yield Static("Port forwarding: none", id=WidgetID.PORTFORWARD)
         with Container(id="log-panel"):
             yield Log()
 
@@ -184,6 +185,8 @@ class CampersTUI(App):
                     self.update_status(payload)
                 elif update_type == "mutagen_status":
                     self.update_mutagen_status(payload)
+                elif update_type == "portforward_status":
+                    self.update_portforward_status(payload)
                 elif update_type == "cleanup_event":
                     self.handle_cleanup_event(payload)
 
@@ -257,6 +260,26 @@ class CampersTUI(App):
             self.query_one(f"#{WidgetID.MUTAGEN}").update(display_text)
         except (ValueError, AttributeError) as e:
             logging.error("Failed to update mutagen widget: %s", e)
+
+    def update_portforward_status(self, payload: dict[str, Any]) -> None:
+        """Update port forwarding status widget.
+
+        Parameters
+        ----------
+        payload : dict[str, Any]
+            Dictionary containing 'ports' list and 'status' string
+        """
+        ports = payload.get("ports", [])
+        if ports:
+            port_str = ", ".join(f"{p} -> {p}" for p in ports)
+            text = f"Port forwarding: {port_str}"
+        else:
+            text = "Port forwarding: none"
+
+        try:
+            self.query_one(f"#{WidgetID.PORTFORWARD}").update(text)
+        except (ValueError, AttributeError) as e:
+            logging.error("Failed to update portforward widget: %s", e)
 
     def handle_cleanup_event(self, payload: dict[str, Any]) -> None:
         """Handle cleanup event by logging to the log panel.

@@ -12,3 +12,4 @@ class WidgetID:
     CAMP_NAME = "camp-name-widget"
     COMMAND = "command-widget"
     MUTAGEN = "mutagen-widget"
+    PORTFORWARD = "portforward-widget"
