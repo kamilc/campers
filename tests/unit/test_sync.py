@@ -34,6 +34,8 @@ def temp_ssh_setup(tmp_path):
     dict
         Dictionary with 'key_file' and 'ssh_dir' paths
     """
+    import os
+    from pathlib import Path
 
     temp_key = tmp_path / "test.pem"
     temp_key.write_text("-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n")
@@ -42,10 +44,35 @@ def temp_ssh_setup(tmp_path):
     temp_ssh_dir = tmp_path / "ssh"
     temp_ssh_dir.mkdir()
 
-    return {
+    temp_campers_dir = tmp_path / "campers"
+    temp_campers_dir.mkdir()
+
+    user_ssh_config = Path.home() / ".ssh" / "config"
+    original_ssh_content = user_ssh_config.read_text() if user_ssh_config.exists() else None
+
+    original_campers_dir = os.environ.get("CAMPERS_DIR")
+    os.environ["CAMPERS_DIR"] = str(temp_campers_dir)
+
+    yield {
         "key_file": str(temp_key),
         "ssh_dir": str(temp_ssh_dir),
     }
+
+    if original_campers_dir is not None:
+        os.environ["CAMPERS_DIR"] = original_campers_dir
+    else:
+        os.environ.pop("CAMPERS_DIR", None)
+
+    if original_ssh_content is not None:
+        user_ssh_config.write_text(original_ssh_content)
+    elif user_ssh_config.exists():
+        current_content = user_ssh_config.read_text()
+        master_include = f"Include {temp_campers_dir / 'ssh' / 'config'}"
+        if master_include in current_content:
+            cleaned = current_content.replace(f"{master_include}\n\n", "")
+            cleaned = cleaned.replace(f"{master_include}\n", "")
+            cleaned = cleaned.replace(master_include, "")
+            user_ssh_config.write_text(cleaned)
 
 
 def test_check_mutagen_installed_success(mutagen_manager) -> None:

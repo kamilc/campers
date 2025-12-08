@@ -78,6 +78,37 @@ class MutagenManager:
         with contextlib.suppress(OSError):
             lock_path.unlink()
 
+    def _remove_ssh_config_include_atomic(self, config_path: Path, include_line: str) -> None:
+        """Atomically remove an Include directive from SSH config with file locking.
+
+        Parameters
+        ----------
+        config_path : Path
+            Path to SSH config file to update
+        include_line : str
+            Include directive line to remove from config
+        """
+        if not config_path.exists():
+            return
+
+        lock_path = config_path.with_suffix(".lock")
+
+        with open(lock_path, "w") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                content = config_path.read_text()
+                if include_line in content:
+                    updated_content = content.replace(f"{include_line}\n\n", "")
+                    updated_content = updated_content.replace(f"{include_line}\n", "")
+                    updated_content = updated_content.replace(include_line, "")
+                    config_path.write_text(updated_content)
+                    logger.debug("Removed Include from %s", config_path)
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        with contextlib.suppress(OSError):
+            lock_path.unlink()
+
     def check_mutagen_installed(self) -> None:
         """Check if mutagen is installed locally.
 
@@ -299,11 +330,18 @@ Host {host}
 
         user_ssh_config = Path.home() / ".ssh" / "config"
         user_ssh_config.parent.mkdir(parents=True, exist_ok=True)
-        include_line = f"Include {campers_config_path}"
+
+        campers_dir = Path(os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers")))
+        campers_master_ssh_config = campers_dir / "ssh" / "config"
+        campers_master_ssh_config.parent.mkdir(parents=True, exist_ok=True)
+
+        master_include_line = f"Include {campers_master_ssh_config}"
+        session_include_line = f"Include {campers_config_path}"
 
         try:
             try:
-                self._update_ssh_config_atomic(user_ssh_config, include_line)
+                self._update_ssh_config_atomic(user_ssh_config, master_include_line)
+                self._update_ssh_config_atomic(campers_master_ssh_config, session_include_line)
             except (PermissionError, OSError) as e:
                 logger.error("Failed to update SSH config: %s", e)
                 raise RuntimeError(f"Failed to update SSH config at {user_ssh_config}: {e}") from e
@@ -543,3 +581,38 @@ Host {host}
                     logger.debug("Removed host %s from SSH config", host)
             except OSError as e:
                 logger.warning("Failed to cleanup SSH config: %s", e)
+
+        self._cleanup_ssh_include_if_empty(campers_config_path)
+
+    def _cleanup_ssh_include_if_empty(self, campers_config_path: Path) -> None:
+        """Remove Include directive from campers master SSH config if session config is empty.
+
+        Parameters
+        ----------
+        campers_config_path : Path
+            Path to the session-specific campers SSH config file
+        """
+        should_remove_include = False
+        include_line = f"Include {campers_config_path}"
+
+        campers_dir = Path(os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers")))
+        campers_master_ssh_config = campers_dir / "ssh" / "config"
+
+        if not campers_config_path.exists():
+            should_remove_include = True
+        else:
+            try:
+                content = campers_config_path.read_text().strip()
+                if not content or "Host " not in content:
+                    should_remove_include = True
+                    with contextlib.suppress(OSError):
+                        campers_config_path.unlink()
+                        logger.debug("Removed empty SSH config: %s", campers_config_path)
+            except OSError:
+                pass
+
+        if should_remove_include:
+            try:
+                self._remove_ssh_config_include_atomic(campers_master_ssh_config, include_line)
+            except OSError as e:
+                logger.warning("Failed to remove Include from campers SSH config: %s", e)
