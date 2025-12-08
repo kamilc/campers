@@ -233,9 +233,12 @@ class AnsibleManager:
             bufsize=1,
         )
 
+        output_lines: list[str] = []
         try:
             for line in process.stdout:
-                logger.info(line.rstrip())
+                stripped_line = line.rstrip()
+                logger.info(stripped_line)
+                output_lines.append(stripped_line)
             process.wait(timeout=ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired as e:
             if process.stdout and hasattr(process.stdout, "close"):
@@ -248,7 +251,12 @@ class AnsibleManager:
                 process.stdout.close()
 
         if process.returncode != 0:
-            raise RuntimeError(f"Ansible playbook failed with exit code {process.returncode}")
+            last_lines = output_lines[-50:] if len(output_lines) > 50 else output_lines
+            error_output = "\n".join(last_lines)
+            raise RuntimeError(
+                f"Ansible playbook failed with exit code {process.returncode}\n\n"
+                f"Ansible output:\n{error_output}"
+            )
 
     def _cleanup_temp_files(self) -> None:
         """Clean up temporary inventory and playbook files.
