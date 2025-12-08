@@ -355,7 +355,8 @@ class RunExecutor:
         with self.resources_lock:
             self.resources["compute_provider"] = compute_provider
 
-        instance_name = generate_instance_name()
+        camp_name = merged_config.get("camp_name")
+        instance_name = generate_instance_name(camp_name)
         instance_details = self.get_or_create_instance(instance_name, merged_config)
 
         with self.resources_lock:

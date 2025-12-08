@@ -1228,7 +1228,7 @@ def test_cleanup_resources_executes_in_correct_order(campers_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    campers_instance.merged_config = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
 
     campers_instance._cleanup_resources()
 
@@ -1257,7 +1257,7 @@ def test_cleanup_resources_continues_on_error(campers_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    campers_instance.merged_config = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
 
     campers_instance._cleanup_resources()
 
@@ -1329,7 +1329,7 @@ def test_cleanup_resources_only_cleans_tracked_resources(campers_module) -> None
         "ssh_manager": mock_ssh,
     }
 
-    campers_instance.merged_config = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
 
     campers_instance._cleanup_resources()
 
@@ -1804,7 +1804,7 @@ def test_cleanup_flag_resets_after_cleanup(campers_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    campers_instance.merged_config = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
 
     assert campers_instance._cleanup_in_progress is False
 
@@ -1907,7 +1907,7 @@ def test_cleanup_flag_resets_even_with_cleanup_errors(campers_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    campers_instance.merged_config = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
 
     campers_instance._cleanup_resources()
 

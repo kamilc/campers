@@ -33,7 +33,7 @@ from campers.providers.aws.constants import (
 )
 from campers.providers.aws.errors import handle_aws_errors
 from campers.providers.aws.keypair import KeyPairInfo, KeyPairManager
-from campers.providers.aws.network import NetworkManager
+from campers.providers.aws.network import NetworkManager, delete_security_group_with_retry
 from campers.providers.aws.utils import (
     extract_instance_from_response,
     extract_tag_value,
@@ -229,7 +229,14 @@ class EC2Manager:
         """
         return self.keypair_manager.create_key_pair(unique_id)
 
-    def create_security_group(self, unique_id: str, ssh_allowed_cidr: str | None = None) -> str:
+    def create_security_group(
+        self,
+        unique_id: str,
+        ssh_allowed_cidr: str | None = None,
+        project_name: str | None = None,
+        branch: str | None = None,
+        camp_name: str | None = None,
+    ) -> str:
         """Create security group with SSH access.
 
         Parameters
@@ -238,13 +245,21 @@ class EC2Manager:
             Unique identifier to use in security group name
         ssh_allowed_cidr : str | None
             CIDR block for SSH access. If None, defaults to 0.0.0.0/0
+        project_name : str | None
+            Project name for naming convention
+        branch : str | None
+            Branch name for naming convention
+        camp_name : str | None
+            Camp name for naming convention
 
         Returns
         -------
         str
             Security group ID
         """
-        return self.network_manager.create_security_group(unique_id, ssh_allowed_cidr)
+        return self.network_manager.create_security_group(
+            unique_id, ssh_allowed_cidr, project_name, branch, camp_name
+        )
 
     def _check_region_mismatch(self, camp_name: str, target_region: str) -> None:
         """Check if an existing instance with same camp name exists in another region.
@@ -360,6 +375,8 @@ class EC2Manager:
             Dictionary containing prepared resources: key_name, key_file, sg_id,
             ami_id, unique_id, instance_tag_name, instance_type
         """
+        from campers.utils import get_git_branch, get_git_project_name
+
         ami_id = self.resolve_ami(config)
         unique_id = str(uuid.uuid4())[:UUID_SLICE_LENGTH]
         instance_tag_name = instance_name if instance_name else f"campers-{unique_id}"
@@ -369,7 +386,12 @@ class EC2Manager:
         key_file = key_pair_info.file_path
 
         ssh_allowed_cidr = config.get("ssh_allowed_cidr")
-        sg_id = self.create_security_group(unique_id, ssh_allowed_cidr)
+        project_name = get_git_project_name()
+        branch = get_git_branch()
+        camp_name = config.get("camp_name")
+        sg_id = self.create_security_group(
+            unique_id, ssh_allowed_cidr, project_name, branch, camp_name
+        )
 
         return {
             "key_name": key_name,
@@ -479,13 +501,12 @@ class EC2Manager:
 
         sg_id = resources.get("sg_id")
         if sg_id:
-            try:
-                self.ec2_client.delete_security_group(GroupId=sg_id)
+            if delete_security_group_with_retry(self.ec2_client, sg_id):
                 logger.debug("Security group %s deleted successfully during rollback", sg_id)
-            except ClientError as cleanup_error:
+            else:
                 logger.warning(
-                    "Failed to delete security group during rollback: %s",
-                    cleanup_error,
+                    "Failed to delete security group %s during rollback after retries",
+                    sg_id,
                 )
 
         key_name = resources.get("key_name")
@@ -951,8 +972,5 @@ class EC2Manager:
             if key_file.exists():
                 key_file.unlink()
 
-        if sg_id:
-            try:
-                self.ec2_client.delete_security_group(GroupId=sg_id)
-            except ClientError as e:
-                logger.debug("Failed to delete security group during cleanup: %s", e)
+        if sg_id and not delete_security_group_with_retry(self.ec2_client, sg_id):
+            logger.debug("Failed to delete security group %s during cleanup after retries", sg_id)

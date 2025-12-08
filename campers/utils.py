@@ -88,11 +88,18 @@ def get_git_branch() -> str | None:
     return None
 
 
-def generate_instance_name() -> str:
+def generate_instance_name(camp_name: str | None = None) -> str:
     """Generate deterministic instance name based on git context.
 
-    Uses format `campers-{project}-{branch}` when in git repository.
-    Falls back to `campers-{unix_timestamp}` when not in git repository.
+    Uses format `campers-{project}-{branch}-{camp_name}` when in git repository
+    and camp_name is provided. Uses format `campers-{project}-{branch}` when in
+    git repository but camp_name is not provided. Falls back to `campers-{unix_timestamp}`
+    when not in git repository.
+
+    Parameters
+    ----------
+    camp_name : str | None
+        Optional camp name to include in the instance name
 
     Returns
     -------
@@ -105,7 +112,10 @@ def generate_instance_name() -> str:
     branch = get_git_branch()
 
     if project and branch:
-        raw_name = f"campers-{project}-{branch}"
+        if camp_name:
+            raw_name = f"campers-{project}-{branch}-{camp_name}"
+        else:
+            raw_name = f"campers-{project}-{branch}"
         return sanitize_instance_name(raw_name)
 
     return f"campers-{int(time.time() * 1000000)}"
