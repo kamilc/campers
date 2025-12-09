@@ -191,10 +191,8 @@ class NetworkManager:
         cidr_block = ssh_allowed_cidr if ssh_allowed_cidr else SSH_SECURITY_GROUP_DEFAULT_CIDR
 
         if cidr_block == SSH_SECURITY_GROUP_DEFAULT_CIDR:
-            logger.warning(
-                "SSH security group is using %s (all IPs). "
-                "This allows SSH access from any IP address. "
-                "Consider restricting this to your IP range for security.",
+            logger.debug(
+                "SSH security group using default CIDR %s",
                 SSH_SECURITY_GROUP_DEFAULT_CIDR,
             )
 
