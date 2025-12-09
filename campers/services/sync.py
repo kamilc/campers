@@ -109,6 +109,72 @@ class MutagenManager:
         with contextlib.suppress(OSError):
             lock_path.unlink()
 
+    def _add_host_to_ssh_config(self, config_path: Path, host: str, host_config: str) -> None:
+        """Atomically add a host entry to SSH config with file locking.
+
+        Parameters
+        ----------
+        config_path : Path
+            Path to SSH config file to update
+        host : str
+            Hostname to add (used to check if already present)
+        host_config : str
+            Full host configuration block to add
+        """
+        lock_path = config_path.with_suffix(".lock")
+
+        with open(lock_path, "w") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                if config_path.exists():
+                    content = config_path.read_text()
+                    if f"Host {host}" not in content:
+                        config_path.write_text(content + host_config)
+                        logger.debug("Added host %s to %s", host, config_path)
+                    else:
+                        logger.debug("Host %s already present in %s", host, config_path)
+                else:
+                    config_path.write_text(host_config)
+                    logger.debug("Created SSH config at %s with host %s", config_path, host)
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        with contextlib.suppress(OSError):
+            lock_path.unlink()
+
+    def _remove_host_from_ssh_config(self, config_path: Path, host: str) -> None:
+        """Atomically remove a host entry from SSH config with file locking.
+
+        Parameters
+        ----------
+        config_path : Path
+            Path to SSH config file to update
+        host : str
+            Hostname to remove
+        """
+        if not config_path.exists():
+            return
+
+        lock_path = config_path.with_suffix(".lock")
+
+        with open(lock_path, "w") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                content = config_path.read_text()
+                if f"Host {host}" in content:
+                    updated_content = re.sub(
+                        rf"\nHost {re.escape(host)}\n(    [^\n]+\n)*",
+                        "",
+                        content,
+                    )
+                    config_path.write_text(updated_content)
+                    logger.debug("Removed host %s from %s", host, config_path)
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        with contextlib.suppress(OSError):
+            lock_path.unlink()
+
     def check_mutagen_installed(self) -> None:
         """Check if mutagen is installed locally.
 
@@ -297,8 +363,6 @@ class MutagenManager:
         with os.fdopen(fd, "w") as f:
             f.write(key_content)
 
-        campers_config_path = (campers_ssh_dir / "campers-ssh-config").resolve()
-
         host_config = f"""
 Host {host}
     HostName {host}
@@ -312,36 +376,19 @@ Host {host}
     ServerAliveCountMax {SSH_CONFIG_SERVER_ALIVE_COUNT}
 """
 
-        if campers_config_path.exists():
-            with open(campers_config_path) as f:
-                existing_config = f.read()
-
-            if f"Host {host}" not in existing_config:
-                with open(campers_config_path, "a") as f:
-                    f.write(host_config)
-                logger.debug("Appended host config to %s", campers_config_path)
-            else:
-                logger.debug("Host %s already in config", host)
-        else:
-            with open(campers_config_path, "w") as f:
-                f.write(host_config)
-
-            logger.debug("Created SSH config at %s", campers_config_path)
-
         user_ssh_config = Path.home() / ".ssh" / "config"
         user_ssh_config.parent.mkdir(parents=True, exist_ok=True)
 
         campers_dir = Path(os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers")))
-        campers_master_ssh_config = campers_dir / "ssh" / "config"
-        campers_master_ssh_config.parent.mkdir(parents=True, exist_ok=True)
+        campers_ssh_config = campers_dir / "ssh" / "config"
+        campers_ssh_config.parent.mkdir(parents=True, exist_ok=True)
 
-        master_include_line = f"Include {campers_master_ssh_config}"
-        session_include_line = f"Include {campers_config_path}"
+        master_include_line = f"Include {campers_ssh_config}"
 
         try:
             try:
                 self._update_ssh_config_atomic(user_ssh_config, master_include_line)
-                self._update_ssh_config_atomic(campers_master_ssh_config, session_include_line)
+                self._add_host_to_ssh_config(campers_ssh_config, host, host_config)
             except (PermissionError, OSError) as e:
                 logger.error("Failed to update SSH config: %s", e)
                 raise RuntimeError(f"Failed to update SSH config at {user_ssh_config}: {e}") from e
@@ -355,7 +402,7 @@ Host {host}
             add_host_cmd = [
                 ssh_path,
                 "-F",
-                str(campers_config_path),
+                str(campers_ssh_config),
                 "-o",
                 "IdentitiesOnly=yes",
                 "-i",
@@ -368,7 +415,7 @@ Host {host}
 
             ssh_env = os.environ.copy()
             ssh_env.pop("SSH_AUTH_SOCK", None)
-            ssh_env["MUTAGEN_SSH_CONFIG"] = str(campers_config_path)
+            ssh_env["MUTAGEN_SSH_CONFIG"] = str(campers_ssh_config)
             ssh_env["MUTAGEN_SSH_ARGS"] = (
                 "-oIdentitiesOnly=yes "
                 "-oStrictHostKeyChecking=accept-new "
@@ -537,7 +584,7 @@ Host {host}
         session_name : str
             Name of session to terminate
         ssh_wrapper_dir : str | None
-            Directory where SSH config was created
+            Directory where SSH key was created
         host : str | None
             Remote host to remove from SSH config
         """
@@ -556,7 +603,6 @@ Host {host}
 
         campers_ssh_dir = Path(ssh_wrapper_dir)
         temp_key_path = campers_ssh_dir / f"campers-key-{session_name}.pem"
-        campers_config_path = campers_ssh_dir / "campers-ssh-config"
 
         try:
             if temp_key_path.exists():
@@ -565,54 +611,37 @@ Host {host}
         except OSError as e:
             logger.warning("Failed to remove SSH key file: %s", e)
 
-        if host and campers_config_path.exists():
-            try:
-                with open(campers_config_path) as f:
-                    config_content = f.read()
+        campers_dir = Path(os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers")))
+        campers_ssh_config = campers_dir / "ssh" / "config"
 
-                if f"Host {host}" in config_content:
-                    updated_config = re.sub(
-                        rf"\nHost {re.escape(host)}\n(    [^\n]+\n)*",
-                        "",
-                        config_content,
-                    )
-                    with open(campers_config_path, "w") as f:
-                        f.write(updated_config)
-                    logger.debug("Removed host %s from SSH config", host)
+        if host:
+            try:
+                self._remove_host_from_ssh_config(campers_ssh_config, host)
             except OSError as e:
                 logger.warning("Failed to cleanup SSH config: %s", e)
 
-        self._cleanup_ssh_include_if_empty(campers_config_path)
+        self._cleanup_ssh_include_if_empty(campers_ssh_config)
 
-    def _cleanup_ssh_include_if_empty(self, campers_config_path: Path) -> None:
-        """Remove Include directive from campers master SSH config if session config is empty.
+    def _cleanup_ssh_include_if_empty(self, campers_ssh_config: Path) -> None:
+        """Clean up empty campers SSH config file.
+
+        The master Include line in ~/.ssh/config is kept permanent.
+        This method only removes the campers SSH config file if it's empty.
 
         Parameters
         ----------
-        campers_config_path : Path
-            Path to the session-specific campers SSH config file
+        campers_ssh_config : Path
+            Path to the campers SSH config file (~/.campers/ssh/config)
         """
-        should_remove_include = False
-        include_line = f"Include {campers_config_path}"
+        if not campers_ssh_config.exists():
+            return
 
-        campers_dir = Path(os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers")))
-        campers_master_ssh_config = campers_dir / "ssh" / "config"
+        try:
+            content = campers_ssh_config.read_text().strip()
 
-        if not campers_config_path.exists():
-            should_remove_include = True
-        else:
-            try:
-                content = campers_config_path.read_text().strip()
-                if not content or "Host " not in content:
-                    should_remove_include = True
-                    with contextlib.suppress(OSError):
-                        campers_config_path.unlink()
-                        logger.debug("Removed empty SSH config: %s", campers_config_path)
-            except OSError:
-                pass
-
-        if should_remove_include:
-            try:
-                self._remove_ssh_config_include_atomic(campers_master_ssh_config, include_line)
-            except OSError as e:
-                logger.warning("Failed to remove Include from campers SSH config: %s", e)
+            if not content or "Host " not in content:
+                with contextlib.suppress(OSError):
+                    campers_ssh_config.unlink()
+                    logger.debug("Removed empty campers SSH config: %s", campers_ssh_config)
+        except OSError:
+            pass
