@@ -25,7 +25,7 @@ from campers.services.ansible import AnsibleManager
 from campers.services.portforward import PortForwardManager, PortInUseError, is_port_in_use
 from campers.services.ssh import SSHManager, get_ssh_connection_info
 from campers.services.sync import MutagenManager
-from campers.utils import generate_instance_name
+from campers.utils import generate_instance_name, status_spinner
 
 logger = logging.getLogger(__name__)
 
@@ -818,11 +818,13 @@ class RunExecutor:
         if not compute_provider:
             raise RuntimeError("Compute provider not initialized")
 
-        logging.info("Searching for existing instance: %s...", instance_name)
+        use_logging = self.update_queue is not None
+        spinner_msg = f"Searching for existing instance: {instance_name}"
 
-        matches = compute_provider.find_instances_by_name_or_id(
-            name_or_id=instance_name, region_filter=None
-        )
+        with status_spinner(spinner_msg, use_logging=use_logging):
+            matches = compute_provider.find_instances_by_name_or_id(
+                name_or_id=instance_name, region_filter=None
+            )
 
         if not matches:
             logging.info("No existing instance found")
