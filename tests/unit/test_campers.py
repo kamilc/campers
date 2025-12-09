@@ -613,7 +613,9 @@ def test_run_with_port_forwarding_creates_tunnels(campers_module) -> None:
         patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.PortForwardManager") as mock_portforward,
+        patch("campers.core.run_executor.is_port_in_use") as mock_is_port_in_use,
     ):
+        mock_is_port_in_use.return_value = False
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.find_instances_by_name_or_id.return_value = []
         mock_ec2_instance.launch_instance.return_value = mock_instance_details
