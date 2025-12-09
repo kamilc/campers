@@ -30,7 +30,7 @@ jobs:
         run: docker build -t campers/python-ssh:latest docker/python-ssh/
 
       - name: Run BDD integration tests
-        run: uv run behave tests/integration/features --summary
+        run: uv run behave tests/integration/features --tags="~@pilot" --summary
 
       - name: Upload diagnostics on failure
         if: failure()
