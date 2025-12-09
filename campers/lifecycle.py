@@ -6,14 +6,12 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from rich.console import Console
-
 from campers.core.config import ConfigLoader
 from campers.core.interfaces import ComputeProvider
 from campers.core.utils import get_volume_size_or_default
 from campers.providers import get_provider
 from campers.providers.exceptions import ProviderAPIError, ProviderCredentialsError
-from campers.utils import format_time_ago
+from campers.utils import format_time_ago, status_spinner
 
 
 class LifecycleManager:
@@ -155,12 +153,10 @@ class LifecycleManager:
         if region is not None:
             self._validate_region(region)
 
-        console = Console()
-
         try:
             compute_provider = self.compute_provider_factory(region=region or default_region)
 
-            with console.status("Fetching instances...", spinner="dots"):
+            with status_spinner("Fetching instances"):
                 instances = compute_provider.list_instances(region_filter=region)
 
             if not instances:
@@ -181,7 +177,7 @@ class LifecycleManager:
                 total_monthly_cost = 0.0
                 costs_available = False
 
-                with console.status("Calculating costs...", spinner="dots"):
+                with status_spinner("Calculating costs"):
                     for inst in instances:
                         regional_manager = self.compute_provider_factory(region=inst["region"])
                         volume_size = regional_manager.get_volume_size(inst["instance_id"])
@@ -284,11 +280,10 @@ class LifecycleManager:
         if region:
             self._validate_region(region)
 
-        console = Console()
         target: dict[str, Any] | None = None
 
         try:
-            with console.status("Finding instance...", spinner="dots"):
+            with status_spinner("Finding instance"):
                 target = self._find_and_validate_instance(name_or_id, region, "stop")
             instance_id = target["instance_id"]
             state = target.get("state", "unknown")
@@ -358,7 +353,7 @@ class LifecycleManager:
                     pricing_service=pricing_service,
                 )
 
-                with console.status("Stopping instance...", spinner="dots"):
+                with status_spinner("Stopping instance"):
                     regional_manager.stop_instance(instance_id)
 
                 logging.info(
@@ -444,11 +439,10 @@ class LifecycleManager:
         if region:
             self._validate_region(region)
 
-        console = Console()
         target: dict[str, Any] | None = None
 
         try:
-            with console.status("Finding instance...", spinner="dots"):
+            with status_spinner("Finding instance"):
                 target = self._find_and_validate_instance(name_or_id, region, "start")
             instance_id = target["instance_id"]
             state = target.get("state", "unknown")
@@ -525,7 +519,7 @@ class LifecycleManager:
                     pricing_service=pricing_service,
                 )
 
-                with console.status("Starting instance...", spinner="dots"):
+                with status_spinner("Starting instance"):
                     instance_details = regional_manager.start_instance(instance_id)
 
                 new_ip = instance_details.get("public_ip", "N/A")
@@ -612,11 +606,10 @@ class LifecycleManager:
         if region:
             self._validate_region(region)
 
-        console = Console()
         target: dict[str, Any] | None = None
 
         try:
-            with console.status("Fetching instance info...", spinner="dots"):
+            with status_spinner("Fetching instance info"):
                 target = self._find_and_validate_instance(name_or_id, region, "view")
                 instance_id = target["instance_id"]
                 regional_manager = self.compute_provider_factory(region=target["region"])
@@ -721,11 +714,10 @@ class LifecycleManager:
         if region:
             self._validate_region(region)
 
-        console = Console()
         target: dict[str, Any] | None = None
 
         try:
-            with console.status("Finding instance...", spinner="dots"):
+            with status_spinner("Finding instance"):
                 target = self._find_and_validate_instance(name_or_id, region, "destroy")
             logging.info(
                 "Terminating instance %s (%s) in %s...",
@@ -736,7 +728,7 @@ class LifecycleManager:
 
             regional_manager = self.compute_provider_factory(region=target["region"])
 
-            with console.status("Terminating instance...", spinner="dots"):
+            with status_spinner("Terminating instance"):
                 regional_manager.terminate_instance(target["instance_id"])
 
             logging.info(

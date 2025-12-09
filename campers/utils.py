@@ -4,15 +4,21 @@ import fcntl
 import logging
 import os
 import subprocess
+import threading
 import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+
+from rich.console import Console
 
 from campers.constants import (
     DEFAULT_NAME_COLUMN_WIDTH,
     SECONDS_PER_DAY,
     SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
+    STATUS_UPDATE_INTERVAL_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -223,3 +229,57 @@ def atomic_file_write(path: Path, content: str) -> None:
             logger.debug("Lock file already deleted: %s", lock_path)
         except OSError as e:
             logger.debug("Failed to delete lock file %s: %s", lock_path, e)
+
+
+@contextmanager
+def status_spinner(
+    message: str,
+    console: Console | None = None,
+) -> Generator[None, None, None]:
+    """Context manager for CLI spinner with Terraform-style elapsed time updates.
+
+    Shows a spinner with immediate feedback and updates the message every
+    STATUS_UPDATE_INTERVAL_SECONDS with elapsed time.
+
+    Parameters
+    ----------
+    message : str
+        Initial status message to display (e.g., "Finding instance")
+    console : Console | None
+        Rich Console instance. Creates new one if not provided.
+
+    Yields
+    ------
+    None
+        Control returns to caller while spinner runs.
+
+    Examples
+    --------
+    >>> with status_spinner("Finding instance"):
+    ...     slow_operation()
+    # Shows: ⠋ Finding instance...
+    # After 10s: ⠙ Still finding instance... (10s)
+    # After 20s: ⠹ Still finding instance... (20s)
+    """
+    if console is None:
+        console = Console()
+
+    start_time = time.time()
+    stop_event = threading.Event()
+    status_handle = console.status(f"{message}...", spinner="dots")
+
+    def update_status() -> None:
+        while not stop_event.wait(STATUS_UPDATE_INTERVAL_SECONDS):
+            elapsed = int(time.time() - start_time)
+            status_handle.update(f"Still {message.lower()}... ({elapsed}s)")
+
+    update_thread = threading.Thread(target=update_status, daemon=True)
+
+    try:
+        status_handle.start()
+        update_thread.start()
+        yield
+    finally:
+        stop_event.set()
+        status_handle.stop()
+        update_thread.join(timeout=1.0)

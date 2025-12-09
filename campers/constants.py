@@ -109,6 +109,13 @@ Controls how often the TUI queries and displays updated instance
 information, cost estimates, and connection status.
 """
 
+STATUS_UPDATE_INTERVAL_SECONDS = 10
+"""Interval in seconds for CLI spinner status updates.
+
+Controls how often the spinner message updates with elapsed time
+during long-running operations like Terraform-style feedback.
+"""
+
 TERMINAL_RESPONSE_TIMEOUT_SECONDS = 0.1
 """Timeout in seconds for terminal input/output operations.
 
