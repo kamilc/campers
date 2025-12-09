@@ -284,10 +284,12 @@ class LifecycleManager:
         if region:
             self._validate_region(region)
 
+        console = Console()
         target: dict[str, Any] | None = None
 
         try:
-            target = self._find_and_validate_instance(name_or_id, region, "stop")
+            with console.status("Finding instance...", spinner="dots"):
+                target = self._find_and_validate_instance(name_or_id, region, "stop")
             instance_id = target["instance_id"]
             state = target.get("state", "unknown")
 
@@ -356,7 +358,8 @@ class LifecycleManager:
                     pricing_service=pricing_service,
                 )
 
-                regional_manager.stop_instance(instance_id)
+                with console.status("Stopping instance...", spinner="dots"):
+                    regional_manager.stop_instance(instance_id)
 
                 logging.info(
                     f"Instance {instance_id} has been successfully stopped.",
@@ -441,10 +444,12 @@ class LifecycleManager:
         if region:
             self._validate_region(region)
 
+        console = Console()
         target: dict[str, Any] | None = None
 
         try:
-            target = self._find_and_validate_instance(name_or_id, region, "start")
+            with console.status("Finding instance...", spinner="dots"):
+                target = self._find_and_validate_instance(name_or_id, region, "start")
             instance_id = target["instance_id"]
             state = target.get("state", "unknown")
 
@@ -520,7 +525,8 @@ class LifecycleManager:
                     pricing_service=pricing_service,
                 )
 
-                instance_details = regional_manager.start_instance(instance_id)
+                with console.status("Starting instance...", spinner="dots"):
+                    instance_details = regional_manager.start_instance(instance_id)
 
                 new_ip = instance_details.get("public_ip", "N/A")
                 logging.info(
@@ -606,20 +612,23 @@ class LifecycleManager:
         if region:
             self._validate_region(region)
 
+        console = Console()
         target: dict[str, Any] | None = None
 
         try:
-            target = self._find_and_validate_instance(name_or_id, region, "view")
-            instance_id = target["instance_id"]
-            regional_manager = self.compute_provider_factory(region=target["region"])
+            with console.status("Fetching instance info...", spinner="dots"):
+                target = self._find_and_validate_instance(name_or_id, region, "view")
+                instance_id = target["instance_id"]
+                regional_manager = self.compute_provider_factory(region=target["region"])
 
-            unique_id = target.get("unique_id")
-            if not unique_id:
-                try:
-                    tags = regional_manager.get_instance_tags(instance_id)
-                    unique_id = tags.get("UniqueId")
-                except (AttributeError, KeyError) as e:
-                    logging.debug("Failed to get UniqueId from instance tags: %s", e)
+                unique_id = target.get("unique_id")
+
+                if not unique_id:
+                    try:
+                        tags = regional_manager.get_instance_tags(instance_id)
+                        unique_id = tags.get("UniqueId")
+                    except (AttributeError, KeyError) as e:
+                        logging.debug("Failed to get UniqueId from instance tags: %s", e)
 
             key_file = None
             if unique_id:
@@ -712,10 +721,12 @@ class LifecycleManager:
         if region:
             self._validate_region(region)
 
+        console = Console()
         target: dict[str, Any] | None = None
 
         try:
-            target = self._find_and_validate_instance(name_or_id, region, "destroy")
+            with console.status("Finding instance...", spinner="dots"):
+                target = self._find_and_validate_instance(name_or_id, region, "destroy")
             logging.info(
                 "Terminating instance %s (%s) in %s...",
                 target["instance_id"],
@@ -724,7 +735,9 @@ class LifecycleManager:
             )
 
             regional_manager = self.compute_provider_factory(region=target["region"])
-            regional_manager.terminate_instance(target["instance_id"])
+
+            with console.status("Terminating instance...", spinner="dots"):
+                regional_manager.terminate_instance(target["instance_id"])
 
             logging.info(
                 f"Instance {target['instance_id']} has been successfully terminated.",
