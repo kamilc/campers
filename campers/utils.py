@@ -11,6 +11,8 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+from rich.console import Console
+
 from campers.constants import (
     DEFAULT_NAME_COLUMN_WIDTH,
     SECONDS_PER_DAY,
@@ -230,16 +232,22 @@ def atomic_file_write(path: Path, content: str) -> None:
 
 
 @contextmanager
-def status_spinner(message: str) -> Generator[None, None, None]:
+def status_spinner(
+    message: str,
+    use_logging: bool = False,
+) -> Generator[None, None, None]:
     """Context manager for CLI status with Terraform-style elapsed time updates.
 
-    Logs immediate feedback and updates the message every
-    STATUS_UPDATE_INTERVAL_SECONDS with elapsed time via logging.
+    Shows immediate feedback and updates the message every
+    STATUS_UPDATE_INTERVAL_SECONDS with elapsed time.
 
     Parameters
     ----------
     message : str
         Initial status message to display (e.g., "Finding instance")
+    use_logging : bool
+        If True, use logging.info() for status updates (for TUI mode).
+        If False (default), use Rich spinner (for CLI mode).
 
     Yields
     ------
@@ -250,25 +258,49 @@ def status_spinner(message: str) -> Generator[None, None, None]:
     --------
     >>> with status_spinner("Finding instance"):
     ...     slow_operation()
-    # Logs: Finding instance...
-    # After 10s: Still finding instance... (10s)
-    # After 20s: Still finding instance... (20s)
+    # CLI mode shows: ⠋ Finding instance...
+    # After 10s: ⠙ Still finding instance... (10s)
+
+    >>> with status_spinner("Finding instance", use_logging=True):
+    ...     slow_operation()
+    # TUI mode logs: Finding instance...
+    # After 10s logs: Still finding instance... (10s)
     """
     start_time = time.time()
     stop_event = threading.Event()
 
-    logging.info("%s...", message)
+    if use_logging:
+        logging.info("%s...", message)
 
-    def log_updates() -> None:
-        while not stop_event.wait(STATUS_UPDATE_INTERVAL_SECONDS):
-            elapsed = int(time.time() - start_time)
-            logging.info("Still %s... (%ds)", message.lower(), elapsed)
+        def log_updates() -> None:
+            while not stop_event.wait(STATUS_UPDATE_INTERVAL_SECONDS):
+                elapsed = int(time.time() - start_time)
+                logging.info("Still %s... (%ds)", message.lower(), elapsed)
 
-    update_thread = threading.Thread(target=log_updates, daemon=True)
+        update_thread = threading.Thread(target=log_updates, daemon=True)
 
-    try:
-        update_thread.start()
-        yield
-    finally:
-        stop_event.set()
-        update_thread.join(timeout=1.0)
+        try:
+            update_thread.start()
+            yield
+        finally:
+            stop_event.set()
+            update_thread.join(timeout=1.0)
+    else:
+        console = Console()
+        status_handle = console.status(f"{message}...", spinner="dots")
+
+        def update_spinner() -> None:
+            while not stop_event.wait(STATUS_UPDATE_INTERVAL_SECONDS):
+                elapsed = int(time.time() - start_time)
+                status_handle.update(f"Still {message.lower()}... ({elapsed}s)")
+
+        update_thread = threading.Thread(target=update_spinner, daemon=True)
+
+        try:
+            status_handle.start()
+            update_thread.start()
+            yield
+        finally:
+            stop_event.set()
+            status_handle.stop()
+            update_thread.join(timeout=1.0)
