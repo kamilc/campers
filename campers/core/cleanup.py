@@ -18,6 +18,7 @@ from campers.constants import TUI_STATUS_UPDATE_PROCESSING_DELAY
 from campers.core.interfaces import PricingProvider
 from campers.core.utils import get_instance_id, get_volume_size_or_default
 from campers.providers.exceptions import ProviderAPIError
+from campers.utils import status_spinner
 
 
 class CleanupManager:
@@ -357,8 +358,12 @@ class CleanupManager:
         try:
             compute_provider = resources_to_clean.get("compute_provider")
             if compute_provider:
+                use_logging = self.update_queue is not None
+
                 if action == "stop":
-                    compute_provider.stop_instance(instance_id)
+                    spinner_msg = f"Stopping instance {instance_id}"
+                    with status_spinner(spinner_msg, use_logging=use_logging):
+                        compute_provider.stop_instance(instance_id)
                     logging.info("Cloud instance stopped successfully")
                     volume_size = get_volume_size_or_default(compute_provider, instance_id)
                     storage_rate = self._get_storage_rate(compute_provider.region)
@@ -369,7 +374,9 @@ class CleanupManager:
                     logging.info(f"  Estimated storage cost: ~${storage_cost:.2f}/month")
                     logging.info(f"  Restart with: campers start {instance_id}")
                 else:
-                    compute_provider.terminate_instance(instance_id)
+                    spinner_msg = f"Terminating instance {instance_id}"
+                    with status_spinner(spinner_msg, use_logging=use_logging):
+                        compute_provider.terminate_instance(instance_id)
                     logging.info("Cloud instance terminated successfully")
 
                 self._emit_cleanup_event(event_action, "completed")

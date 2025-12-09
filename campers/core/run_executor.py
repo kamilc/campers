@@ -283,6 +283,8 @@ class RunExecutor:
         dict[str, Any]
             Merged and validated configuration
         """
+        logging.info("Loading configuration...")
+
         if verbose:
             logging.getLogger("campers").setLevel(logging.DEBUG)
             logging.debug("Verbose mode enabled")
@@ -347,6 +349,8 @@ class RunExecutor:
         tuple[dict[str, Any], Any]
             Instance details and compute provider
         """
+        logging.info("Initializing cloud provider...")
+
         if merged_config.get("sync_paths"):
             mutagen_mgr.check_mutagen_installed()
 
@@ -814,9 +818,16 @@ class RunExecutor:
         if not compute_provider:
             raise RuntimeError("Compute provider not initialized")
 
+        logging.info("Searching for existing instance: %s...", instance_name)
+
         matches = compute_provider.find_instances_by_name_or_id(
             name_or_id=instance_name, region_filter=None
         )
+
+        if not matches:
+            logging.info("No existing instance found")
+        else:
+            logging.info("Found %d existing instance(s)", len(matches))
 
         if len(matches) > 1:
             logging.warning(
