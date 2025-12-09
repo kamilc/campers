@@ -6,6 +6,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from rich.console import Console
+
 from campers.core.config import ConfigLoader
 from campers.core.interfaces import ComputeProvider
 from campers.core.utils import get_volume_size_or_default
@@ -153,9 +155,13 @@ class LifecycleManager:
         if region is not None:
             self._validate_region(region)
 
+        console = Console()
+
         try:
             compute_provider = self.compute_provider_factory(region=region or default_region)
-            instances = compute_provider.list_instances(region_filter=region)
+
+            with console.status("Fetching instances...", spinner="dots"):
+                instances = compute_provider.list_instances(region_filter=region)
 
             if not instances:
                 logging.info("No campers-managed instances found", extra={"stream": "stdout"})
@@ -170,32 +176,33 @@ class LifecycleManager:
 
             try:
                 if not pricing_service.pricing_available:
-                    logging.info("ℹ️  Pricing unavailable", extra={"stream": "stdout"})
+                    logging.info("Pricing unavailable", extra={"stream": "stdout"})
 
                 total_monthly_cost = 0.0
                 costs_available = False
 
-                for inst in instances:
-                    regional_manager = self.compute_provider_factory(region=inst["region"])
-                    volume_size = regional_manager.get_volume_size(inst["instance_id"])
+                with console.status("Calculating costs...", spinner="dots"):
+                    for inst in instances:
+                        regional_manager = self.compute_provider_factory(region=inst["region"])
+                        volume_size = regional_manager.get_volume_size(inst["instance_id"])
 
-                    if volume_size is None:
-                        volume_size = 0
+                        if volume_size is None:
+                            volume_size = 0
 
-                    monthly_cost = calculate_monthly_cost(
-                        instance_type=inst["instance_type"],
-                        region=inst["region"],
-                        state=inst["state"],
-                        volume_size_gb=volume_size,
-                        pricing_service=pricing_service,
-                    )
+                        monthly_cost = calculate_monthly_cost(
+                            instance_type=inst["instance_type"],
+                            region=inst["region"],
+                            state=inst["state"],
+                            volume_size_gb=volume_size,
+                            pricing_service=pricing_service,
+                        )
 
-                    if monthly_cost is not None:
-                        total_monthly_cost += monthly_cost
-                        costs_available = True
+                        if monthly_cost is not None:
+                            total_monthly_cost += monthly_cost
+                            costs_available = True
 
-                    inst["monthly_cost"] = monthly_cost
-                    inst["volume_size"] = volume_size
+                        inst["monthly_cost"] = monthly_cost
+                        inst["volume_size"] = volume_size
 
                 if region:
                     logging.info(f"Instances in {region}:", extra={"stream": "stdout"})
