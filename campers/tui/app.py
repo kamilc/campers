@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import queue
 import sys
+import threading
 import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -100,6 +101,8 @@ class CampersTUI(App):
         self.last_ctrl_c_time: float = 0.0
         self.log_widget: Log | None = None
         self.fatal_error_message: str | None = None
+        self._running = True
+        self._thread_id = threading.get_ident()
         self.styles.background = self.terminal_bg
 
     def compose(self) -> ComposeResult:
@@ -377,6 +380,7 @@ class CampersTUI(App):
 
     def on_unmount(self) -> None:
         """Handle unmount event - restore logging and cleanup resources."""
+        self._running = False
         root_logger = logging.getLogger()
         root_logger.handlers = self.original_handlers
 

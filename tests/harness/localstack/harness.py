@@ -201,6 +201,8 @@ class LocalStackHarness(ScenarioHarness):
         )
 
         poll_interval = self._get_monitor_poll_interval()
+        is_tui_scenario = self._should_initialize_pilot_extension()
+        watchdog_budget = 30.0 if is_tui_scenario else 10.0
 
         monitor_controller = MonitorController(
             event_bus=event_bus,
@@ -213,6 +215,7 @@ class LocalStackHarness(ScenarioHarness):
             action_provider=self._describe_localstack_instances,
             http_ready_callback=self._start_http_services,
             poll_interval_sec=poll_interval,
+            watchdog_budget_sec=watchdog_budget,
         )
 
         self.services = LocalStackServiceContainer(
