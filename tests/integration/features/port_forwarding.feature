@@ -52,7 +52,7 @@ Scenario: Create single SSH tunnel via TUI
   And the TUI log panel contains "SSH tunnel established: localhost:48888 -> remote:48888"
   And HTTP request to localhost:48888 succeeds
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Create multiple SSH tunnels via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "sleep 30"

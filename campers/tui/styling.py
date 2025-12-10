@@ -23,4 +23,7 @@ RichLog {
     scrollbar-background-active: #383838;
     scrollbar-color-active: #606060;
 }
+.hidden {
+    display: none;
+}
 """

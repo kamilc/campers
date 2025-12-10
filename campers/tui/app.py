@@ -128,7 +128,7 @@ class CampersTUI(App):
             yield Static("Command: loading...", id=WidgetID.COMMAND)
             yield Static("File sync: Not syncing", id=WidgetID.MUTAGEN)
             yield Static("Port forwarding: none", id=WidgetID.PORTFORWARD)
-            yield Static("Public ports: none", id=WidgetID.PUBLIC_PORTS)
+            yield Static("", id=WidgetID.PUBLIC_PORTS, classes="hidden")
         with Container(id="log-panel"):
             yield RichLog(markup=True)
 
@@ -352,8 +352,9 @@ class CampersTUI(App):
                 logging.error("Failed to update command widget: %s", e)
 
         public_ports = config.get("public_ports", [])
-        if public_ports:
-            try:
+        try:
+            public_ports_widget = self.query_one(f"#{WidgetID.PUBLIC_PORTS}")
+            if public_ports:
                 instance_details = self.campers._resources.get("instance_details", {})
                 public_ip = instance_details.get("public_ip")
                 if public_ip:
@@ -361,10 +362,13 @@ class CampersTUI(App):
                     for port in public_ports:
                         protocol = "https" if port == 443 else "http"
                         urls.append(f"{protocol}://{public_ip}:{port}")
-                    public_ports_text = "Public ports: " + ", ".join(urls)
-                    self.query_one(f"#{WidgetID.PUBLIC_PORTS}").update(public_ports_text)
-            except (ValueError, AttributeError, RuntimeError) as e:
-                logging.error("Failed to update public ports widget: %s", e)
+                    public_ports_text = f"Public IP: {public_ip} | URLs: " + ", ".join(urls)
+                    public_ports_widget.update(public_ports_text)
+                    public_ports_widget.remove_class("hidden")
+            else:
+                public_ports_widget.add_class("hidden")
+        except (ValueError, AttributeError, RuntimeError) as e:
+            logging.error("Failed to update public ports widget: %s", e)
 
     def update_from_instance_details(self, details: dict[str, Any]) -> None:
         """Update widgets from instance details data.

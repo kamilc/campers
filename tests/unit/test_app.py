@@ -149,3 +149,102 @@ def test_update_mutagen_status_attribute_error(tui_app):
     with patch("campers.tui.app.logging") as mock_logging:
         tui_app.update_mutagen_status({"status_text": "idle"})
         mock_logging.error.assert_called_once()
+
+
+@pytest.fixture
+def tui_app_for_public_ports():
+    """Create CampersTUI instance for public ports testing.
+
+    Returns
+    -------
+    Mock
+        Mock CampersTUI instance for testing
+    """
+    from campers.tui.app import CampersTUI
+
+    app = Mock(spec=CampersTUI)
+    app.update_from_config = CampersTUI.update_from_config.__get__(app)
+    app.campers = Mock()
+    app.campers._merged_config_prop = {}
+    app.campers._resources = {}
+
+    return app
+
+
+def test_public_ports_widget_hidden_when_no_ports(tui_app_for_public_ports):
+    """Test that public ports widget is hidden when public_ports is empty.
+
+    Parameters
+    ----------
+    tui_app_for_public_ports : CampersTUI
+        TUI app instance
+    """
+    mock_widget = Mock()
+    tui_app_for_public_ports.query_one = Mock(return_value=mock_widget)
+
+    tui_app_for_public_ports.update_from_config({"public_ports": []})
+
+    mock_widget.add_class.assert_called_with("hidden")
+
+
+def test_public_ports_widget_hidden_when_ports_missing(tui_app_for_public_ports):
+    """Test that public ports widget is hidden when public_ports key is missing.
+
+    Parameters
+    ----------
+    tui_app_for_public_ports : CampersTUI
+        TUI app instance
+    """
+    mock_widget = Mock()
+    tui_app_for_public_ports.query_one = Mock(return_value=mock_widget)
+
+    tui_app_for_public_ports.update_from_config({})
+
+    mock_widget.add_class.assert_called_with("hidden")
+
+
+def test_public_ports_widget_shown_with_ip_and_urls(tui_app_for_public_ports):
+    """Test that public ports widget shows public IP and URLs when ports configured.
+
+    Parameters
+    ----------
+    tui_app_for_public_ports : CampersTUI
+        TUI app instance
+    """
+    mock_widget = Mock()
+    tui_app_for_public_ports.query_one = Mock(return_value=mock_widget)
+    tui_app_for_public_ports.campers._resources = {
+        "instance_details": {"public_ip": "192.0.2.1"}
+    }
+
+    tui_app_for_public_ports.update_from_config({"public_ports": [8080, 443]})
+
+    mock_widget.update.assert_called_with(
+        "Public IP: 192.0.2.1 | URLs: http://192.0.2.1:8080, https://192.0.2.1:443"
+    )
+    mock_widget.remove_class.assert_called_with("hidden")
+
+
+def test_public_ports_widget_not_shown_without_public_ip(tui_app_for_public_ports):
+    """Test that public ports widget stays hidden when no public IP available.
+
+    Parameters
+    ----------
+    tui_app_for_public_ports : CampersTUI
+        TUI app instance
+    """
+    public_ports_widget = Mock()
+    other_widget = Mock()
+
+    def query_one_side_effect(selector):
+        if "public-ports" in selector:
+            return public_ports_widget
+        return other_widget
+
+    tui_app_for_public_ports.query_one = Mock(side_effect=query_one_side_effect)
+    tui_app_for_public_ports.campers._resources = {"instance_details": {}}
+
+    tui_app_for_public_ports.update_from_config({"public_ports": [8080]})
+
+    public_ports_widget.update.assert_not_called()
+    public_ports_widget.remove_class.assert_not_called()
