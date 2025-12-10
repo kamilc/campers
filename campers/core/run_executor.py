@@ -890,6 +890,10 @@ class RunExecutor:
                     f"Please wait for stable state before retrying."
                 )
 
+        if self.cleanup_in_progress_getter():
+            logging.debug("Cleanup in progress, aborting instance creation")
+            raise RuntimeError("Instance creation aborted due to cleanup request")
+
         logging.info("Creating new instance: %s", instance_name)
 
         instance_details = compute_provider.launch_instance(
