@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container
-from textual.widgets import Log, Static
+from textual.widgets import RichLog, Static
 
 from campers.constants import (
     CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS,
@@ -130,14 +130,14 @@ class CampersTUI(App):
             yield Static("Port forwarding: none", id=WidgetID.PORTFORWARD)
             yield Static("Public ports: none", id=WidgetID.PUBLIC_PORTS)
         with Container(id="log-panel"):
-            yield Log()
+            yield RichLog(markup=True)
 
     def on_mount(self) -> None:
         """Handle mount event - setup logging, start worker, and timer."""
         root_logger = logging.getLogger()
         self.original_handlers = root_logger.handlers[:]
 
-        log_widget = self.query_one(Log)
+        log_widget = self.query_one(RichLog)
         self.log_widget = log_widget
         tui_handler = TuiLogHandler(self, log_widget)
         tui_handler.setFormatter(StreamFormatter("%(message)s"))
@@ -166,7 +166,7 @@ class CampersTUI(App):
         if self.log_widget is None:
             return
 
-        self.log_widget.write_line(message.text)
+        self.log_widget.write(message.text)
 
     def check_for_updates(self) -> None:
         """Check queue for updates and update widgets accordingly.
@@ -549,8 +549,8 @@ class CampersTUI(App):
                 and (current_time - self.last_ctrl_c_time) < CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS
             ):
                 try:
-                    log_widget = self.query_one(Log)
-                    log_widget.write_line("Force exit - skipping cleanup!")
+                    log_widget = self.query_one(RichLog)
+                    log_widget.write("[red]Force exit - skipping cleanup![/red]")
                 except (ValueError, AttributeError, RuntimeError) as e:
                     logger.debug("Failed to write to log widget during force exit: %s", e)
 
@@ -621,9 +621,9 @@ class CampersTUI(App):
                 logger.debug("Failed to update status widget during quit: %s", e)
 
             try:
-                log_widget = self.query_one(Log)
+                log_widget = self.query_one(RichLog)
                 msg = "Graceful shutdown initiated (press Ctrl+C again to force exit)"
-                log_widget.write_line(msg)
+                log_widget.write(msg)
             except (ValueError, AttributeError, RuntimeError) as e:
                 logger.debug("Failed to write shutdown message to log widget: %s", e)
 

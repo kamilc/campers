@@ -802,6 +802,53 @@ class RunExecutor:
 
         return instance_details
 
+    def _check_config_drift(
+        self,
+        existing_instance: dict[str, Any],
+        config: dict[str, Any],
+        compute_provider: ComputeProvider,
+    ) -> None:
+        """Check for configuration drift between config file and existing instance.
+
+        Logs warnings if the config file specifies different hardware settings
+        than what the existing instance has.
+
+        Parameters
+        ----------
+        existing_instance : dict[str, Any]
+            Existing instance details from find_instances_by_name_or_id
+        config : dict[str, Any]
+            Merged configuration from config file
+        compute_provider : ComputeProvider
+            Compute provider instance for fetching volume size
+        """
+        instance_id = existing_instance["instance_id"]
+        drifts = []
+
+        configured_type = config.get("instance_type")
+        actual_type = existing_instance.get("instance_type")
+
+        if configured_type and actual_type and configured_type != actual_type:
+            drifts.append(f"instance_type: config={configured_type}, actual={actual_type}")
+
+        configured_disk = config.get("disk_size")
+
+        if configured_disk:
+            try:
+                actual_disk = compute_provider.get_volume_size(instance_id)
+
+                if actual_disk and configured_disk != actual_disk:
+                    drifts.append(f"disk_size: config={configured_disk}GB, actual={actual_disk}GB")
+            except Exception as e:
+                logger.debug("Failed to get volume size for drift check: %s", e)
+
+        if drifts:
+            drift_details = ", ".join(drifts)
+            logging.warning(
+                "Config drift detected: %s. To apply changes, terminate the instance and re-run.",
+                drift_details,
+            )
+
     def get_or_create_instance(self, instance_name: str, config: dict[str, Any]) -> dict[str, Any]:
         """Get or create instance with smart reuse logic.
 
@@ -875,6 +922,8 @@ class RunExecutor:
                     f"  - Change config region back to: {instance_region}\n"
                     f"  - Destroy the old instance: campers destroy {instance_id}\n"
                 )
+
+            self._check_config_drift(existing, config, compute_provider)
 
             if state == "stopped":
                 logging.info("Found stopped instance %s, starting...", instance_id)
