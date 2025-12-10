@@ -496,9 +496,9 @@ class TestExitCodes:
             "instance_details": {"instance_id": "i-test"},
             "ec2_manager": MagicMock(),
         }
-        campers.merged_config = {"on_exit": "stop"}
+        campers.merged_config = {}
 
-        campers._cleanup_resources(signum=None, frame=None)
+        campers._cleanup_resources(action="stop", signum=None, frame=None)
 
         assert campers._cleanup_in_progress is False
 

@@ -739,7 +739,7 @@ def step_create_file_on_instance(context: Context, file_path: str) -> None:
     try:
         context.harness.wait_for_event("ssh-ready", instance_id, timeout_sec=30)
     except Exception as e:
-        raise AssertionError(f"SSH not ready for instance {instance_id} within 30 seconds: {e}")
+        raise AssertionError(f"SSH not ready for {instance_id} within 30 seconds: {e}") from e
 
     host, port, key_file = context.harness.get_ssh_details(instance_id)
 
@@ -803,7 +803,7 @@ def step_check_file_exists_on_instance(context: Context, file_path: str) -> None
             context.harness.wait_for_event("ssh-ready", instance_id, timeout_sec=30)
             host, port, key_file = context.harness.get_ssh_details(instance_id)
         except Exception as e:
-            raise AssertionError(f"SSH not ready for instance {instance_id} within 30 seconds: {e}")
+            raise AssertionError(f"SSH not ready for {instance_id} within 30 seconds: {e}") from e
 
     assert host and port and key_file, f"SSH details not available for instance {instance_id}"
 
@@ -1450,7 +1450,9 @@ def step_run_campers_run(context: Context, camp_name: str) -> None:
             context.instance_reused = True
             context.instance_creation_count = 0
         elif len(matches) == 1 and matches[0]["state"] == "running":
-            context.command_error = f"Instance '{instance_name}' is already running. Stop or destroy the instance to continue."
+            context.command_error = (
+                f"Instance '{instance_name}' is already running. Stop or destroy it to continue."
+            )
             context.command_failed = True
         else:
             context.command_error = f"Multiple instances matched: {len(matches)}"

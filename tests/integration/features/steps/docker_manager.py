@@ -88,7 +88,8 @@ class EC2ContainerManager:
                         sock.close()
                         if banner:
                             logger.debug(
-                                f"SSH server ready on port {port} (attempt {attempt + 1}) - received banner"
+                                f"SSH server ready on port {port} "
+                                f"(attempt {attempt + 1}) - received banner"
                             )
                             return True
                     except Exception as e:
@@ -121,7 +122,8 @@ class EC2ContainerManager:
             try:
                 existing_container = self.client.containers.get(container_name)
                 logger.info(
-                    f"Found existing container {container_name}, removing it (attempt {attempt + 1}/{max_retries})"
+                    f"Found existing container {container_name}, removing it "
+                    f"(attempt {attempt + 1}/{max_retries})"
                 )
                 existing_container.remove(force=True)
                 logger.debug(f"Successfully removed existing container {container_name}")
@@ -132,12 +134,14 @@ class EC2ContainerManager:
             except Exception as e:
                 if attempt < max_retries - 1:
                     logger.warning(
-                        f"Error removing container {container_name} (attempt {attempt + 1}/{max_retries}): {e}. Retrying..."
+                        f"Error removing container {container_name} "
+                        f"(attempt {attempt + 1}/{max_retries}): {e}. Retrying..."
                     )
                     time.sleep(retry_delay)
                 else:
                     logger.warning(
-                        f"Could not remove existing container {container_name} after {max_retries} attempts: {e}. Continuing anyway..."
+                        f"Could not remove existing container {container_name} "
+                        f"after {max_retries} attempts: {e}. Continuing anyway..."
                     )
                     return
 
@@ -208,7 +212,8 @@ class EC2ContainerManager:
                 logger.error(f"stderr: {e.stderr}")
                 logger.error(f"command: {e.cmd}")
                 raise RuntimeError(
-                    f"Failed to generate SSH key for {instance_id}: stdout={e.stdout}, stderr={e.stderr}"
+                    f"Failed to generate SSH key for {instance_id}: "
+                    f"stdout={e.stdout}, stderr={e.stderr}"
                 ) from e
             except FileNotFoundError as e:
                 logger.error("ssh-keygen command not found in PATH")
@@ -247,15 +252,14 @@ class EC2ContainerManager:
         Returns
         -------
         tuple[int | None, Path]
-            (port, key_file_path) where port is SSH port (or None if blocked) and key_file_path is the private key
+            (port, key_file_path) where port is SSH port (or None if blocked)
+            and key_file_path is the private key
         """
         logger.debug(f"Starting create_instance_container for {instance_id}")
-        logger.debug(
-            f"Checking SSH delay env var: CAMPERS_SSH_DELAY_SECONDS={os.environ.get('CAMPERS_SSH_DELAY_SECONDS', 'not set')}"
-        )
-        logger.debug(
-            f"Checking SSH block env var: CAMPERS_SSH_BLOCK_CONNECTIONS={os.environ.get('CAMPERS_SSH_BLOCK_CONNECTIONS', 'not set')}"
-        )
+        delay_val = os.environ.get("CAMPERS_SSH_DELAY_SECONDS", "not set")
+        logger.debug(f"Checking SSH delay env var: CAMPERS_SSH_DELAY_SECONDS={delay_val}")
+        block_val = os.environ.get("CAMPERS_SSH_BLOCK_CONNECTIONS", "not set")
+        logger.debug(f"Checking SSH block env var: CAMPERS_SSH_BLOCK_CONNECTIONS={block_val}")
 
         ssh_delay = int(os.environ.get("CAMPERS_SSH_DELAY_SECONDS", "0"))
         block_ssh = os.environ.get("CAMPERS_SSH_BLOCK_CONNECTIONS") == "1"
@@ -392,14 +396,18 @@ exec /init
         if not container_ready:
             container.reload()
             raise TimeoutError(
-                f"Container {container.short_id} not ready after {timeout}s (status: {container.status})"
+                f"Container {container.short_id} not ready after {timeout}s "
+                f"(status: {container.status})"
             )
 
         if not block_ssh:
             ssh_delay = int(os.environ.get("CAMPERS_SSH_DELAY_SECONDS", "0"))
 
             if ssh_delay > 0:
-                logger.info(f"Skipping SSH readiness check (SSH delay of {ssh_delay}s configured for retry testing)")
+                logger.info(
+                    f"Skipping SSH readiness check "
+                    f"(SSH delay of {ssh_delay}s configured for retry testing)"
+                )
             else:
                 ssh_health_start = time.time()
                 logger.info(f"Waiting for SSH server to be ready on localhost:{port}...")
@@ -412,7 +420,8 @@ exec /init
                         ssh_ready_elapsed = time.time() - ssh_health_start
                         total_elapsed = time.time() - start_time
                         logger.info(
-                            f"SSH server ready on port {port} after {ssh_ready_elapsed:.1f}s (total: {total_elapsed:.1f}s)"
+                            f"SSH server ready on port {port} after "
+                            f"{ssh_ready_elapsed:.1f}s (total: {total_elapsed:.1f}s)"
                         )
 
                         logger.info("Waiting for SSH authentication subsystem to initialize...")
@@ -430,7 +439,8 @@ exec /init
             return port, key_file
         else:
             logger.info(
-                f"SSH container {container.name} ready (blocked - no port mapping) with key {key_file}"
+                f"SSH container {container.name} ready (blocked - no port mapping) "
+                f"with key {key_file}"
             )
             return None, key_file
 

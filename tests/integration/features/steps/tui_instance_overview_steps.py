@@ -24,9 +24,11 @@ def step_create_running_instances(context: Context, count: int) -> None:
         instance_name = f"test-running-{i}"
         step_create_running_instance(context, instance_name)
         context.running_instances.append(instance_name)
-        if hasattr(context, "test_instance_id"):
-            if context.test_instance_id not in context.created_instance_ids:
-                context.created_instance_ids.append(context.test_instance_id)
+        has_test_id = hasattr(context, "test_instance_id")
+        is_new = has_test_id and context.test_instance_id not in context.created_instance_ids
+
+        if is_new:
+            context.created_instance_ids.append(context.test_instance_id)
 
 
 @given("I have {count:d} stopped instances")
@@ -44,9 +46,11 @@ def step_create_stopped_instances(context: Context, count: int) -> None:
         instance_name = f"test-stopped-{i}"
         step_create_stopped_instance(context, instance_name)
         context.stopped_instances.append(instance_name)
-        if hasattr(context, "test_instance_id"):
-            if context.test_instance_id not in context.created_instance_ids:
-                context.created_instance_ids.append(context.test_instance_id)
+        has_test_id = hasattr(context, "test_instance_id")
+        is_new = has_test_id and context.test_instance_id not in context.created_instance_ids
+
+        if is_new:
+            context.created_instance_ids.append(context.test_instance_id)
 
 
 @given("I have {count:d} instances")
@@ -121,9 +125,11 @@ def step_create_running_instances_of_type(context: Context, count: int, instance
         context.pending_instance_type = instance_type
         step_create_running_instance(context, instance_name)
         context.running_instances.append(instance_name)
-        if hasattr(context, "test_instance_id"):
-            if context.test_instance_id not in context.created_instance_ids:
-                context.created_instance_ids.append(context.test_instance_id)
+        has_test_id = hasattr(context, "test_instance_id")
+        is_new = has_test_id and context.test_instance_id not in context.created_instance_ids
+
+        if is_new:
+            context.created_instance_ids.append(context.test_instance_id)
 
     if not hasattr(context, "instance_types"):
         context.instance_types = {}
@@ -217,9 +223,11 @@ def step_launch_new_instance(context: Context) -> None:
         context.created_instance_ids = []
 
     step_create_running_instance(context, "test-new-instance")
-    if hasattr(context, "test_instance_id"):
-        if context.test_instance_id not in context.created_instance_ids:
-            context.created_instance_ids.append(context.test_instance_id)
+    has_test_id = hasattr(context, "test_instance_id")
+    is_new = has_test_id and context.test_instance_id not in context.created_instance_ids
+
+    if is_new:
+        context.created_instance_ids.append(context.test_instance_id)
 
 
 @then('overview widget shows "{expected_text}"')

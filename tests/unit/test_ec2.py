@@ -275,9 +275,11 @@ def test_launch_instance_rollback_on_failure(ec2_manager, cleanup_keys):
         "region": "us-east-1",
     }
 
-    with patch("time.time", return_value=1234567890):
-        with pytest.raises(ValueError, match="No AMI found"):
-            ec2_manager.launch_instance(config)
+    with (
+        patch("time.time", return_value=1234567890),
+        pytest.raises(ValueError, match="No AMI found"),
+    ):
+        ec2_manager.launch_instance(config)
 
     key_pairs = ec2_client.describe_key_pairs()
     assert len(key_pairs["KeyPairs"]) == 0

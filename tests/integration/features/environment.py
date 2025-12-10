@@ -477,7 +477,7 @@ def cleanup_test_ports(port_list: list[int]) -> None:
                 if filtered_pids:
                     logger.info(
                         f"Attempt {attempt + 1}/{max_retries}: "
-                        f"Cleaning up {len(filtered_pids)} process(es) using port {port}: {filtered_pids}"
+                        f"Cleaning up {len(filtered_pids)} process(es) on port {port}"
                     )
 
                     killed_pids = []
@@ -503,7 +503,7 @@ def cleanup_test_ports(port_list: list[int]) -> None:
                 if not filtered_pids:
                     if pids and current_pid in pids:
                         logger.debug(
-                            f"Attempting to stop portforward managers for port {port} owned by current PID {current_pid}"
+                            f"Stopping portforward managers for port {port}, PID {current_pid}"
                         )
                         _stop_portforward_managers_via_gc()
                     break
@@ -1181,14 +1181,16 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         logger.debug(f"Error cleaning up instances: {e}")
 
     try:
-        if "localstack" in scenario.tags and hasattr(context, "app_process"):
-            if context.app_process and context.app_process.poll() is None:
-                logger.info("Killing orphaned app_process from graceful shutdown test")
-                send_signal_to_process(context.app_process, signal.SIGKILL)
-                try:
-                    context.app_process.wait(timeout=5)
-                except Exception as e:
-                    logger.warning(f"Error waiting for app_process to terminate: {e}")
+        is_localstack = "localstack" in scenario.tags and hasattr(context, "app_process")
+        is_running = is_localstack and context.app_process and context.app_process.poll() is None
+
+        if is_running:
+            logger.info("Killing orphaned app_process from graceful shutdown test")
+            send_signal_to_process(context.app_process, signal.SIGKILL)
+            try:
+                context.app_process.wait(timeout=5)
+            except Exception as e:
+                logger.warning(f"Error waiting for app_process to terminate: {e}")
     except Exception as e:
         logger.debug(f"Error cleaning up app_process: {e}")
 
@@ -1243,9 +1245,12 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         logger.error(f"Unexpected error cleaning cleanup_key_file: {e}", exc_info=True)
 
     try:
-        if hasattr(context, "key_file") and context.key_file:
-            if hasattr(context.key_file, "exists") and context.key_file.exists():
-                context.key_file.unlink()
+        has_key_file = hasattr(context, "key_file") and context.key_file
+        has_exists_method = has_key_file and hasattr(context.key_file, "exists")
+        key_exists = has_exists_method and context.key_file.exists()
+
+        if key_exists:
+            context.key_file.unlink()
     except (RuntimeError, AttributeError, OSError) as e:
         logger.debug(f"Expected error cleaning key_file: {e}")
     except Exception as e:
@@ -1276,18 +1281,20 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         logger.error(f"Unexpected error with AWS credentials restoration: {e}", exc_info=True)
 
     try:
-        if hasattr(context, "temp_config_file") and context.temp_config_file:
-            if os.path.exists(context.temp_config_file):
-                os.unlink(context.temp_config_file)
+        has_temp_config = hasattr(context, "temp_config_file") and context.temp_config_file
+
+        if has_temp_config and os.path.exists(context.temp_config_file):
+            os.unlink(context.temp_config_file)
     except (RuntimeError, AttributeError, OSError) as e:
         logger.debug(f"Expected error deleting temp_config_file: {e}")
     except Exception as e:
         logger.error(f"Unexpected error deleting temp_config_file: {e}", exc_info=True)
 
     try:
-        if hasattr(context, "env_config_file") and context.env_config_file:
-            if os.path.exists(context.env_config_file):
-                os.unlink(context.env_config_file)
+        has_env_config = hasattr(context, "env_config_file") and context.env_config_file
+
+        if has_env_config and os.path.exists(context.env_config_file):
+            os.unlink(context.env_config_file)
     except (RuntimeError, AttributeError, OSError) as e:
         logger.debug(f"Expected error deleting env_config_file: {e}")
     except Exception as e:
@@ -1466,9 +1473,7 @@ def before_feature(context: Context, feature) -> None:
             )
             all_instances = ec2_manager.list_instances(region_filter=None)
             if all_instances:
-                logger.info(
-                    f"Cleaning up {len(all_instances)} stale instances from LocalStack before feature"
-                )
+                logger.info(f"Cleaning up {len(all_instances)} stale instances from LocalStack")
                 for instance in all_instances:
                     try:
                         ec2_manager.terminate_instance(instance["instance_id"])

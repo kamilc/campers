@@ -1230,9 +1230,9 @@ def test_cleanup_resources_executes_in_correct_order(campers_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {}
 
-    campers_instance._cleanup_resources()
+    campers_instance._cleanup_resources(action="terminate")
 
     assert cleanup_order == ["portforward", "mutagen", "ssh", "ec2"]
 
@@ -1259,9 +1259,9 @@ def test_cleanup_resources_continues_on_error(campers_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {}
 
-    campers_instance._cleanup_resources()
+    campers_instance._cleanup_resources(action="terminate")
 
     mock_portforward.stop_all_tunnels.assert_called_once()
     mock_mutagen.terminate_session.assert_called_once()
@@ -1331,9 +1331,9 @@ def test_cleanup_resources_only_cleans_tracked_resources(campers_module) -> None
         "ssh_manager": mock_ssh,
     }
 
-    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {}
 
-    campers_instance._cleanup_resources()
+    campers_instance._cleanup_resources(action="terminate")
 
     mock_ec2.terminate_instance.assert_called_once_with("i-test123")
     mock_ssh.close.assert_called_once()
@@ -1546,12 +1546,12 @@ def test_list_command_all_regions(campers_module, aws_credentials, caplog) -> No
 
     mock_ec2_class = MagicMock(return_value=mock_ec2_manager)
 
-    with caplog.at_level(logging.INFO):
-        with (
-            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
-            patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
-        ):
-            campers_instance.list()
+    with (
+        caplog.at_level(logging.INFO),
+        patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
+        patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
+    ):
+        campers_instance.list()
 
     output = caplog.text
     assert "NAME" in output
@@ -1597,13 +1597,13 @@ def test_list_command_filtered_region(campers_module, aws_credentials, caplog) -
         ]
     }
 
-    with caplog.at_level(logging.INFO):
-        with (
-            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
-            patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
-            patch("boto3.client", return_value=mock_ec2_client),
-        ):
-            campers_instance.list(region="us-east-1")
+    with (
+        caplog.at_level(logging.INFO),
+        patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
+        patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
+        patch("boto3.client", return_value=mock_ec2_client),
+    ):
+        campers_instance.list(region="us-east-1")
 
     output = caplog.text
     assert "Instances in us-east-1:" in output
@@ -1628,12 +1628,12 @@ def test_list_command_no_instances(campers_module, aws_credentials, caplog) -> N
 
     mock_ec2_class = MagicMock(return_value=mock_ec2_manager)
 
-    with caplog.at_level(logging.INFO):
-        with (
-            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
-            patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
-        ):
-            campers_instance.list()
+    with (
+        caplog.at_level(logging.INFO),
+        patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
+        patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
+    ):
+        campers_instance.list()
 
     output = caplog.text
     assert "No campers-managed instances found" in output
@@ -1655,13 +1655,13 @@ def test_list_command_no_credentials(campers_module, caplog) -> None:
 
     mock_ec2_class = MagicMock(return_value=mock_ec2_manager)
 
-    with caplog.at_level(logging.ERROR):
-        with (
-            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
-            patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
-        ):
-            with pytest.raises(ProviderCredentialsError):
-                campers_instance.list()
+    with (
+        caplog.at_level(logging.ERROR),
+        patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
+        patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
+        pytest.raises(ProviderCredentialsError),
+    ):
+        campers_instance.list()
 
     output = caplog.text
     assert "Cloud provider credentials not found" in output
@@ -1684,13 +1684,13 @@ def test_list_command_permission_error(campers_module, aws_credentials, caplog) 
 
     mock_ec2_class = MagicMock(return_value=mock_ec2_manager)
 
-    with caplog.at_level(logging.ERROR):
-        with (
-            patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
-            patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
-        ):
-            with pytest.raises(ProviderAPIError):
-                campers_instance.list()
+    with (
+        caplog.at_level(logging.ERROR),
+        patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
+        patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
+        pytest.raises(ProviderAPIError),
+    ):
+        campers_instance.list()
 
     output = caplog.text
     assert "Insufficient cloud provider permissions" in output
@@ -1806,11 +1806,11 @@ def test_cleanup_flag_resets_after_cleanup(campers_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {}
 
     assert campers_instance._cleanup_in_progress is False
 
-    campers_instance._cleanup_resources()
+    campers_instance._cleanup_resources(action="terminate")
 
     assert campers_instance._cleanup_in_progress is False
     mock_ec2.terminate_instance.assert_called_once()
@@ -1909,9 +1909,9 @@ def test_cleanup_flag_resets_even_with_cleanup_errors(campers_module) -> None:
         "instance_details": {"instance_id": "i-test123"},
     }
 
-    campers_instance._cleanup_manager.config_dict = {"on_exit": "terminate"}
+    campers_instance._cleanup_manager.config_dict = {}
 
-    campers_instance._cleanup_resources()
+    campers_instance._cleanup_resources(action="terminate")
 
     assert campers_instance._cleanup_in_progress is False
     mock_ec2.terminate_instance.assert_called_once()
@@ -2133,7 +2133,20 @@ def test_stop_command_success(campers_module) -> None:
 
     campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
-    with patch("builtins.print"):
+    mock_pricing_service = MagicMock()
+    mock_pricing_service.close = MagicMock()
+    mock_calculate_cost = MagicMock(return_value=100.0)
+    mock_format_cost = MagicMock(return_value="$100.00/month")
+    mock_provider = {
+        "pricing_service": MagicMock(return_value=mock_pricing_service),
+        "calculate_monthly_cost": mock_calculate_cost,
+        "format_cost": mock_format_cost,
+    }
+
+    with (
+        patch("builtins.print"),
+        patch("campers.lifecycle.get_provider", return_value=mock_provider),
+    ):
         campers_instance.stop("i-test123")
 
     mock_ec2.stop_instance.assert_called_once_with("i-test123")
@@ -2234,10 +2247,21 @@ def test_stop_command_displays_storage_cost(campers_module, caplog) -> None:
 
     campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
-    with caplog.at_level(logging.INFO):
-        with patch("campers.providers.aws.pricing.calculate_monthly_cost") as mock_cost:
-            mock_cost.side_effect = [100.0, 50.0]
-            campers_instance.stop("i-test123")
+    mock_pricing_service = MagicMock()
+    mock_pricing_service.close = MagicMock()
+    mock_calculate_cost = MagicMock(side_effect=[100.0, 50.0])
+    mock_format_cost = MagicMock(return_value="$100.00/month")
+    mock_provider = {
+        "pricing_service": MagicMock(return_value=mock_pricing_service),
+        "calculate_monthly_cost": mock_calculate_cost,
+        "format_cost": mock_format_cost,
+    }
+
+    with (
+        caplog.at_level(logging.INFO),
+        patch("campers.lifecycle.get_provider", return_value=mock_provider),
+    ):
+        campers_instance.stop("i-test123")
 
     output = caplog.text
     assert "cost" in output.lower()
@@ -2269,7 +2293,20 @@ def test_start_command_success(campers_module) -> None:
 
     campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
-    with patch("builtins.print"):
+    mock_pricing_service = MagicMock()
+    mock_pricing_service.close = MagicMock()
+    mock_calculate_cost = MagicMock(return_value=100.0)
+    mock_format_cost = MagicMock(return_value="$100.00/month")
+    mock_provider = {
+        "pricing_service": MagicMock(return_value=mock_pricing_service),
+        "calculate_monthly_cost": mock_calculate_cost,
+        "format_cost": mock_format_cost,
+    }
+
+    with (
+        patch("builtins.print"),
+        patch("campers.lifecycle.get_provider", return_value=mock_provider),
+    ):
         campers_instance.start("i-test123")
 
     mock_ec2.start_instance.assert_called_once_with("i-test123")
@@ -2346,7 +2383,7 @@ def test_start_command_multiple_matches_requires_id(campers_module) -> None:
 def test_start_command_displays_new_ip(campers_module, caplog) -> None:
     """Test start() displays new IP in output."""
     import logging
-    from unittest.mock import MagicMock
+    from unittest.mock import MagicMock, patch
 
     campers_instance = campers_module()
     campers_instance._config_loader = MagicMock()
@@ -2370,7 +2407,20 @@ def test_start_command_displays_new_ip(campers_module, caplog) -> None:
 
     campers_instance._create_compute_provider = MagicMock(return_value=mock_ec2)
 
-    with caplog.at_level(logging.INFO):
+    mock_pricing_service = MagicMock()
+    mock_pricing_service.close = MagicMock()
+    mock_calculate_cost = MagicMock(return_value=100.0)
+    mock_format_cost = MagicMock(return_value="$100.00/month")
+    mock_provider = {
+        "pricing_service": MagicMock(return_value=mock_pricing_service),
+        "calculate_monthly_cost": mock_calculate_cost,
+        "format_cost": mock_format_cost,
+    }
+
+    with (
+        caplog.at_level(logging.INFO),
+        patch("campers.lifecycle.get_provider", return_value=mock_provider),
+    ):
         campers_instance.start("i-test123")
 
     output = caplog.text

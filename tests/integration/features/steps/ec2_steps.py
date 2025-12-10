@@ -107,13 +107,15 @@ def simulate_launch_timeout(context: Context) -> None:
         last_response={"Error": {"Code": "Timeout"}},
     )
 
-    with patch.object(ec2_manager.ec2_client, "get_waiter", return_value=waiter_mock):
-        with patch.object(ec2_manager, "create_key_pair", side_effect=capture_unique_id_wrapper):
-            try:
-                ec2_manager.launch_instance(context.ec2_config)
-                context.exception = None
-            except ProviderAPIError as e:
-                context.exception = e
+    with (
+        patch.object(ec2_manager.ec2_client, "get_waiter", return_value=waiter_mock),
+        patch.object(ec2_manager, "create_key_pair", side_effect=capture_unique_id_wrapper),
+    ):
+        try:
+            ec2_manager.launch_instance(context.ec2_config)
+            context.exception = None
+        except ProviderAPIError as e:
+            context.exception = e
 
     context.ec2_client = ec2_manager.ec2_client
 
@@ -1297,9 +1299,11 @@ def step_config_with_invalid_architecture(context: Context) -> None:
 @given("no ami.query.owner specified")
 def step_no_ami_query_owner(context: Context) -> None:
     """Ensure no owner is specified in query."""
-    if hasattr(context, "ami_config") and "ami" in context.ami_config:
-        if "query" in context.ami_config["ami"]:
-            context.ami_config["ami"]["query"].pop("owner", None)
+    has_ami_config = hasattr(context, "ami_config") and "ami" in context.ami_config
+    has_query = has_ami_config and "query" in context.ami_config["ami"]
+
+    if has_query:
+        context.ami_config["ami"]["query"].pop("owner", None)
 
 
 @given("a config with no ami section")

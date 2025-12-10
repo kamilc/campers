@@ -89,12 +89,11 @@ def test_check_mutagen_installed_success(mutagen_manager) -> None:
 
 def test_check_mutagen_not_installed(mutagen_manager) -> None:
     """Test error when mutagen is not installed."""
-    with patch("campers.services.sync.subprocess.run", side_effect=FileNotFoundError):
-        with pytest.raises(
-            RuntimeError,
-            match="Mutagen is not installed locally",
-        ):
-            mutagen_manager.check_mutagen_installed()
+    with (
+        patch("campers.services.sync.subprocess.run", side_effect=FileNotFoundError),
+        pytest.raises(RuntimeError, match="Mutagen is not installed locally"),
+    ):
+        mutagen_manager.check_mutagen_installed()
 
 
 def test_check_mutagen_returns_error(mutagen_manager) -> None:
@@ -266,9 +265,8 @@ def test_wait_for_initial_sync_timeout(mutagen_manager) -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="Status: Connecting")
 
-        with patch("time.sleep"):
-            with pytest.raises(RuntimeError, match="Mutagen sync timed out"):
-                mutagen_manager.wait_for_initial_sync("campers-123", timeout=1)
+        with patch("time.sleep"), pytest.raises(RuntimeError, match="Mutagen sync timed out"):
+            mutagen_manager.wait_for_initial_sync("campers-123", timeout=1)
 
 
 def test_wait_for_initial_sync_check_failure(mutagen_manager) -> None:

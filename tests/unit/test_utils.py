@@ -354,9 +354,11 @@ class TestAtomicFileWrite:
         with tempfile.TemporaryDirectory() as tmpdir:
             target_path = Path(tmpdir) / "test.txt"
 
-            with patch("builtins.open", side_effect=OSError("Write failed")):
-                with pytest.raises(IOError):
-                    atomic_file_write(target_path, "content")
+            with (
+                patch("builtins.open", side_effect=OSError("Write failed")),
+                pytest.raises(IOError),
+            ):
+                atomic_file_write(target_path, "content")
 
             temp_path = target_path.with_suffix(".tmp")
             assert not temp_path.exists()
@@ -366,9 +368,11 @@ class TestAtomicFileWrite:
         with tempfile.TemporaryDirectory() as tmpdir:
             target_path = Path(tmpdir) / "test.txt"
 
-            with patch("builtins.open", side_effect=OSError("Write failed")):
-                with pytest.raises(IOError, match="Write failed"):
-                    atomic_file_write(target_path, "content")
+            with (
+                patch("builtins.open", side_effect=OSError("Write failed")),
+                pytest.raises(IOError, match="Write failed"),
+            ):
+                atomic_file_write(target_path, "content")
 
     def test_writes_empty_file(self) -> None:
         """Test writes empty content."""

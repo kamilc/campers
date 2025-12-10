@@ -24,7 +24,10 @@ def step_camp_has_multi_line_setup_script(context: Context, camp_name: str) -> N
     """
     ensure_camp_exists(context, camp_name)
 
-    multi_line_script = "set -e; mkdir -p /tmp/workspace; echo 'Ready' > /tmp/workspace/status.txt; if [ -d /tmp/workspace ]; then echo 'Workspace created'; fi"
+    multi_line_script = (
+        "set -e; mkdir -p /tmp/workspace; echo 'Ready' > /tmp/workspace/status.txt; "
+        "if [ -d /tmp/workspace ]; then echo 'Workspace created'; fi"
+    )
 
     context.config_data["camps"][camp_name]["setup_script"] = multi_line_script
     logger.info(f"Configured multi-line setup_script for {camp_name}")

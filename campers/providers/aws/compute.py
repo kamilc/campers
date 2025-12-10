@@ -233,11 +233,13 @@ class EC2Manager:
         self,
         unique_id: str,
         ssh_allowed_cidr: str | None = None,
+        public_ports: list[int] | None = None,
+        public_ports_allowed_cidr: str | None = None,
         project_name: str | None = None,
         branch: str | None = None,
         camp_name: str | None = None,
     ) -> str:
-        """Create security group with SSH access.
+        """Create security group with SSH access and optional public ports.
 
         Parameters
         ----------
@@ -245,6 +247,10 @@ class EC2Manager:
             Unique identifier to use in security group name
         ssh_allowed_cidr : str | None
             CIDR block for SSH access. If None, defaults to 0.0.0.0/0
+        public_ports : list[int] | None
+            List of ports to open for public access (optional)
+        public_ports_allowed_cidr : str | None
+            CIDR block for public ports access (optional)
         project_name : str | None
             Project name for naming convention
         branch : str | None
@@ -258,7 +264,13 @@ class EC2Manager:
             Security group ID
         """
         return self.network_manager.create_security_group(
-            unique_id, ssh_allowed_cidr, project_name, branch, camp_name
+            unique_id,
+            ssh_allowed_cidr,
+            public_ports,
+            public_ports_allowed_cidr,
+            project_name,
+            branch,
+            camp_name,
         )
 
     def _check_region_mismatch(self, camp_name: str, target_region: str) -> None:
@@ -386,11 +398,19 @@ class EC2Manager:
         key_file = key_pair_info.file_path
 
         ssh_allowed_cidr = config.get("ssh_allowed_cidr")
+        public_ports = config.get("public_ports")
+        public_ports_allowed_cidr = config.get("public_ports_allowed_cidr")
         project_name = get_git_project_name()
         branch = get_git_branch()
         camp_name = config.get("camp_name")
         sg_id = self.create_security_group(
-            unique_id, ssh_allowed_cidr, project_name, branch, camp_name
+            unique_id,
+            ssh_allowed_cidr,
+            public_ports,
+            public_ports_allowed_cidr,
+            project_name,
+            branch,
+            camp_name,
         )
 
         return {

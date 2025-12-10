@@ -113,13 +113,12 @@ def step_launch_tui_with_config(context: Context) -> None:
     context : Context
         Behave context object
     """
-    temp_file = tempfile.NamedTemporaryFile(
+    with tempfile.NamedTemporaryFile(
         mode="w", suffix=".yaml", delete=False, dir=context.tmp_dir
-    )
-    yaml.dump(context.config_data, temp_file)
-    temp_file.close()
-    context.temp_config_file = temp_file.name
-    context.config_path = temp_file.name
+    ) as temp_file:
+        yaml.dump(context.config_data, temp_file)
+        context.temp_config_file = temp_file.name
+        context.config_path = temp_file.name
     logger.info(f"Created config file: {context.config_path}")
 
 
@@ -339,8 +338,8 @@ async def poll_tui_with_unified_timeout(
                     log_lines.append(str(line))
             except OSError as os_error:
                 logger.debug(
-                    f"OSError while iterating log widget lines (errno {os_error.errno}): {os_error}. "
-                    "This may indicate a PTY/device issue. Using fallback extraction."
+                    f"OSError iterating log lines (errno {os_error.errno}): {os_error}. "
+                    "PTY/device issue. Using fallback."
                 )
                 log_lines = []
                 try:
@@ -381,9 +380,7 @@ async def poll_tui_with_unified_timeout(
                             last_status = status_text
                     except Exception:
                         pass
-                logger.info(
-                    "Error status detected with extended post-error handling - breaking from polling"
-                )
+                logger.info("Error status with extended post-error handling - breaking")
                 break
             elif not error_detection_time:
                 await pilot.pause(0.5)
@@ -669,7 +666,7 @@ def run_tui_test_with_machine(
                                     final_status = "extraction_failed"
 
                                 logger.info(
-                                    "=== TUI TEST END === (machine: %s, status: %s, log_length: %d)",
+                                    "=== TUI TEST END === (camp: %s, status: %s, len: %d)",
                                     camp_name,
                                     final_status,
                                     len(log_text),
@@ -680,11 +677,11 @@ def run_tui_test_with_machine(
                                     "log_lines": log_lines,
                                     "log_text": log_text,
                                 }
-                    except TimeoutError:
+                    except TimeoutError as err:
                         raise AssertionError(
                             f"TUI test exceeded {max_wait}s timeout. "
                             f"Check logs for container boot delays or SSH issues."
-                        )
+                        ) from err
             except Exception as e:
                 logger.error(f"Exception during TUI result extraction: {e}", exc_info=True)
                 log_lines = []

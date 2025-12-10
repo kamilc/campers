@@ -5,7 +5,12 @@ from contextlib import contextmanager
 
 
 def http_response() -> bytes:
-    response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK"
+    response = (
+        b"HTTP/1.1 200 OK\r\n"
+        b"Content-Type: text/plain\r\n"
+        b"Content-Length: 2\r\n"
+        b"Connection: close\r\n\r\nOK"
+    )
     return response
 
 

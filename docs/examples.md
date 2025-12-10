@@ -99,16 +99,15 @@ camps:
   builder:
     instance_type: c6a.12xlarge  # 48 vCPUs!
     disk_size: 50
-    
+
     setup_script: |
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       sudo apt-get install -y build-essential clang
-    
+
     command: cargo build --release
-    
-    # Auto-terminate after the build to save money
-    on_exit: terminate
 ```
+
+When the build completes, you'll be prompted to stop or destroy the instance.
 
 ## Web Development (Full Control)
 
@@ -118,20 +117,86 @@ Run a backend, frontend, and database in the cloud using Docker Compose. This gi
 camps:
   webapp:
     instance_type: t3.medium
-    
+
     # Forward Frontend, API, and DB admin ports
     ports:
       - 3000  # React
       - 8000  # FastAPI
       - 5432  # Postgres
-    
+
     setup_script: |
       # Install Docker & Compose
       curl -fsSL https://get.docker.com | sh
       sudo usermod -aG docker ubuntu
-      
+
     command: docker compose up
 ```
+
+## Client Demos
+
+Share your running application with clients by exposing ports publicly. Unlike `ports` (which tunnels to localhost), `public_ports` opens security group rules so anyone can access the instance's public IP.
+
+```yaml
+vars:
+  project: client-demo
+  remote_dir: /home/ubuntu/${project}
+
+camps:
+  demo:
+    instance_type: t3.medium
+
+    # Public access for clients
+    public_ports: [80, 3000]
+
+    # Also tunnel to localhost for your own dev access
+    ports: [3000]
+
+    setup_script: |
+      curl -fsSL https://get.docker.com | sh
+      sudo usermod -aG docker ubuntu
+
+    command: docker compose up
+```
+
+**Workflow:**
+
+1. Run `campers run demo` to start the instance.
+2. Share the public URL with your client: `http://<public-ip>:3000`
+3. When finished, press Q and select **Keep running** to disconnect while preserving client access.
+4. Later, run `campers stop demo` or `campers destroy demo` to clean up.
+
+**HTTPS for Demos:**
+
+For production-quality demos with SSL, you can use [Caddy](https://caddyserver.com/) as a reverse proxy. Caddy auto-provisions Let's Encrypt certificates.
+
+```yaml
+playbooks:
+  caddy-proxy:
+    - name: Setup Caddy
+      hosts: all
+      become: true
+      tasks:
+        - apt: {name: caddy, state: present, update_cache: true}
+        - copy:
+            dest: /etc/caddy/Caddyfile
+            content: |
+              {{ public_ip | replace('.', '-') }}.sslip.io {
+                reverse_proxy localhost:3000
+              }
+          notify: Reload Caddy
+      handlers:
+        - name: Reload Caddy
+          systemd: {name: caddy, state: reloaded}
+
+camps:
+  demo-https:
+    instance_type: t3.medium
+    public_ports: [80, 443]
+    ansible_playbooks: [caddy-proxy]
+    command: npm start
+```
+
+This gives you a shareable HTTPS URL like `https://54-123-45-67.sslip.io` with a valid certificate.
 
 ## Advanced: AWS Profile Support
 

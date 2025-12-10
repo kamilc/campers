@@ -180,9 +180,7 @@ def test_phase_file_sync_terminates_when_watching_detected(run_executor):
     mutagen_mgr = Mock()
     mutagen_mgr.cleanup_orphaned_session = Mock()
     mutagen_mgr.create_sync_session = Mock()
-    mutagen_mgr.get_sync_status = Mock(
-        return_value="Syncing, watching for changes"
-    )
+    mutagen_mgr.get_sync_status = Mock(return_value="Syncing, watching for changes")
 
     merged_config = {"sync_paths": [{"local": "/local", "remote": "/remote"}]}
     instance_details = {
@@ -203,14 +201,10 @@ def test_phase_file_sync_terminates_when_watching_detected(run_executor):
             update_queue=update_queue,
         )
 
-        assert mock_logging.info.call_args_list[
-            -1
-        ][0][0] == "File sync completed"
+        assert mock_logging.info.call_args_list[-1][0][0] == "File sync completed"
 
 
-def test_phase_file_sync_aborts_on_cleanup_requested(
-    run_executor, cleanup_in_progress_getter
-):
+def test_phase_file_sync_aborts_on_cleanup_requested(run_executor, cleanup_in_progress_getter):
     """Test polling loop aborts when cleanup is requested.
 
     Parameters
@@ -254,13 +248,8 @@ def test_phase_file_sync_aborts_on_cleanup_requested(
             update_queue=update_queue,
         )
 
-        call_args = [
-            str(call[0][0])
-            for call in mock_logging.info.call_args_list
-        ]
-        assert any(
-            "Cleanup requested" in msg for msg in call_args
-        ), "Should log cleanup request"
+        call_args = [str(call[0][0]) for call in mock_logging.info.call_args_list]
+        assert any("Cleanup requested" in msg for msg in call_args), "Should log cleanup request"
 
 
 def test_phase_file_sync_timeout_warning(run_executor, cleanup_in_progress_getter):

@@ -180,10 +180,11 @@ def step_filter_environment_variables(context):
     ssh_manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem")
 
     env_filter = None
+    has_config_data = hasattr(context, "config_data") and context.config_data
+    has_defaults = has_config_data and "defaults" in context.config_data
 
-    if hasattr(context, "config_data") and context.config_data:
-        if "defaults" in context.config_data:
-            env_filter = context.config_data["defaults"].get("env_filter")
+    if has_defaults:
+        env_filter = context.config_data["defaults"].get("env_filter")
 
     context.filtered_vars = ssh_manager.filter_environment_variables(env_filter)
 

@@ -13,3 +13,4 @@ class WidgetID:
     COMMAND = "command-widget"
     MUTAGEN = "mutagen-widget"
     PORTFORWARD = "portforward-widget"
+    PUBLIC_PORTS = "public-ports-widget"

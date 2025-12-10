@@ -260,8 +260,8 @@ class EventBus:
 
             try:
                 event = self._queues[event_type].get(timeout=remaining)
-            except queue.Empty:
-                raise self._timeout_error(event_type, instance_id)
+            except queue.Empty as err:
+                raise self._timeout_error(event_type, instance_id) from err
 
             if instance_id is None or event.instance_id == instance_id:
                 with self._lock:

@@ -14,15 +14,17 @@ from campers.providers.exceptions import (
     ProviderCredentialsError,
 )
 
-CREDENTIAL_ERROR_CODES = frozenset({
-    "ExpiredTokenException",
-    "ExpiredToken",
-    "RequestExpired",
-    "InvalidClientTokenId",
-    "InvalidToken",
-    "TokenRefreshRequired",
-    "UnrecognizedClientException",
-})
+CREDENTIAL_ERROR_CODES = frozenset(
+    {
+        "ExpiredTokenException",
+        "ExpiredToken",
+        "RequestExpired",
+        "InvalidClientTokenId",
+        "InvalidToken",
+        "TokenRefreshRequired",
+        "UnrecognizedClientException",
+    }
+)
 
 
 @contextmanager

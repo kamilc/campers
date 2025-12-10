@@ -341,7 +341,7 @@ class MonitorController:
                         },
                     )
                     logger.debug(
-                        "Action provider attempt %d/%d failed (%s): %s. Retrying in %.2f seconds...",
+                        "Action provider attempt %d/%d failed (%s): %s. Retrying in %.2fs",
                         attempt + 1,
                         max_retries,
                         error_classification,

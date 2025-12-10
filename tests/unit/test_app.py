@@ -17,9 +17,7 @@ def tui_app():
     from campers.tui.app import CampersTUI
 
     app = Mock(spec=CampersTUI)
-    app.update_mutagen_status = CampersTUI.update_mutagen_status.__get__(
-        app
-    )
+    app.update_mutagen_status = CampersTUI.update_mutagen_status.__get__(app)
 
     return app
 
@@ -85,13 +83,9 @@ def test_update_mutagen_status_legacy_with_files_synced(tui_app):
     mock_widget = Mock()
     tui_app.query_one = Mock(return_value=mock_widget)
 
-    tui_app.update_mutagen_status(
-        {"state": "synced", "files_synced": 42}
-    )
+    tui_app.update_mutagen_status({"state": "synced", "files_synced": 42})
 
-    mock_widget.update.assert_called_once_with(
-        "File sync: synced (42 files)"
-    )
+    mock_widget.update.assert_called_once_with("File sync: synced (42 files)")
 
 
 def test_update_mutagen_status_legacy_without_files_synced(tui_app):

@@ -137,11 +137,13 @@ class NetworkManager:
         self,
         unique_id: str,
         ssh_allowed_cidr: str | None = None,
+        public_ports: list[int] | None = None,
+        public_ports_allowed_cidr: str | None = None,
         project_name: str | None = None,
         branch: str | None = None,
         camp_name: str | None = None,
     ) -> str:
-        """Create security group with SSH access.
+        """Create security group with SSH access and optional public ports.
 
         Parameters
         ----------
@@ -149,6 +151,10 @@ class NetworkManager:
             Unique identifier to use in security group name
         ssh_allowed_cidr : str | None
             CIDR block for SSH access. If None, defaults to 0.0.0.0/0
+        public_ports : list[int] | None
+            List of ports to open for public access (optional)
+        public_ports_allowed_cidr : str | None
+            CIDR block for public ports access. If None, defaults to 0.0.0.0/0
         project_name : str | None
             Project name for naming convention. If provided along with branch and camp_name,
             uses format campers-{project_name}-{branch}-{camp_name}
@@ -162,6 +168,8 @@ class NetworkManager:
         str
             Security group ID
         """
+        from campers.constants import PUBLIC_PORTS_DEFAULT_CIDR
+
         if project_name and branch and camp_name:
             sg_name = f"campers-{project_name}-{branch}-{camp_name}"
         else:
@@ -208,6 +216,37 @@ class NetworkManager:
                     }
                 ],
             )
+
+        if public_ports:
+            public_cidr = public_ports_allowed_cidr or PUBLIC_PORTS_DEFAULT_CIDR
+
+            if public_cidr == PUBLIC_PORTS_DEFAULT_CIDR:
+                logger.warning(
+                    "Public ports %s are open to the internet (%s)",
+                    public_ports,
+                    PUBLIC_PORTS_DEFAULT_CIDR,
+                )
+            else:
+                logger.debug(
+                    "Public ports %s are open to %s",
+                    public_ports,
+                    public_cidr,
+                )
+
+            for port in public_ports:
+                with handle_aws_errors():
+                    self.ec2_client.authorize_security_group_ingress(
+                        GroupId=sg_id,
+                        IpPermissions=[
+                            {
+                                "IpProtocol": "tcp",
+                                "FromPort": port,
+                                "ToPort": port,
+                                "IpRanges": [{"CidrIp": public_cidr}],
+                            }
+                        ],
+                    )
+                logger.debug("Opened public port %d to %s", port, public_cidr)
 
         return sg_id
 

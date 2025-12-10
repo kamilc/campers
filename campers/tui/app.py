@@ -25,6 +25,7 @@ from campers.constants import (
 )
 from campers.logging import StreamFormatter, TuiLogHandler, TuiLogMessage
 from campers.providers.exceptions import ProviderCredentialsError
+from campers.tui.exit_modal import ExitModal
 from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.tui.styling import TUI_CSS
 from campers.tui.terminal import detect_terminal_background
@@ -126,6 +127,7 @@ class CampersTUI(App):
             yield Static("Command: loading...", id=WidgetID.COMMAND)
             yield Static("File sync: Not syncing", id=WidgetID.MUTAGEN)
             yield Static("Port forwarding: none", id=WidgetID.PORTFORWARD)
+            yield Static("Public ports: none", id=WidgetID.PUBLIC_PORTS)
         with Container(id="log-panel"):
             yield Log()
 
@@ -348,6 +350,21 @@ class CampersTUI(App):
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update command widget: %s", e)
 
+        public_ports = config.get("public_ports", [])
+        if public_ports:
+            try:
+                instance_details = self.campers._resources.get("instance_details", {})
+                public_ip = instance_details.get("public_ip")
+                if public_ip:
+                    urls = []
+                    for port in public_ports:
+                        protocol = "https" if port == 443 else "http"
+                        urls.append(f"{protocol}://{public_ip}:{port}")
+                    public_ports_text = "Public ports: " + ", ".join(urls)
+                    self.query_one(f"#{WidgetID.PUBLIC_PORTS}").update(public_ports_text)
+            except (ValueError, AttributeError, RuntimeError) as e:
+                logging.error("Failed to update public ports widget: %s", e)
+
     def update_from_instance_details(self, details: dict[str, Any]) -> None:
         """Update widgets from instance details data.
 
@@ -545,23 +562,67 @@ class CampersTUI(App):
                 self.action_quit()
 
     def action_quit(self) -> None:
-        """Handle quit action (q key or first Ctrl+C)."""
-        self.campers._abort_requested = True
+        """Handle quit action (q key or first Ctrl+C) - show exit modal."""
+        public_ip = None
+        public_ports = []
+        hourly_cost = None
 
-        try:
-            self.query_one(f"#{WidgetID.STATUS}").update("Status: shutting down")
-        except (ValueError, AttributeError, RuntimeError) as e:
-            logger.debug("Failed to update status widget during quit: %s", e)
+        if hasattr(self.campers, "_resources"):
+            instance_details = self.campers._resources.get("instance_details", {})
+            public_ip = instance_details.get("public_ip")
+            if hasattr(self.campers, "_merged_config_prop"):
+                public_ports = self.campers._merged_config_prop.get("public_ports", [])
 
-        try:
-            log_widget = self.query_one(Log)
-            log_widget.write_line("Graceful shutdown initiated (press Ctrl+C again to force exit)")
-        except (ValueError, AttributeError, RuntimeError) as e:
-            logger.debug("Failed to write shutdown message to log widget: %s", e)
+            try:
+                from campers.constants import DEFAULT_PROVIDER
+                from campers.registry import get_provider
 
-        self.refresh()
+                instance_type = instance_details.get("instance_type")
+                region = self.campers._merged_config_prop.get("region")
 
-        self.run_worker(self._run_cleanup, thread=True, exit_on_error=False)
+                if instance_type and region:
+                    provider = get_provider(DEFAULT_PROVIDER)
+                    pricing_service_class = provider["pricing_service"]
+                    pricing_service = pricing_service_class()
+
+                    try:
+                        if pricing_service.pricing_available:
+                            hourly_cost = pricing_service.get_instance_price(instance_type, region)
+                    finally:
+                        pricing_service.close()
+            except Exception as e:
+                logger.debug("Failed to calculate hourly cost: %s", e)
+
+        def handle_exit_choice(action: str | None) -> None:
+            if action == "cancel":
+                return
+
+            self.campers._abort_requested = True
+            self._selected_exit_action = action
+
+            try:
+                self.query_one(f"#{WidgetID.STATUS}").update("Status: shutting down")
+            except (ValueError, AttributeError, RuntimeError) as e:
+                logger.debug("Failed to update status widget during quit: %s", e)
+
+            try:
+                log_widget = self.query_one(Log)
+                msg = "Graceful shutdown initiated (press Ctrl+C again to force exit)"
+                log_widget.write_line(msg)
+            except (ValueError, AttributeError, RuntimeError) as e:
+                logger.debug("Failed to write shutdown message to log widget: %s", e)
+
+            self.refresh()
+            self.run_worker(self._run_cleanup, thread=True, exit_on_error=False)
+
+        self.push_screen(
+            ExitModal(
+                public_ip=public_ip,
+                public_ports=public_ports,
+                hourly_cost=hourly_cost,
+            ),
+            handle_exit_choice,
+        )
 
     def _run_cleanup(self) -> None:
         """Run cleanup in worker thread to keep TUI responsive."""
@@ -569,6 +630,8 @@ class CampersTUI(App):
             self.campers._resources["ssh_manager"].abort_active_command()
 
         if not self.campers._cleanup_in_progress:
-            self.campers._cleanup_resources()
+            action = getattr(self, "_selected_exit_action", "stop")
+            self.campers._cleanup_resources(action=action)
 
-        self.call_from_thread(self.exit, 130)
+        exit_code = 0 if getattr(self, "_selected_exit_action", "stop") == "detach" else 130
+        self.call_from_thread(self.exit, exit_code)

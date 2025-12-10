@@ -143,14 +143,13 @@ def step_instance_running_with_all_resources(context: Context) -> None:
         ]
         context.config_data["camps"]["test-box"] = {}
 
-        temp_file = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False, dir=context.tmp_dir
-        )
-        yaml.dump(context.config_data, temp_file)
-        temp_file.close()
-        context.temp_config_file = temp_file.name
+        ) as temp_file:
+            yaml.dump(context.config_data, temp_file)
+            context.temp_config_file = temp_file.name
 
-        context.harness.services.configuration_env.set("CAMPERS_CONFIG", temp_file.name)
+        context.harness.services.configuration_env.set("CAMPERS_CONFIG", context.temp_config_file)
         context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "0")
         context.harness.services.configuration_env.set("CAMPERS_FORCE_SIGNAL_EXIT", "1")
         os.environ["CAMPERS_FORCE_SIGNAL_EXIT"] = "1"
@@ -234,14 +233,13 @@ def step_instance_launch_in_progress(context: Context) -> None:
         context.config_data["defaults"]["command"] = "sleep 300"
         context.config_data["camps"]["test-box"] = {}
 
-        temp_file = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False, dir=context.tmp_dir
-        )
-        yaml.dump(context.config_data, temp_file)
-        temp_file.close()
-        context.temp_config_file = temp_file.name
+        ) as temp_file:
+            yaml.dump(context.config_data, temp_file)
+            context.temp_config_file = temp_file.name
 
-        context.harness.services.configuration_env.set("CAMPERS_CONFIG", temp_file.name)
+        context.harness.services.configuration_env.set("CAMPERS_CONFIG", context.temp_config_file)
         context.harness.services.configuration_env.set("CAMPERS_TEST_MODE", "0")
         context.harness.services.configuration_env.set("CAMPERS_FORCE_SIGNAL_EXIT", "1")
         os.environ["CAMPERS_FORCE_SIGNAL_EXIT"] = "1"
@@ -368,7 +366,7 @@ def step_sigint_received(context: Context) -> None:
             context.process_output = stdout + stderr
             context.stdout = stdout
             context.stderr = stderr
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as err:
             send_signal_to_process(context.app_process, signal.SIGKILL)
             stdout, stderr = context.app_process.communicate()
             diagnostics_path = collect_diagnostics(
@@ -377,11 +375,12 @@ def step_sigint_received(context: Context) -> None:
                 stderr,
                 reason="sigint-timeout",
             )
+            last_output = stderr[-1000:] if stderr else "No stderr"
             raise AssertionError(
                 f"Graceful shutdown did not complete within {GRACEFUL_CLEANUP_TIMEOUT_SECONDS}s. "
-                f"Process appears hung. Last output:\n{stderr[-1000:] if stderr else 'No stderr'}\n"
+                f"Process appears hung. Last output:\n{last_output}\n"
                 f"Diagnostics written to: {diagnostics_path}"
-            )
+            ) from err
     else:
         capture_logs_during_cleanup(
             context,
@@ -416,7 +415,7 @@ def step_sigterm_received(context: Context) -> None:
             context.process_output = stdout + stderr
             context.stdout = stdout
             context.stderr = stderr
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as err:
             send_signal_to_process(context.app_process, signal.SIGKILL)
             stdout, stderr = context.app_process.communicate()
             diagnostics_path = collect_diagnostics(
@@ -425,11 +424,12 @@ def step_sigterm_received(context: Context) -> None:
                 stderr,
                 reason="sigterm-timeout",
             )
+            last_output = stderr[-1000:] if stderr else "No stderr"
             raise AssertionError(
                 f"Graceful shutdown did not complete within {GRACEFUL_CLEANUP_TIMEOUT_SECONDS}s. "
-                f"Process appears hung. Last output:\n{stderr[-1000:] if stderr else 'No stderr'}\n"
+                f"Process appears hung. Last output:\n{last_output}\n"
                 f"Diagnostics written to: {diagnostics_path}"
-            )
+            ) from err
     else:
         capture_logs_during_cleanup(
             context,
@@ -617,8 +617,8 @@ def step_mutagen_terminated_second(context: Context) -> None:
 
                     if session_name in result.stdout:
                         raise AssertionError(f"Session {session_name} still exists after cleanup")
-                except subprocess.TimeoutExpired:
-                    raise AssertionError("Mutagen sync list timed out")
+                except subprocess.TimeoutExpired as err:
+                    raise AssertionError("Mutagen sync list timed out") from err
             elif not mutagen_not_established:
                 pass
     else:
@@ -808,8 +808,9 @@ def step_port_forwarding_cleanup_skipped(context: Context) -> None:
             )
 
             if port_cleanup:
+                last_output = output[-1000:]
                 raise AssertionError(
-                    f"Port forwarding cleanup should have been skipped but was found: {output[-1000:]}"
+                    f"Port forwarding cleanup should have been skipped: {last_output}"
                 )
     else:
         assert "portforward" not in context.cleanup_order

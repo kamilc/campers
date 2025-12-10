@@ -30,9 +30,11 @@ With Campers, the workflow looks like this:
     *   You run your application on the remote instance.
     *   You access the application via `localhost` in your browser. Campers tunnels the traffic through SSH automatically.
 
-4.  **Stop or Destroy**:
-    *   **Stop**: If you simply close Campers (Ctrl+C), the instance is stopped but preserved. Storage is kept, so you can resume work later by running `campers run` again. You only pay for storage while stopped.
-    *   **Destroy**: To completely remove the instance and stop all costs, run `campers destroy`.
+4.  **Exit Options**:
+    When you press Q or Ctrl+C, you'll be prompted to choose:
+    *   **Stop** (default): Instance is stopped but preserved. Resume later with `campers run`.
+    *   **Keep running**: Disconnect locally but keep the instance running. Ideal for demos where clients need continued access.
+    *   **Destroy**: Terminate and delete everything. You can also run `campers destroy` anytime.
 
 <p align="center">
   <img src="docs/assets/infographic.jpg" alt="Campers Workflow Infographic" width="100%">
@@ -51,10 +53,14 @@ Instead of cluttering your local machine with databases and system dependencies,
 **Heavy Compilation**
 If you are compiling large C++ or Rust projects, you can provision a high-core instance (like a `c6a.24xlarge`) for the duration of the build. You get the build speed of a workstation without maintaining the hardware.
 
+**Client Demos**
+Share running applications with clients by exposing ports publicly. Use `public_ports` to open security group rules, then select "Keep running" on exit so clients can continue accessing your demo while you disconnect.
+
 ## Features
 
 - **Mutagen Sync**: Uses [Mutagen](https://mutagen.io/) for high-performance file synchronization. It is not `rsync`; it uses a real-time, bi-directional sync agent that is orders of magnitude faster for large projects (like `node_modules`).
 - **Automatic Port Forwarding**: Tunnels remote ports to your local machine based on your configuration.
+- **Public Port Exposure**: Open ports directly for external access - perfect for client demos.
 - **Ansible Integration**: Supports running Ansible playbooks to configure the instance on startup.
 - **Cost Control:** Encourages an ephemeral workflow where instances are destroyed when not in use.
 - **TUI Dashboard**: A terminal interface to monitor logs, sync status, and instance health.
@@ -124,6 +130,13 @@ camps:
       cd ${remote_path}
       tensorboard --logdir logs --port 6006 &
       python train_model.py
+
+  # 4. Client demo (publicly accessible)
+  demo:
+    instance_type: t3.medium
+    # Open ports for external access (clients can hit the public IP)
+    public_ports: [80, 3000]
+    command: npm start
 ```
 
 **How you use them:**
@@ -137,6 +150,9 @@ campers run experiment
 
 # Launch the heavy training job
 campers run training
+
+# Start a client demo (share the public IP with clients)
+campers run demo
 
 # Check status of all your camps (showing estimated monthly costs)
 campers list

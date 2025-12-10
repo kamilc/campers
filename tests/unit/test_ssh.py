@@ -594,10 +594,11 @@ def test_build_command_with_env_multiple_vars(ssh_manager: SSHManager) -> None:
 
     result = ssh_manager.build_command_with_env(command, env_vars)
 
-    assert (
-        result
-        == "export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE && export HF_TOKEN=hf_AbCdEfGhIjKlMnOpQrStUvWxYz && python train.py"
+    expected = (
+        "export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE && "
+        "export HF_TOKEN=hf_AbCdEfGhIjKlMnOpQrStUvWxYz && python train.py"
     )
+    assert result == expected
 
 
 def test_build_command_with_env_special_characters(ssh_manager: SSHManager) -> None:

@@ -540,12 +540,10 @@ def test_ec2_instance_naming_with_camp_name(aws_credentials):
             "ami": {"image_id": ami_id},
         }
 
-        with patch(
-            "campers.utils.get_git_project_name", return_value="simple1"
-        ), patch(
-            "campers.utils.get_git_branch", return_value="main"
-        ), patch(
-            "time.time", return_value=1234567890
+        with (
+            patch("campers.utils.get_git_project_name", return_value="simple1"),
+            patch("campers.utils.get_git_branch", return_value="main"),
+            patch("time.time", return_value=1234567890),
         ):
             result = ec2_manager.launch_instance(
                 config, instance_name="campers-simple1-main-jupyter"

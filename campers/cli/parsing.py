@@ -47,8 +47,7 @@ def parse_single_port_spec(port_spec: str | int) -> tuple[int, int]:
             local_port = int(parts[1].strip())
         except ValueError:
             raise ValueError(
-                f"Invalid port mapping: '{port_str}'. "
-                f"Both remote and local ports must be numeric"
+                f"Invalid port mapping: '{port_str}'. Both remote and local ports must be numeric"
             ) from None
 
         return (remote_port, local_port)
@@ -84,7 +83,7 @@ def validate_port_range(port: int, context: str = "") -> None:
 
 
 def parse_port_parameter(
-    port: str | int | list[int | str] | tuple[int | str, ...]
+    port: str | int | list[int | str] | tuple[int | str, ...],
 ) -> list[tuple[int, int]]:
     """Parse port parameter into list of (remote, local) tuples with validation.
 

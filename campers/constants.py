@@ -4,8 +4,6 @@ This module contains application-wide constants that are used across multiple
 components. These values are provider-agnostic and suitable for any cloud provider.
 """
 
-from enum import Enum
-
 SYNC_TIMEOUT = 300
 """Mutagen initial sync timeout in seconds.
 
@@ -331,9 +329,9 @@ SSH_CONFIG_SERVER_ALIVE_COUNT = 3
 Number of unanswered keepalive messages allowed before SSH closes the connection.
 """
 
+PUBLIC_PORTS_DEFAULT_CIDR = "0.0.0.0/0"
+"""Default CIDR block for public port access.
 
-class OnExitAction(str, Enum):
-    """Actions to take on campers exit."""
-
-    STOP = "stop"
-    TERMINATE = "terminate"
+When public_ports are configured without an explicit CIDR restriction,
+this default allows access from anywhere on the internet.
+"""

@@ -325,9 +325,8 @@ def step_status_messages_printed(context: Context) -> None:
     if not (found_waiting_msg or found_established_msg):
         if hasattr(context, "exit_code") and context.exit_code == 0:
             return
-        assert False, (
-            f"Expected status messages in log records, got: {[record.getMessage() for record in getattr(context, 'log_records', [])]}"
-        )
+        log_msgs = [record.getMessage() for record in getattr(context, "log_records", [])]
+        raise AssertionError(f"Expected status messages in log records, got: {log_msgs}")
 
 
 @then("command_exit_code is {exit_code:d} in result")
@@ -544,9 +543,11 @@ def step_verify_retry_delays(context: Context, delays: str) -> None:
             if i == 0:
                 tolerance = RETRY_DELAY_TOLERANCE_SECONDS + 2
 
-            assert abs(actual_delays[i] - expected_delay) <= tolerance, (
-                f"Delay {i + 1}: expected {expected_delay}s ±{tolerance}s, got {actual_delays[i]:.1f}s"
+            actual_delay = actual_delays[i]
+            msg = (
+                f"Delay {i + 1}: expected {expected_delay}s ±{tolerance}s, got {actual_delay:.1f}s"
             )
+            assert abs(actual_delays[i] - expected_delay) <= tolerance, msg
 
 
 @then("connection succeeds when SSH becomes ready")

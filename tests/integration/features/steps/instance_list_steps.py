@@ -1,9 +1,8 @@
 """BDD step definitions for instance list command."""
 
 import contextlib
-import sys
+import re
 from datetime import UTC, datetime
-from io import StringIO
 from typing import Any
 
 import boto3
@@ -11,8 +10,6 @@ from behave import given, then, when
 from behave.runner import Context
 
 from tests.integration.features.environment import LogCapture
-
-import re
 
 TEST_AMI_ID = "ami-12345678"
 """Test AMI ID used for creating mock EC2 instances in BDD tests."""
@@ -183,8 +180,8 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
     region : str | None
         Optional region filter
     """
-    from unittest.mock import patch
     import logging
+    from unittest.mock import patch
 
     if context.region_patches is not None and context.region_patches:
         for patch_obj in context.region_patches:
@@ -339,7 +336,7 @@ def step_output_displays_header(context: Context, header: str) -> None:
         if header in line:
             return
 
-    assert False, f"Expected header '{header}' not found in output: {context.stdout}"
+    raise AssertionError(f"Expected header '{header}' not found in output: {context.stdout}")
 
 
 @then("instances are sorted by launch time descending")

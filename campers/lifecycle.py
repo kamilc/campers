@@ -365,7 +365,7 @@ class LifecycleManager:
                     savings = running_cost - stopped_cost
                     savings_pct = (savings / running_cost * 100) if running_cost > 0 else 0
 
-                    logging.info("\U0001F4B0 Cost Impact:", extra={"stream": "stdout"})
+                    logging.info("\U0001f4b0 Cost Impact:", extra={"stream": "stdout"})
                     logging.info(
                         f"  Previous: {format_cost(running_cost)}", extra={"stream": "stdout"}
                     )
@@ -532,7 +532,7 @@ class LifecycleManager:
                 if stopped_cost is not None and running_cost is not None:
                     increase = running_cost - stopped_cost
 
-                    logging.info("\U0001F4B0 Cost Impact:", extra={"stream": "stdout"})
+                    logging.info("\U0001f4b0 Cost Impact:", extra={"stream": "stdout"})
                     logging.info(
                         f"  Previous: {format_cost(stopped_cost)}", extra={"stream": "stdout"}
                     )
@@ -615,13 +615,46 @@ class LifecycleManager:
                 regional_manager = self.compute_provider_factory(region=target["region"])
 
                 unique_id = target.get("unique_id")
+                public_ports = []
 
                 if not unique_id:
                     try:
                         tags = regional_manager.get_instance_tags(instance_id)
                         unique_id = tags.get("UniqueId")
+                        machine_config = tags.get("MachineConfig")
+
+                        if machine_config and machine_config != "ad-hoc":
+                            try:
+                                full_config = self.config_loader.load_config()
+                                camp_config = self.config_loader.get_camp_config(
+                                    full_config, machine_config
+                                )
+                                public_ports = camp_config.get("public_ports", [])
+                            except (ValueError, KeyError, AttributeError) as e:
+                                logging.debug("Failed to load camp config for public ports: %s", e)
                     except (AttributeError, KeyError) as e:
-                        logging.debug("Failed to get UniqueId from instance tags: %s", e)
+                        logging.debug("Failed to get tags from instance: %s", e)
+
+                try:
+                    instance_details = regional_manager.describe_instance(instance_id)
+                    if instance_details:
+                        target["public_ip"] = instance_details.get("public_ip")
+                except (AttributeError, RuntimeError) as e:
+                    logging.debug("Failed to get public IP from instance details: %s", e)
+
+                camp_config_name = target.get("camp_config")
+                if not public_ports and camp_config_name and camp_config_name != "ad-hoc":
+                    try:
+                        full_config = self.config_loader.load_config()
+                        camp_config = self.config_loader.get_camp_config(
+                            full_config, camp_config_name
+                        )
+                        public_ports = camp_config.get("public_ports", [])
+                    except (ValueError, KeyError, AttributeError) as e:
+                        logging.debug("Failed to load camp config for public ports: %s", e)
+
+                if public_ports:
+                    target["public_ports"] = public_ports
 
             key_file = None
             if unique_id:
@@ -673,6 +706,15 @@ class LifecycleManager:
                 f"  Key File: {key_file if key_file else 'N/A'}", extra={"stream": "stdout"}
             )
             logging.info(f"  Uptime: {uptime_str}", extra={"stream": "stdout"})
+
+            public_ports = target.get("public_ports", [])
+            public_ip = target.get("public_ip")
+            if public_ports and public_ip:
+                logging.info("", extra={"stream": "stdout"})
+                logging.info("  Public Access:", extra={"stream": "stdout"})
+                for port in public_ports:
+                    protocol = "https" if port == 443 else "http"
+                    logging.info(f"    {protocol}://{public_ip}:{port}", extra={"stream": "stdout"})
 
         except ProviderCredentialsError:
             logging.error(

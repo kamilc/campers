@@ -240,9 +240,8 @@ def step_status_messages_all_ports(context: Context) -> None:
         assert f"Creating SSH tunnel for port {port}..." in output, (
             f"Expected message 'Creating SSH tunnel for port {port}...' not found in output"
         )
-        assert f"SSH tunnel established: localhost:{port} -> remote:{port}" in output, (
-            f"Expected message 'SSH tunnel established: localhost:{port} -> remote:{port}' not found in output"
-        )
+        expected_msg = f"SSH tunnel established: localhost:{port} -> remote:{port}"
+        assert expected_msg in output, f"Expected '{expected_msg}' not found in output"
 
 
 @then("no SSH tunnels are created")
@@ -421,8 +420,8 @@ def start_http_server_in_container(context: Context, port: int) -> None:
 
             if check_apk.exit_code != 0:
                 error_msg = (
-                    f"Cannot install Python3: container {container_name} does not use Alpine Linux (apk not found). "
-                    f"Docker image must either include Python3 or use Alpine Linux with apk package manager."
+                    f"Cannot install Python3: {container_name} does not use Alpine Linux. "
+                    f"Docker image must include Python3 or use Alpine (apk)."
                 )
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
@@ -451,11 +450,12 @@ def start_http_server_in_container(context: Context, port: int) -> None:
             script_content = f.read()
 
         tar_buffer = io.BytesIO()
-        tar = tarfile.open(fileobj=tar_buffer, mode="w")
-        tarinfo = tarfile.TarInfo(name="http_server.py")
-        tarinfo.size = len(script_content)
-        tar.addfile(tarinfo, io.BytesIO(script_content))
-        tar.close()
+
+        with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+            tarinfo = tarfile.TarInfo(name="http_server.py")
+            tarinfo.size = len(script_content)
+            tar.addfile(tarinfo, io.BytesIO(script_content))
+
         tar_buffer.seek(0)
 
         try:
@@ -476,7 +476,10 @@ def start_http_server_in_container(context: Context, port: int) -> None:
         time.sleep(2)
 
         for attempt in range(10):
-            check_cmd = f"ss -tuln 2>/dev/null | grep -E ':{port}\\s' || netstat -tuln 2>/dev/null | grep ':{port}'"
+            check_cmd = (
+                f"ss -tuln 2>/dev/null | grep -E ':{port}\\s' || "
+                f"netstat -tuln 2>/dev/null | grep ':{port}'"
+            )
             check_result = container.exec_run(["sh", "-c", check_cmd])
 
             if check_result.exit_code == 0:

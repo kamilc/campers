@@ -35,7 +35,7 @@ class CleanupManager:
     update_queue : queue.Queue | None
         Queue for sending cleanup events to TUI (optional)
     config_dict : dict[str, Any] | None
-        Configuration dictionary containing on_exit setting (optional)
+        Configuration dictionary (optional)
     pricing_provider : PricingProvider | None
         Pricing service for getting storage rates (optional)
 
@@ -113,12 +113,14 @@ class CleanupManager:
         return 0.0
 
     def cleanup_resources(
-        self, signum: int | None = None, _frame: types.FrameType | None = None
+        self, action: str = "stop", signum: int | None = None, _frame: types.FrameType | None = None
     ) -> None:
         """Perform graceful cleanup of all resources.
 
         Parameters
         ----------
+        action : str
+            Cleanup action to perform: "stop", "terminate", or "detach"
         signum : int | None
             Signal number if triggered by signal handler (e.g., signal.SIGINT)
         _frame : types.FrameType | None
@@ -127,9 +129,10 @@ class CleanupManager:
 
         Notes
         -----
-        Routes cleanup based on on_exit configuration:
-        - on_exit="stop": Preserves instance and resources for restart
-        - on_exit="terminate": Removes all resources (full cleanup)
+        Cleanup actions:
+        - "stop": Preserves instance and resources for restart
+        - "terminate": Removes all resources (full cleanup)
+        - "detach": Close local connections but keep instance running
 
         Exit codes when triggered by signal:
         - 130: SIGINT (Ctrl+C)
@@ -147,12 +150,12 @@ class CleanupManager:
             self.cleanup_event.set()
 
         try:
-            on_exit_action = self.config_dict.get("on_exit", "stop")
-
-            if on_exit_action == "stop":
+            if action == "stop":
                 self.stop_instance_cleanup(signum=signum)
-            else:
+            elif action == "terminate":
                 self.terminate_instance_cleanup(signum=signum)
+            elif action == "detach":
+                self.detach_cleanup(signum=signum)
 
         finally:
             with self.cleanup_lock:
@@ -500,3 +503,73 @@ class CleanupManager:
 
         except OSError as e:
             logging.error("Unexpected error during terminate cleanup: %s", e)
+
+    def detach_cleanup(self, signum: int | None = None) -> None:
+        """Detach from instance while keeping it running.
+
+        Close local connections and resources but preserve the cloud instance
+        for external access. Useful when maintaining instances for demo purposes.
+
+        Parameters
+        ----------
+        signum : int | None
+            Signal number if triggered by signal handler
+
+        Notes
+        -----
+        Cleanup order for detach:
+        1. Port forwarding (releases network resources)
+        2. Mutagen session (stops file synchronization)
+        3. SSH connection (closes remote connection)
+        4. Cloud instance is NOT stopped or terminated
+
+        Handles partial initialization gracefully by checking resource existence
+        before attempting cleanup. Individual component failures do not halt cleanup.
+        """
+        try:
+            errors = []
+
+            with self.cleanup_lock, self.resources_lock:
+                self.cleanup_in_progress = True
+                resources_to_clean = dict(self.resources)
+                self.resources.clear()
+
+            if not resources_to_clean:
+                logging.info("No resources to clean up")
+                return
+
+            logging.info("Detaching from instance (keeping it running)...")
+
+            if "ssh_manager" in resources_to_clean:
+                resources_to_clean["ssh_manager"].abort_active_command()
+
+            self.cleanup_port_forwarding(resources_to_clean, errors)
+            self.cleanup_mutagen_session(resources_to_clean, errors)
+            self.cleanup_ssh_connections(resources_to_clean, errors)
+
+            instance_details = resources_to_clean.get("instance_details", {})
+            instance_id = get_instance_id(instance_details)
+            public_ip = instance_details.get("public_ip")
+
+            logging.info("\nDetached from instance (still running)")
+            logging.info("  Instance ID: %s", instance_id)
+            logging.info("  Public IP: %s", public_ip)
+
+            public_ports = self.config_dict.get("public_ports", [])
+            if public_ports and public_ip:
+                logging.info("  Public access:")
+                for port in public_ports:
+                    protocol = "https" if port == 443 else "http"
+                    logging.info("    %s://%s:%d", protocol, public_ip, port)
+
+            logging.info("  To reconnect: campers run <camp>")
+            logging.info("  To stop: campers stop %s", instance_id)
+            logging.info("  To destroy: campers destroy %s", instance_id)
+
+            if errors:
+                logging.info("Detach completed with %s errors", len(errors))
+            else:
+                logging.info("Detach completed successfully")
+
+        except OSError as e:
+            logging.error("Unexpected error during detach: %s", e)

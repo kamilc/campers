@@ -801,7 +801,7 @@ def step_error_message_contains(context: Context, text: str) -> None:
             attr for attr in dir(context) if not attr.startswith("_") and "error" in attr.lower()
         ]
         logger.warning(
-            f"No error found in expected locations. Available error-related attrs: {available_attrs}"
+            f"No error found in expected locations. Error-related attrs: {available_attrs}"
         )
         error_msg = ""
 

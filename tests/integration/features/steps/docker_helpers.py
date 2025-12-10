@@ -40,8 +40,8 @@ def get_ssh_container(context: Context) -> docker.models.containers.Container:
     docker_client = docker.from_env()
     try:
         return docker_client.containers.get(container_name)
-    except docker.errors.NotFound:
-        raise RuntimeError(f"SSH container {container_name} not found")
+    except docker.errors.NotFound as err:
+        raise RuntimeError(f"SSH container {container_name} not found") from err
 
 
 def exec_in_ssh_container(context: Context, command: str | list[str]) -> tuple[int, bytes]:

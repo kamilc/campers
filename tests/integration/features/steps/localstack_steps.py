@@ -78,9 +78,7 @@ def wait_for_ssh_container_ready(instance_id: str, timeout: int = 90) -> None:
 
     while time.time() - start < timeout:
         if port_env_var in os.environ and key_file_env_var in os.environ:
-            logger.info(
-                f"SSH container ready for {instance_id} (port={os.environ[port_env_var]}, key={os.environ[key_file_env_var]})"
-            )
+            logger.info(f"SSH container ready for {instance_id} (port={os.environ[port_env_var]})")
             return
         time.sleep(0.5)
 
@@ -210,9 +208,7 @@ def step_localstack_is_healthy(context: Context) -> None:
                         non_terminated.append(instance["InstanceId"])
 
         if instance_ids:
-            logger.info(
-                f"Cleaning {len(instance_ids)} old instances from LocalStack (all states): {instance_ids}"
-            )
+            logger.info(f"Cleaning {len(instance_ids)} old instances from LocalStack (all states)")
 
             if non_terminated:
                 ec2_client.terminate_instances(InstanceIds=non_terminated)
@@ -367,8 +363,9 @@ def step_instance_is_in_state(context: Context, expected_state: str) -> None:
     actual_state = instance["State"]["Name"]
 
     if actual_state != expected_state:
+        instance_id = context.localstack_instance_id
         raise AssertionError(
-            f"Instance {context.localstack_instance_id} is in state '{actual_state}', expected '{expected_state}'"
+            f"Instance {instance_id} is in state '{actual_state}', expected '{expected_state}'"
         )
 
     logger.info(f"Instance {context.localstack_instance_id} is in state '{actual_state}'")

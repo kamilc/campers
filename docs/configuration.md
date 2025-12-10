@@ -231,25 +231,47 @@ sync_paths:
 
 ### Port Forwarding (`ports`)
 
-Automatically tunnels remote ports to `localhost`.
+Automatically tunnels remote ports to `localhost` via SSH. This is ideal for development - services appear on your local machine.
 
 ```yaml
 ports:
-  - 8888   # Jupyter
-  - 6006   # TensorBoard
-  - 5432   # PostgreSQL
+  - 8888   # Jupyter → localhost:8888
+  - 6006   # TensorBoard → localhost:6006
+  - 5432   # PostgreSQL → localhost:5432
 ```
 
-### Lifecycle (`on_exit`)
+### Public Ports (`public_ports`)
 
-Controls what happens when you exit the `campers run` session.
-
-- `stop` (Default): Instance is stopped. Disk is preserved. You pay for storage.
-- `terminate`: Instance is destroyed. Disk is deleted. You pay nothing.
+Opens ports directly on the instance's public IP for external access. This is ideal for **client demos** where others need to access your running application.
 
 ```yaml
 camps:
-  # Build jobs should clean up after themselves
-  builder:
-    on_exit: terminate
+  demo:
+    instance_type: t3.medium
+    public_ports: [80, 443, 3000]
+    command: npm start
 ```
+
+With this configuration, clients can access your app at `http://<public-ip>:3000`.
+
+**Security Note:** By default, public ports are open to the internet (`0.0.0.0/0`). You can restrict access to specific IP ranges:
+
+```yaml
+defaults:
+  public_ports_allowed_cidr: "203.0.113.0/24"  # Only your office IP
+```
+
+| Setting | Purpose |
+|---------|---------|
+| `ports` | SSH tunneling to localhost (developer access) |
+| `public_ports` | Security group rules (external/client access) |
+
+### Session Exit
+
+When you exit a `campers run` session (Q or Ctrl+C), you'll be prompted to choose:
+
+- **Stop** (default): Instance is stopped. Disk is preserved. You pay for storage only.
+- **Keep running**: Disconnect locally but keep the instance running. Useful for demos where clients still need access.
+- **Destroy**: Terminate the instance and delete all data. You pay nothing.
+
+This interactive prompt replaces the need for pre-configured exit behavior.

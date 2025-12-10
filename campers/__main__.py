@@ -309,8 +309,19 @@ class Campers:
         return self._cleanup_manager.terminate_instance_cleanup(signum=signum)
 
     def _cleanup_resources(
-        self, signum: int | None = None, frame: types.FrameType | None = None
+        self, action: str = "stop", signum: int | None = None, frame: types.FrameType | None = None
     ) -> None:
+        """Clean up resources with specified action.
+
+        Parameters
+        ----------
+        action : str
+            Cleanup action: "stop", "terminate", or "detach"
+        signum : int | None
+            Signal number if triggered by signal handler
+        frame : types.FrameType | None
+            Stack frame (required by signal handler signature)
+        """
         merged_config = None
         if self._run_executor is not None:
             merged_config = self._run_executor.merged_config
@@ -323,10 +334,54 @@ class Campers:
             self._cleanup_manager.cleanup_in_progress = self._cleanup_in_progress
 
         try:
-            return self._cleanup_manager.cleanup_resources(signum=signum, _frame=frame)
+            return self._cleanup_manager.cleanup_resources(
+                action=action, signum=signum, _frame=frame
+            )
         finally:
             with self._cleanup_lock:
                 self._cleanup_in_progress = self._cleanup_manager.cleanup_in_progress
+
+    def _detach_resources(
+        self, signum: int | None = None, frame: types.FrameType | None = None
+    ) -> None:
+        """Detach from instance while keeping it running.
+
+        Parameters
+        ----------
+        signum : int | None
+            Signal number if triggered by signal handler
+        frame : types.FrameType | None
+            Stack frame (required by signal handler signature)
+        """
+        return self._cleanup_resources(action="detach", signum=signum, frame=frame)
+
+    def _prompt_exit_action(self) -> str:
+        """Prompt user for exit action in plain mode.
+
+        Returns
+        -------
+        str
+            One of: "stop", "detach", "destroy"
+        """
+        logging.info("\nWhat would you like to do?")
+        logging.info("  [s] Stop instance (resume later)")
+        logging.info("  [k] Keep running (for client access)")
+        logging.info("  [d] Destroy (terminate and delete)")
+        logging.info("")
+
+        while True:
+            try:
+                choice = input("Choice [s/k/d]: ").strip().lower()
+                if choice in ("s", "stop"):
+                    return "stop"
+                elif choice in ("k", "keep", "detach"):
+                    return "detach"
+                elif choice in ("d", "destroy", "terminate"):
+                    return "destroy"
+                else:
+                    logging.info("Invalid choice. Please enter s, k, or d.")
+            except (EOFError, KeyboardInterrupt):
+                return "stop"
 
     def _build_command_in_directory(self, working_dir: str, command: str) -> str:
         """Build a command that executes in the specified working directory.

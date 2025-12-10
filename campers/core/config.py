@@ -9,7 +9,7 @@ import yaml
 from omegaconf import OmegaConf
 from omegaconf.errors import InterpolationResolutionError
 
-from campers.constants import DEFAULT_DISK_SIZE, DEFAULT_PROVIDER, OnExitAction
+from campers.constants import DEFAULT_DISK_SIZE, DEFAULT_PROVIDER
 from campers.providers import get_default_region, get_provider_defaults, list_providers
 
 logger = logging.getLogger(__name__)
@@ -29,12 +29,13 @@ class ConfigLoader:
             "instance_type": provider_defaults["instance_type"],
             "disk_size": DEFAULT_DISK_SIZE,
             "ports": [],
+            "public_ports": [],
+            "public_ports_allowed_cidr": None,
             "include_vcs": False,
             "ignore": ["*.pyc", "__pycache__", "*.log", ".DS_Store"],
             "env_filter": provider_defaults["env_filter"],
             "sync_paths": [],
             "ssh_username": provider_defaults["ssh_username"],
-            "on_exit": OnExitAction.STOP.value,
             "ssh_allowed_cidr": None,
         }
 
@@ -163,9 +164,9 @@ class ConfigLoader:
         self._validate_required_fields(config)
         self._validate_optional_fields(config)
         self._validate_ports(config)
+        self._validate_public_ports(config)
         self._validate_sync_paths(config)
         self._validate_ansible_config(config)
-        self._validate_on_exit(config)
 
     def _validate_required_fields(self, config: dict[str, Any]) -> None:
         """Validate required configuration fields.
@@ -327,9 +328,7 @@ class ConfigLoader:
                     remote, local = int(parts[0]), int(parts[1])
                     for p in (remote, local):
                         if not (1 <= p <= 65535):
-                            raise ValueError(
-                                "ports entries must be between 1 and 65535"
-                            )
+                            raise ValueError("ports entries must be between 1 and 65535")
                 except ValueError as e:
                     if "invalid literal" in str(e):
                         raise ValueError(
@@ -344,8 +343,7 @@ class ConfigLoader:
                 except ValueError as e:
                     if "invalid literal" in str(e):
                         raise ValueError(
-                            f"Invalid port: {port}. "
-                            f"Must be an integer or 'remote:local' format"
+                            f"Invalid port: {port}. Must be an integer or 'remote:local' format"
                         ) from None
                     raise
             return
@@ -361,14 +359,11 @@ class ConfigLoader:
                 for port_val in port:
                     if not isinstance(port_val, int):
                         raise ValueError(
-                            f"Invalid port mapping: {port}. "
-                            f"Both ports must be integers"
+                            f"Invalid port mapping: {port}. Both ports must be integers"
                         )
 
                     if not (1 <= port_val <= 65535):
-                        raise ValueError(
-                            "ports entries must be between 1 and 65535"
-                        )
+                        raise ValueError("ports entries must be between 1 and 65535")
                 return
             else:
                 raise ValueError("port must be an integer, got tuple")
@@ -446,8 +441,8 @@ class ConfigLoader:
                     f"got {type(playbook_content).__name__}"
                 )
 
-    def _validate_on_exit(self, config: dict[str, Any]) -> None:
-        """Validate on_exit configuration.
+    def _validate_public_ports(self, config: dict[str, Any]) -> None:
+        """Validate public_ports configuration.
 
         Parameters
         ----------
@@ -457,13 +452,24 @@ class ConfigLoader:
         Raises
         ------
         ValueError
-            If on_exit configuration is invalid
+            If public_ports configuration is invalid
         """
-        if "on_exit" not in config:
+        from campers.cli.parsing import validate_port_range
+
+        if "public_ports" not in config:
             return
 
-        if not isinstance(config["on_exit"], str):
-            raise ValueError("on_exit must be a string")
+        public_ports = config["public_ports"]
+        if not isinstance(public_ports, list):
+            raise ValueError("public_ports must be a list")
 
-        if config["on_exit"] not in ("stop", "terminate"):
-            raise ValueError(f"on_exit must be 'stop' or 'terminate', got '{config['on_exit']}'")
+        for port in public_ports:
+            if not isinstance(port, int):
+                msg = f"public_ports entries must be integers, got {type(port).__name__}"
+                raise ValueError(msg)
+            validate_port_range(port)
+
+        if "public_ports_allowed_cidr" in config:
+            cidr = config["public_ports_allowed_cidr"]
+            if cidr is not None and not isinstance(cidr, str):
+                raise ValueError("public_ports_allowed_cidr must be a string or null")

@@ -516,12 +516,11 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
 
         from tests.integration.features.steps.mutagen_mocking import mutagen_mocked
 
-        boto3_factory = None
         compute_provider_factory = None
         ssh_manager_factory = None
 
         if is_cli_test and not is_localstack:
-            boto3_factory = create_cli_test_boto3_factory()
+            create_cli_test_boto3_factory()
             compute_provider_factory = create_cli_test_compute_provider_factory()
             ssh_manager_factory = create_cli_test_ssh_manager_factory()
 
@@ -575,9 +574,8 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                     if context.final_config and "instance_id" in context.final_config:
                         context.instance_id = context.final_config["instance_id"]
 
-                    logger.debug(
-                        f"In-process execution succeeded, instance: {context.final_config.get('instance_id', 'unknown')}"
-                    )
+                    instance_id = context.final_config.get("instance_id", "unknown")
+                    logger.debug(f"In-process execution succeeded, instance: {instance_id}")
 
                     if hasattr(context, "monitor_error") and context.monitor_error:
                         logger.error(f"Monitor thread reported error: {context.monitor_error}")
