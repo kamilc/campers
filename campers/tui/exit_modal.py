@@ -29,7 +29,7 @@ class ExitModal(ModalScreen[str]):
     Returns
     -------
     str
-        One of: "stop", "detach", "destroy", "cancel"
+        One of: "stop", "detach", "terminate", "cancel"
     """
 
     CSS = """
@@ -77,7 +77,7 @@ class ExitModal(ModalScreen[str]):
     BINDINGS = [
         ("s", "select('stop')", "Stop"),
         ("k", "select('detach')", "Keep"),
-        ("d", "select('destroy')", "Destroy"),
+        ("d", "select('terminate')", "Destroy"),
         ("escape", "select('cancel')", "Cancel"),
         ("up", "focus_previous", "Previous"),
         ("down", "focus_next", "Next"),
@@ -173,7 +173,7 @@ class ExitModal(ModalScreen[str]):
         button_map = {
             "btn-stop": "stop",
             "btn-detach": "detach",
-            "btn-destroy": "destroy",
+            "btn-destroy": "terminate",
             "btn-cancel": "cancel",
         }
         action = button_map.get(event.button.id, "cancel")

@@ -109,7 +109,7 @@ class TestExitModal:
         modal.dismiss.assert_called_once_with("detach")
 
     def test_on_button_pressed_destroy(self) -> None:
-        """Test on_button_pressed with Destroy button."""
+        """Test on_button_pressed with Destroy button returns terminate action."""
         modal = ExitModal()
         modal.dismiss = Mock()
 
@@ -120,7 +120,7 @@ class TestExitModal:
 
         modal.on_button_pressed(mock_event)
 
-        modal.dismiss.assert_called_once_with("destroy")
+        modal.dismiss.assert_called_once_with("terminate")
 
     def test_on_button_pressed_cancel(self) -> None:
         """Test on_button_pressed with Cancel button."""
