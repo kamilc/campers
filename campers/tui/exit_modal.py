@@ -41,6 +41,7 @@ class ExitModal(ModalScreen[str]):
     #exit-dialog {
         width: 60;
         height: auto;
+        max-height: 24;
         padding: 1 2;
         background: $surface;
         border: thick $primary;
@@ -67,6 +68,10 @@ class ExitModal(ModalScreen[str]):
         width: 100%;
         margin-bottom: 0;
     }
+
+    Button:focus {
+        text-style: bold reverse;
+    }
     """
 
     BINDINGS = [
@@ -74,6 +79,9 @@ class ExitModal(ModalScreen[str]):
         ("k", "select('detach')", "Keep"),
         ("d", "select('destroy')", "Destroy"),
         ("escape", "select('cancel')", "Cancel"),
+        ("up", "focus_previous", "Previous"),
+        ("down", "focus_next", "Next"),
+        ("enter", "activate_focused", "Select"),
     ]
 
     def __init__(
@@ -139,6 +147,20 @@ class ExitModal(ModalScreen[str]):
             The action selected via keyboard binding
         """
         self.dismiss(action)
+
+    def action_focus_previous(self) -> None:
+        """Move focus to previous button."""
+        self.focus_previous()
+
+    def action_focus_next(self) -> None:
+        """Move focus to next button."""
+        self.focus_next()
+
+    def action_activate_focused(self) -> None:
+        """Activate the currently focused button."""
+        focused = self.focused
+        if isinstance(focused, Button):
+            focused.press()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button click selection.
