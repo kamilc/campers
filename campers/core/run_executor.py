@@ -349,10 +349,18 @@ class RunExecutor:
         tuple[dict[str, Any], Any]
             Instance details and compute provider
         """
+        if self.cleanup_in_progress_getter():
+            logging.info("No instance was created. Exiting Campers.")
+            raise SystemExit(0)
+
         logging.info("Initializing cloud provider...")
 
         if merged_config.get("sync_paths"):
             mutagen_mgr.check_mutagen_installed()
+
+        if self.cleanup_in_progress_getter():
+            logging.info("No instance was created. Exiting Campers.")
+            raise SystemExit(0)
 
         compute_provider = self.compute_provider_factory(region=merged_config["region"])
 
@@ -826,6 +834,10 @@ class RunExecutor:
                 name_or_id=instance_name, region_filter=None
             )
 
+        if self.cleanup_in_progress_getter():
+            logging.info("No instance was created. Exiting Campers.")
+            raise SystemExit(0)
+
         if not matches:
             logging.info("No existing instance found")
         else:
@@ -891,8 +903,8 @@ class RunExecutor:
                 )
 
         if self.cleanup_in_progress_getter():
-            logging.debug("Cleanup in progress, aborting instance creation")
-            raise RuntimeError("Instance creation aborted due to cleanup request")
+            logging.info("No instance was created. Exiting Campers.")
+            raise SystemExit(0)
 
         logging.info("Creating new instance: %s", instance_name)
 

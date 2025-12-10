@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import sys
 import threading
@@ -563,41 +564,55 @@ class CampersTUI(App):
 
     def action_quit(self) -> None:
         """Handle quit action (q key or first Ctrl+C) - show exit modal."""
-        public_ip = None
-        public_ports = []
-        hourly_cost = None
+        instance_details = {}
+        has_instance = False
 
         if hasattr(self.campers, "_resources"):
             instance_details = self.campers._resources.get("instance_details", {})
-            public_ip = instance_details.get("public_ip")
-            if hasattr(self.campers, "_merged_config_prop"):
-                public_ports = self.campers._merged_config_prop.get("public_ports", [])
+            has_instance = bool(instance_details.get("instance_id"))
 
-            try:
-                from campers.constants import DEFAULT_PROVIDER
-                from campers.registry import get_provider
+        if not has_instance:
+            self.campers._abort_requested = True
+            sys.stdout.write("\x1b[?1000l\x1b[?1003l\x1b[?1006l")
+            sys.stdout.write("\x1b[?1049l")
+            sys.stdout.write("\x1b[0m\x1b[?25h\n")
+            sys.stdout.flush()
+            import subprocess
+            subprocess.run(["stty", "sane"], stderr=subprocess.DEVNULL)
+            os._exit(0)
 
-                instance_type = instance_details.get("instance_type")
-                region = self.campers._merged_config_prop.get("region")
+        public_ip = instance_details.get("public_ip")
+        public_ports = []
+        hourly_cost = None
 
-                if instance_type and region:
-                    provider = get_provider(DEFAULT_PROVIDER)
-                    pricing_service_class = provider["pricing_service"]
-                    pricing_service = pricing_service_class()
+        if hasattr(self.campers, "_merged_config_prop"):
+            public_ports = self.campers._merged_config_prop.get("public_ports", [])
 
-                    try:
-                        if pricing_service.pricing_available:
-                            hourly_cost = pricing_service.get_instance_price(instance_type, region)
-                    finally:
-                        pricing_service.close()
-            except Exception as e:
-                logger.debug("Failed to calculate hourly cost: %s", e)
+        try:
+            from campers.constants import DEFAULT_PROVIDER
+            from campers.registry import get_provider
+
+            instance_type = instance_details.get("instance_type")
+            region = self.campers._merged_config_prop.get("region")
+
+            if instance_type and region:
+                provider = get_provider(DEFAULT_PROVIDER)
+                pricing_service_class = provider["pricing_service"]
+                pricing_service = pricing_service_class()
+
+                try:
+                    if pricing_service.pricing_available:
+                        hourly_cost = pricing_service.get_instance_price(instance_type, region)
+                finally:
+                    pricing_service.close()
+        except Exception as e:
+            logger.debug("Failed to calculate hourly cost: %s", e)
 
         def handle_exit_choice(action: str | None) -> None:
             if action == "cancel":
+                self.campers._abort_requested = False
                 return
 
-            self.campers._abort_requested = True
             self._selected_exit_action = action
 
             try:
@@ -615,6 +630,7 @@ class CampersTUI(App):
             self.refresh()
             self.run_worker(self._run_cleanup, thread=True, exit_on_error=False)
 
+        self.campers._abort_requested = True
         self.push_screen(
             ExitModal(
                 public_ip=public_ip,

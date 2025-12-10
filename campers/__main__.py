@@ -98,8 +98,12 @@ class Campers:
 
     @property
     def _cleanup_in_progress_prop(self) -> bool:
-        """Get cleanup in progress status."""
-        return self._cleanup_in_progress
+        """Get cleanup in progress status.
+
+        Returns True if cleanup is in progress OR if abort was requested
+        (e.g., user pressed Ctrl+C and is viewing the exit modal).
+        """
+        return self._cleanup_in_progress or self._abort_requested
 
     @property
     def _run_executor_prop(self) -> RunExecutor:
@@ -215,7 +219,9 @@ class Campers:
 
             exit_code = app.run()
 
-            if exit_code == 130 and self._abort_requested:
+            has_instance = bool(self._resources.get("instance_details", {}).get("instance_id"))
+
+            if exit_code == 130 and self._abort_requested and has_instance:
                 sys.stderr.write("Stopping instance, please wait...\n")
                 sys.stderr.flush()
 
