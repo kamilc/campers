@@ -63,10 +63,8 @@ playbooks:
     - name: Jupyter Lab setup
       hosts: all
       tasks:
-        - name: Install Jupyter and data science packages
-          shell: |
-            ~/.local/bin/uv pip install --system \\
-              jupyter jupyterlab pandas numpy matplotlib
+        - name: Verify uv is available for Jupyter
+          shell: ~/.local/bin/uv --version
 
 # ==============================================================================
 # Defaults - Inherited by all camps
@@ -119,7 +117,7 @@ camps:
       - base
       - python-dev
       - jupyter
-    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+    command: ~/.local/bin/uv run --no-project --with jupyter --with jupyterlab --with pandas --with numpy --with matplotlib jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
     ignore:
       - "*.pyc"
       - __pycache__
@@ -144,7 +142,7 @@ camps:
       - base
       - python-dev
       - jupyter
-    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+    command: ~/.local/bin/uv run --no-project --with jupyter --with jupyterlab --with pandas --with numpy --with matplotlib jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
 
 # ==============================================================================
 # Alternative: Shell Scripts (simpler, but not idempotent)

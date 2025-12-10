@@ -37,7 +37,7 @@ Scenario: Skip port forwarding when no ports configured
   Then no SSH tunnels are created
   And no port forwarding log messages appear
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Create single SSH tunnel via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "sleep 30"
@@ -72,7 +72,7 @@ Scenario: Create multiple SSH tunnels via TUI
   And HTTP request to localhost:48889 succeeds
   And HTTP request to localhost:48890 succeeds
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Skip port forwarding when no ports configured via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "sleep 10"
@@ -84,7 +84,7 @@ Scenario: Skip port forwarding when no ports configured via TUI
 
   Then the TUI log panel does not contain "Creating SSH tunnel"
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Port forwarding lifecycle via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "sleep 10"

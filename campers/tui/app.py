@@ -391,14 +391,32 @@ class CampersTUI(App):
                 self.instance_start_time = launch_time.replace(tzinfo=None)
 
         if "public_ip" in details and details["public_ip"]:
+            public_ip = details["public_ip"]
             try:
                 ssh_username = details.get("ssh_username", DEFAULT_SSH_USERNAME)
                 key_file = details.get("key_file", "key.pem")
-                public_ip = details["public_ip"]
                 ssh_string = f"ssh -o IdentitiesOnly=yes -i {key_file} {ssh_username}@{public_ip}"
                 self.query_one(f"#{WidgetID.SSH}").update(f"SSH: {ssh_string}")
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update SSH widget: %s", e)
+
+            public_ports = getattr(self.campers, "_merged_config_prop", {}).get(
+                "public_ports", []
+            )
+            if public_ports:
+                try:
+                    urls = []
+                    for port in public_ports:
+                        protocol = "https" if port == 443 else "http"
+                        urls.append(f"{protocol}://{public_ip}:{port}")
+                    public_ports_text = f"Public IP: {public_ip} | URLs: " + ", ".join(
+                        urls
+                    )
+                    public_ports_widget = self.query_one(f"#{WidgetID.PUBLIC_PORTS}")
+                    public_ports_widget.update(public_ports_text)
+                    public_ports_widget.remove_class("hidden")
+                except (ValueError, AttributeError, RuntimeError) as e:
+                    logging.error("Failed to update public ports widget: %s", e)
 
     def on_unmount(self) -> None:
         """Handle unmount event - restore logging and cleanup resources."""

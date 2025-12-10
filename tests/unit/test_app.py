@@ -248,3 +248,55 @@ def test_public_ports_widget_not_shown_without_public_ip(tui_app_for_public_port
 
     public_ports_widget.update.assert_not_called()
     public_ports_widget.remove_class.assert_not_called()
+
+
+@pytest.fixture
+def tui_app_for_instance_details():
+    """Create CampersTUI instance for instance details testing.
+
+    Returns
+    -------
+    Mock
+        Mock CampersTUI instance for testing
+    """
+    from campers.tui.app import CampersTUI
+
+    app = Mock(spec=CampersTUI)
+    app.update_from_instance_details = CampersTUI.update_from_instance_details.__get__(
+        app
+    )
+    app.campers = Mock()
+    app.campers._merged_config_prop = {}
+
+    return app
+
+
+def test_public_ports_widget_shown_on_instance_details_with_public_ip(
+    tui_app_for_instance_details,
+):
+    """Test that public ports widget is shown when instance details include public IP.
+
+    Parameters
+    ----------
+    tui_app_for_instance_details : CampersTUI
+        TUI app instance
+    """
+    public_ports_widget = Mock()
+    other_widget = Mock()
+
+    def query_one_side_effect(selector):
+        if "public-ports" in selector:
+            return public_ports_widget
+        return other_widget
+
+    tui_app_for_instance_details.query_one = Mock(side_effect=query_one_side_effect)
+    tui_app_for_instance_details.campers._merged_config_prop = {"public_ports": [8888]}
+
+    tui_app_for_instance_details.update_from_instance_details(
+        {"public_ip": "52.29.99.159", "state": "running"}
+    )
+
+    public_ports_widget.update.assert_called_with(
+        "Public IP: 52.29.99.159 | URLs: http://52.29.99.159:8888"
+    )
+    public_ports_widget.remove_class.assert_called_with("hidden")
