@@ -15,7 +15,7 @@ InstanceOverviewWidget {
     content-align: center middle;
     text-style: dim;
 }
-Log {
+RichLog {
     scrollbar-background: #383838;
     scrollbar-color: #606060;
     scrollbar-background-hover: #404040;
