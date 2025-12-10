@@ -169,9 +169,12 @@ class LocalStackHarness(ScenarioHarness):
 
         resource_registry = ResourceRegistry()
         scenario_timeout = getattr(self.context, "scenario_timeout", DEFAULT_TIMEOUT_BUDGET)
-        timeout_manager = TimeoutManager(
-            budget_seconds=min(scenario_timeout, DEFAULT_TIMEOUT_BUDGET)
-        )
+        is_tui_scenario = self._should_initialize_pilot_extension()
+        if is_tui_scenario:
+            timeout_budget = scenario_timeout * 1.5
+        else:
+            timeout_budget = min(scenario_timeout, DEFAULT_TIMEOUT_BUDGET)
+        timeout_manager = TimeoutManager(budget_seconds=timeout_budget)
         event_bus = EventBus()
         artifacts = ArtifactManager()
         scenario_dir = artifacts.create_scenario_dir(self.scenario.name)
@@ -201,8 +204,7 @@ class LocalStackHarness(ScenarioHarness):
         )
 
         poll_interval = self._get_monitor_poll_interval()
-        is_tui_scenario = self._should_initialize_pilot_extension()
-        watchdog_budget = 30.0 if is_tui_scenario else 10.0
+        watchdog_budget = float(scenario_timeout) if is_tui_scenario else 10.0
 
         monitor_controller = MonitorController(
             event_bus=event_bus,
@@ -538,9 +540,10 @@ class LocalStackHarness(ScenarioHarness):
     def _get_monitor_poll_interval(self) -> float:
         """Determine the monitor polling interval based on scenario type.
 
-        For TUI/pilot scenarios, uses continuous polling (1ms instead of 500ms)
+        For TUI/pilot scenarios, uses faster polling (50ms instead of 500ms)
         to minimize SSH tag race conditions where production code queries tags before
-        the monitor has provisioned and tagged instances.
+        the monitor has provisioned and tagged instances, while still respecting
+        scenario timeouts and avoiding API rate limiting.
 
         Returns
         -------
@@ -548,7 +551,7 @@ class LocalStackHarness(ScenarioHarness):
             Polling interval in seconds
         """
         if self._should_initialize_pilot_extension():
-            logger.info("TUI scenario detected; using continuous monitor polling (1ms)")
+            logger.info("TUI scenario detected; using faster monitor polling (1ms)")
             return 0.001
         return 0.5
 
