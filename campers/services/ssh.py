@@ -238,7 +238,7 @@ class SSHManager:
             logging.info(line.rstrip("\n"))
 
     def stream_output_realtime(
-        self, stdout: ChannelFile, stderr: ChannelFile, timeout: float = DEFAULT_SSH_TIMEOUT
+        self, stdout: ChannelFile, stderr: ChannelFile, timeout: float | None = None
     ) -> None:
         """Stream stdout and stderr in real-time until command completes.
 
@@ -248,9 +248,9 @@ class SSHManager:
             SSH channel stdout stream
         stderr : ChannelFile
             SSH channel stderr stream
-        timeout : float, optional
+        timeout : float | None, optional
             Maximum total time in seconds to wait for command completion.
-            Default is 300.0 seconds.
+            Default is None (no timeout).
 
         Raises
         ------
@@ -260,7 +260,7 @@ class SSHManager:
         start_time = time.monotonic()
 
         while True:
-            if time.monotonic() - start_time > timeout:
+            if timeout is not None and time.monotonic() - start_time > timeout:
                 raise TimeoutError(f"Stream output timed out after {timeout} seconds")
 
             stdout.channel.settimeout(DEFAULT_CHANNEL_TIMEOUT)
