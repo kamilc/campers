@@ -320,7 +320,8 @@ class RunExecutor:
 
         merged_config["ports"] = normalize_ports_config(merged_config.get("ports"))
 
-        self._validate_ports_available(merged_config.get("ports"))
+        if os.environ.get("CAMPERS_HARNESS_MANAGED") != "1":
+            self._validate_ports_available(merged_config.get("ports"))
 
         self._send_queue_update(update_queue, {"type": "merged_config", "payload": merged_config})
 

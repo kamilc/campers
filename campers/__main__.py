@@ -339,6 +339,9 @@ class Campers:
         with self._cleanup_lock:
             self._cleanup_manager.cleanup_in_progress = self._cleanup_in_progress
 
+        if signum is not None and action == "stop":
+            action = "terminate"
+
         try:
             return self._cleanup_manager.cleanup_resources(
                 action=action, signum=signum, _frame=frame

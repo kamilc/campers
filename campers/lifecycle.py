@@ -172,7 +172,7 @@ class LifecycleManager:
 
             try:
                 if not pricing_service.pricing_available:
-                    logging.info("Pricing unavailable", extra={"stream": "stdout"})
+                    logging.info("ℹ️  Pricing unavailable", extra={"stream": "stdout"})
 
                 total_monthly_cost = 0.0
                 costs_available = False

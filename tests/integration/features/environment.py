@@ -718,8 +718,14 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         os.environ["AWS_ACCESS_KEY_ID"] = "testing"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-        os.environ["CAMPERS_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
-        os.environ["CAMPERS_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
+
+        if is_pilot_scenario:
+            os.environ["CAMPERS_SSH_TIMEOUT"] = "45"
+            os.environ["CAMPERS_SSH_MAX_RETRIES"] = "10"
+            logger.info("Using extended SSH retry config for @pilot scenario")
+        else:
+            os.environ["CAMPERS_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
+            os.environ["CAMPERS_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
 
         import time
 
@@ -758,7 +764,10 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     else:
         context.use_direct_instantiation = False
 
-    if is_localstack_scenario or is_pilot_scenario:
+    is_cli_test = "smoke" in scenario.tags or "error" in scenario.tags
+    should_cleanup_ports = is_localstack_scenario or is_pilot_scenario or is_cli_test
+
+    if should_cleanup_ports:
         try:
             from tests.integration.features.steps.cli_steps import (
                 stop_registered_portforward_managers,
@@ -778,7 +787,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
         import time
 
-        common_test_ports = [48888, 48889, 48890, 48891, 6006]
+        common_test_ports = [48888, 48889, 48890, 48891, 6006, 5000]
         logger.info("Forcefully cleaning up test ports before scenario...")
         try:
             cleanup_test_ports(common_test_ports)

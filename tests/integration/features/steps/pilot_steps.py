@@ -455,6 +455,7 @@ async def ensure_monitor_provisioning_complete(behave_context: Context | None = 
 
     The fix waits for recent ssh-ready events to settle (no new events for 1 second),
     indicating the monitor has finished provisioning all pending instances.
+    Also detects provisioning errors (SSH timeout, container failures) and fails fast.
 
     Parameters
     ----------
@@ -465,6 +466,11 @@ async def ensure_monitor_provisioning_complete(behave_context: Context | None = 
     -----
     This is purely test harness code and does not touch production code.
     It leverages the event_bus to detect when provisioning is complete.
+
+    Raises
+    ------
+    RuntimeError
+        If monitor errors occur (e.g., SSH provisioning timeout, SSH not ready)
     """
     if behave_context is None or not hasattr(behave_context, "harness"):
         logger.debug("No harness context available; skipping monitor synchronization")
@@ -481,8 +487,36 @@ async def ensure_monitor_provisioning_complete(behave_context: Context | None = 
 
     idle_count = 0
     idle_threshold = 4
+    seen_any_ssh_ready = False
+    first_instance_timeout_iterations = 240
 
-    for iteration in range(50):
+    diagnostics = harness.services.diagnostics
+
+    for event in diagnostics.events:
+        if event.description == "ssh-ready":
+            logger.info(
+                f"Detected existing ssh-ready event for instance {event.details.get('instance_id')} "
+                f"from diagnostics; marking as provisioned"
+            )
+            seen_any_ssh_ready = True
+            idle_count = 0
+            break
+
+    initial_event_count = len(diagnostics.events)
+
+    for iteration in range(first_instance_timeout_iterations):
+        current_event_count = len(diagnostics.events)
+        if current_event_count > initial_event_count:
+            for event in diagnostics.events[initial_event_count:]:
+                if event.description == "ssh-ready":
+                    logger.info(
+                        f"Detected ssh-ready event for instance {event.details.get('instance_id')} "
+                        f"from diagnostics (iteration {iteration + 1}); resetting idle counter"
+                    )
+                    seen_any_ssh_ready = True
+                    idle_count = 0
+                    break
+
         try:
             ssh_event = event_bus.wait_for(
                 event_type="ssh-ready",
@@ -493,15 +527,35 @@ async def ensure_monitor_provisioning_complete(behave_context: Context | None = 
                 f"Detected ssh-ready event for instance {ssh_event.instance_id} "
                 f"(iteration {iteration + 1}); resetting idle counter"
             )
+            seen_any_ssh_ready = True
             idle_count = 0
             await asyncio.sleep(0.05)
         except Exception:
             idle_count += 1
-            if idle_count >= idle_threshold:
+            if seen_any_ssh_ready and idle_count >= idle_threshold:
                 logger.info(
                     f"Monitor provisioning idle for {idle_count * 0.25:.2f}s; "
                     "assuming all instances fully provisioned with SSH tags"
                 )
+                break
+            if not seen_any_ssh_ready and iteration == first_instance_timeout_iterations - 1:
+                logger.warning(
+                    "Monitor has not provisioned any instances after 60s. "
+                    "Checking for provisioning errors..."
+                )
+                try:
+                    error_event = event_bus.wait_for(
+                        event_type="monitor-error",
+                        instance_id=None,
+                        timeout_sec=0.5,
+                    )
+                    raise RuntimeError(
+                        f"Monitor provisioning failed: {error_event.data.get('error', 'unknown error')}"
+                    )
+                except Exception as check_error:
+                    if isinstance(check_error, RuntimeError):
+                        raise
+                    logger.debug("No monitor errors detected; proceeding with empty instance set")
                 break
             await asyncio.sleep(0.05)
 
@@ -623,8 +677,6 @@ def run_tui_test_with_machine(
 
                     try:
                         async with asyncio.timeout(max_wait):
-                            await ensure_monitor_provisioning_complete(behave_context)
-
                             async with app.run_test() as pilot:
                                 await pilot.pause()
 

@@ -588,8 +588,8 @@ class LocalStackHarness(ScenarioHarness):
             Polling interval in seconds
         """
         if self._should_initialize_pilot_extension():
-            logger.info("TUI scenario detected; using faster monitor polling (1ms)")
-            return 0.001
+            logger.info("TUI scenario detected; using faster monitor polling (50ms)")
+            return 0.05
         return 0.5
 
     def _should_initialize_pilot_extension(self) -> bool:

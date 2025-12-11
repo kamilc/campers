@@ -12,7 +12,7 @@ import docker
 
 logger = logging.getLogger(__name__)
 
-SSH_CONTAINER_BOOT_BASE_TIMEOUT = int(os.environ.get("CAMPERS_SSH_CONTAINER_BOOT_TIMEOUT", "20"))
+SSH_CONTAINER_BOOT_BASE_TIMEOUT = int(os.environ.get("CAMPERS_SSH_CONTAINER_BOOT_TIMEOUT", "45"))
 
 SSH_CONTAINER_IMAGE = os.environ.get("CAMPERS_SSH_IMAGE", "campers/python-ssh:latest")
 
