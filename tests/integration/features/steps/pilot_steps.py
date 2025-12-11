@@ -293,6 +293,7 @@ async def poll_tui_with_unified_timeout(
         if (
             behave_context is not None
             and getattr(behave_context, "monitor_error", None) is not None
+            and not terminating_found
         ):
             error_message = behave_context.monitor_error
             logger.error("Monitor reported error during TUI polling: %s", error_message)
