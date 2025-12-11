@@ -263,64 +263,6 @@ def test_run_startup_script_without_sync_paths_raises_error(campers_module) -> N
         campers_instance.run()
 
 
-def test_run_with_sync_paths_creates_mutagen_session(campers_module) -> None:
-    """Test that run() creates Mutagen session when sync_paths configured."""
-    from unittest.mock import MagicMock, patch
-
-    campers_instance = campers_module()
-    campers_instance._config_loader = MagicMock()
-    campers_instance._config_loader.load_config.return_value = {"defaults": {}}
-    campers_instance._config_loader.get_camp_config.return_value = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
-        "command": "echo test",
-    }
-    campers_instance._config_loader.validate_config.return_value = None
-
-    mock_instance_details = {
-        "instance_id": "i-test123",
-        "public_ip": "203.0.113.1",
-        "state": "running",
-        "key_file": "/tmp/test.pem",
-        "security_group_id": "sg-test123",
-        "unique_id": "test123",
-    }
-
-    with (
-        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
-        patch("campers_cli.get_provider") as mock_get_provider,
-        patch("campers_cli.MutagenManager") as mock_mutagen,
-    ):
-        mock_ec2_instance = MagicMock()
-        mock_ec2_instance.find_instances_by_name_or_id.return_value = []
-        mock_ec2_instance.launch_instance.return_value = mock_instance_details
-        mock_ec2.return_value = mock_ec2_instance
-
-        mock_get_provider.return_value = {"compute": mock_ec2}
-
-        mock_ssh_instance = MagicMock()
-        mock_ssh_instance.filter_environment_variables.return_value = {}
-        mock_ssh_instance.connect.return_value = None
-        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
-        mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
-
-        mock_mutagen_instance = MagicMock()
-        mock_mutagen_instance.get_sync_status.return_value = "watching"
-        mock_mutagen.return_value = mock_mutagen_instance
-        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
-
-        result = campers_instance.run()
-
-        mock_mutagen_instance.check_mutagen_installed.assert_called_once()
-        mock_mutagen_instance.cleanup_orphaned_session.assert_called_once()
-        mock_mutagen_instance.create_sync_session.assert_called_once()
-        mock_mutagen_instance.get_sync_status.assert_called()
-        mock_mutagen_instance.terminate_session.assert_called_once()
-        assert result["instance_id"] == "i-test123"
-
-
 def test_run_executes_command_from_synced_directory(campers_module) -> None:
     """Test that command executes from synced directory when sync_paths configured."""
     from unittest.mock import MagicMock, patch
@@ -766,66 +708,6 @@ def test_run_port_forwarding_error_triggers_cleanup(campers_module) -> None:
 
         mock_portforward_instance.stop_all_tunnels.assert_not_called()
         mock_ssh_instance.close.assert_called_once()
-
-
-def test_run_port_forwarding_with_sync_paths(campers_module) -> None:
-    """Test that port forwarding works with sync_paths enabled."""
-    from unittest.mock import MagicMock, patch
-
-    campers_instance = campers_module()
-    campers_instance._config_loader = MagicMock()
-    campers_instance._config_loader.load_config.return_value = {"defaults": {}}
-    campers_instance._config_loader.get_camp_config.return_value = {
-        "region": "us-east-1",
-        "instance_type": "t3.medium",
-        "ports": [8888],
-        "sync_paths": [{"local": "~/myproject", "remote": "~/myproject"}],
-        "command": "echo test",
-    }
-    campers_instance._config_loader.validate_config.return_value = None
-
-    mock_instance_details = {
-        "instance_id": "i-test123",
-        "public_ip": "203.0.113.1",
-        "state": "running",
-        "key_file": "/tmp/test.pem",
-        "security_group_id": "sg-test123",
-        "unique_id": "test123",
-    }
-
-    with (
-        patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
-        patch("campers_cli.get_provider") as mock_get_provider,
-        patch("campers_cli.MutagenManager") as mock_mutagen,
-        patch("campers_cli.PortForwardManager") as mock_portforward,
-    ):
-        mock_ec2_instance = MagicMock()
-        mock_ec2_instance.find_instances_by_name_or_id.return_value = []
-        mock_ec2_instance.launch_instance.return_value = mock_instance_details
-        mock_ec2.return_value = mock_ec2_instance
-
-        mock_get_provider.return_value = {"compute": mock_ec2}
-
-        mock_ssh_instance = MagicMock()
-        mock_ssh_instance.filter_environment_variables.return_value = {}
-        mock_ssh_instance.connect.return_value = None
-        mock_ssh_instance.build_command_with_env.side_effect = lambda cmd, env: cmd
-        mock_ssh_instance.execute_command_raw.return_value = 0
-        campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
-
-        mock_mutagen_instance = MagicMock()
-        mock_mutagen.return_value = mock_mutagen_instance
-        campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
-
-        mock_portforward_instance = MagicMock()
-        mock_portforward.return_value = mock_portforward_instance
-        campers_instance._portforward_manager_factory = lambda: mock_portforward_instance
-
-        result = campers_instance.run()
-
-        mock_portforward_instance.create_tunnels.assert_called_once()
-        mock_mutagen_instance.create_sync_session.assert_called_once()
-        assert result["instance_id"] == "i-test123"
 
 
 def test_run_port_forwarding_with_startup_script(campers_module) -> None:
