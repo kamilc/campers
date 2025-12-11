@@ -18,6 +18,7 @@ import boto3
 import requests
 from behave.model import Scenario
 from behave.runner import Context
+from botocore.exceptions import ClientError
 
 from campers.services.sync import MutagenManager
 from tests.harness.base import ScenarioHarness
@@ -157,8 +158,44 @@ class LocalStackHarness(ScenarioHarness):
         self._ensure_localstack_container_running()
         self._ensure_localstack_ready(timeout=LOCALSTACK_STARTUP_TIMEOUT)
 
+    def _ensure_default_vpc_exists(self) -> None:
+        """Ensure a default VPC exists in LocalStack.
+
+        LocalStack doesn't automatically create a default VPC like AWS does.
+        This method creates one if it doesn't exist, allowing tests that depend
+        on a default VPC to function properly.
+        """
+        try:
+            vpcs = self._ec2_client.describe_vpcs(
+                Filters=[{"Name": "isDefault", "Values": ["true"]}]
+            )
+
+            if vpcs["Vpcs"]:
+                logger.debug("Default VPC already exists in LocalStack")
+                return
+
+            logger.info("Creating default VPC in LocalStack")
+            self._ec2_client.create_default_vpc()
+            logger.info("Default VPC created successfully")
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code", "")
+            if error_code == "DefaultVpcAlreadyExists":
+                logger.debug("Default VPC already exists (another test created it)")
+                return
+            if "DefaultSubnetAlreadyExistsInAvailabilityZone" in error_code or \
+               "DefaultSubnetAlreadyExistsInAvailabilityZone" in str(exc):
+                logger.debug("Default VPC and subnets already exist from previous test")
+                return
+            logger.error("Failed to ensure default VPC exists: %s", exc)
+            raise RuntimeError(f"Failed to ensure default VPC exists: {exc}") from exc
+        except Exception as exc:
+            logger.error("Failed to ensure default VPC exists: %s", exc)
+            raise RuntimeError(f"Failed to ensure default VPC exists: {exc}") from exc
+
     def setup(self) -> None:
         """Initialize LocalStack scenario services."""
+        self._ensure_default_vpc_exists()
+
         configuration_env = ConfigurationEnv()
         configuration_env.enter()
         configuration_env.set("AWS_ENDPOINT_URL", LOCALSTACK_ENDPOINT)
