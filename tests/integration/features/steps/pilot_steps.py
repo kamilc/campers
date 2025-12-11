@@ -315,6 +315,7 @@ async def poll_tui_with_unified_timeout(
                     f"cleanup: {cleanup_completed_found}, "
                     f"error: {error_found})"
                 )
+                logger.info(f"Log widget status: {hasattr(app, 'log_widget') and app.log_widget is not None}")
                 last_log_time = time.time()
 
             if "terminating" in status_text.lower() or "stopping" in status_text.lower():
@@ -351,6 +352,11 @@ async def poll_tui_with_unified_timeout(
                     log_lines = []
             log_text = "\n".join(log_lines)
 
+            if log_lines and not command_completed_found and not cleanup_completed_found:
+                logger.debug(f"Log widget has {len(log_lines)} lines")
+                if log_lines:
+                    logger.debug(f"First few log lines: {log_lines[:3]}")
+
             if "Command completed" in log_text:
                 if not command_completed_found:
                     logger.info("Found command completion message in logs")
@@ -361,9 +367,9 @@ async def poll_tui_with_unified_timeout(
                     logger.info("Found 'Cleanup completed successfully' in logs")
                 cleanup_completed_found = True
         except NoMatches:
-            pass
-        except Exception:
-            pass
+            logger.debug("Log widget not found")
+        except Exception as e:
+            logger.debug(f"Error querying log widget: {e}")
 
         if error_found:
             if error_detection_time and time.time() - error_detection_time > 10:
@@ -395,6 +401,14 @@ async def poll_tui_with_unified_timeout(
         await pilot.pause(0.5)
 
     elapsed = time.time() - start_time
+    try:
+        log_lines, log_text = extract_log_lines(app)
+        logger.info(f"Final log content ({len(log_lines)} lines):")
+        for line in log_lines[-10:]:
+            logger.info(f"  {line}")
+    except Exception as e:
+        logger.debug(f"Could not extract final logs: {e}")
+
     logger.info(
         f"TUI polling completed after {elapsed:.1f}s "
         f"(terminating: {terminating_found}, "

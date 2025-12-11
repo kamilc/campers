@@ -157,8 +157,14 @@ class CampersTUI(App):
         self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
         self.set_interval(UPTIME_UPDATE_INTERVAL_SECONDS, self.update_uptime, name="uptime-timer")
 
+        logging.info(f"on_mount: _start_worker={self._start_worker}")
         if self._start_worker:
-            self.run_worker(self.run_campers_logic, exit_on_error=False, thread=True)
+            logging.info("on_mount: starting worker thread")
+            try:
+                self.run_worker(self.run_campers_logic, exit_on_error=False, thread=True)
+                logging.info("on_mount: worker thread started")
+            except Exception as e:
+                logging.error(f"on_mount: failed to start worker: {e}", exc_info=True)
 
     async def on_tui_log_message(self, message: TuiLogMessage) -> None:
         """Append log messages emitted from worker threads to the log widget."""
@@ -441,16 +447,25 @@ class CampersTUI(App):
         """Run campers logic in worker thread."""
         error_message = None
 
+        import sys
+        print("Worker thread starting", file=sys.stderr, flush=True)
+        logging.info("Worker thread starting")
+
         try:
+            print(f"Executing campers run with kwargs: {self.run_kwargs}", file=sys.stderr, flush=True)
+            logging.info(f"Executing campers run with kwargs: {self.run_kwargs}")
             result = self.campers._execute_run(
                 tui_mode=True, update_queue=self._update_queue, **self.run_kwargs
             )
             self.worker_exit_code = 0
+            print(f"Campers execution completed, result: {result}", file=sys.stderr, flush=True)
+            logging.info(f"Campers execution completed, result: {result}")
 
             if isinstance(result, dict) and "command_exit_code" in result:
                 self.worker_exit_code = result["command_exit_code"]
 
             if self.worker_exit_code == 0:
+                print("Command completed successfully", file=sys.stderr, flush=True)
                 logging.info("Command completed successfully")
 
             if self._update_queue is not None:
@@ -461,6 +476,7 @@ class CampersTUI(App):
                 except queue.Full:
                     logging.warning("TUI update queue full, dropping terminating status")
 
+            print("Cleanup completed successfully", file=sys.stderr, flush=True)
             logging.info("Cleanup completed successfully")
         except KeyboardInterrupt:
             logging.info("Operation cancelled by user")
