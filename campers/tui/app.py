@@ -141,9 +141,12 @@ class CampersTUI(App):
         self.log_widget = log_widget
         tui_handler = TuiLogHandler(self, log_widget)
         tui_handler.setFormatter(StreamFormatter("%(message)s"))
+        tui_handler.setLevel(logging.DEBUG)
 
         root_logger.handlers = [tui_handler]
-        root_logger.setLevel(logging.INFO)
+        root_logger.setLevel(logging.DEBUG)
+
+        logging.info("TUI handler installed and root logger configured")
 
         for module in ["portforward", "ssh", "sync", "ec2"]:
             module_logger = logging.getLogger(f"campers.{module}")
