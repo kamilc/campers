@@ -349,6 +349,7 @@ def test_run_executes_command_from_synced_directory(campers_module) -> None:
         patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
+        patch("sys.stdout.isatty", return_value=False),
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.find_instances_by_name_or_id.return_value = []
@@ -365,6 +366,8 @@ def test_run_executes_command_from_synced_directory(campers_module) -> None:
         campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
+        mock_mutagen_instance.wait_for_initial_sync.return_value = None
+        mock_mutagen_instance.get_sync_status.return_value = "watching"
         mock_mutagen.return_value = mock_mutagen_instance
         campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
@@ -406,6 +409,7 @@ def test_run_executes_startup_script_from_synced_directory(campers_module) -> No
         patch("campers.providers.aws.compute.EC2Manager") as mock_ec2,
         patch("campers_cli.get_provider") as mock_get_provider,
         patch("campers_cli.MutagenManager") as mock_mutagen,
+        patch("sys.stdout.isatty", return_value=False),
     ):
         mock_ec2_instance = MagicMock()
         mock_ec2_instance.find_instances_by_name_or_id.return_value = []
@@ -422,6 +426,8 @@ def test_run_executes_startup_script_from_synced_directory(campers_module) -> No
         campers_instance._ssh_manager_factory = lambda **kwargs: mock_ssh_instance
 
         mock_mutagen_instance = MagicMock()
+        mock_mutagen_instance.wait_for_initial_sync.return_value = None
+        mock_mutagen_instance.get_sync_status.return_value = "watching"
         mock_mutagen.return_value = mock_mutagen_instance
         campers_instance._mutagen_manager_factory = lambda: mock_mutagen_instance
 
