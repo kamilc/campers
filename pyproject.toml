@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "campers"
-version = "0.1.0"
+version = "0.1.1"
 description = "CLI tool for managing remote development environments on the cloud"
 readme = "README.md"
 license = {text = "MIT"}
@@ -45,16 +45,19 @@ campers = "campers.__main__:main"
 [dependency-groups]
 dev = [
     "behave>=1.3.3",
+    "build>=1.3.0",
     "docker>=7.1.0",
     "mkdocs>=1.6.1",
     "mkdocs-material>=9.7.0",
     "moto[ec2]>=5.1.13",
     "pytest>=8.4.2",
     "ruff>=0.13.2",
+    "twine>=6.2.0",
 ]
 
-[tool.setuptools]
-packages = ["campers"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["campers*"]
 
 [tool.setuptools.package-data]
 campers = ["py.typed"]
