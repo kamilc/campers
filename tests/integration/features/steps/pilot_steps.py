@@ -400,8 +400,11 @@ async def poll_tui_with_unified_timeout(
                 await pilot.pause(0.5)
                 continue
 
-        if terminating_found and command_completed_found and cleanup_completed_found:
-            logger.info("All TUI conditions met")
+        if command_completed_found and cleanup_completed_found:
+            logger.info(
+                f"TUI work completed (terminating: {terminating_found}, "
+                f"command: {command_completed_found}, cleanup: {cleanup_completed_found})"
+            )
             await pilot.pause(3.0)
             break
 
