@@ -1,139 +1,126 @@
 # Getting Started
 
-This guide walks you through installing Campers and launching your first remote development environment.
+This guide will help you spin up your first Campers environment in under 5 minutes.
 
 ## Prerequisites
 
-Before using Campers, ensure you have:
-
-- **Python 3.12+**
-- **AWS credentials** configured via `aws configure` or environment variables
-- **[Mutagen](https://mutagen.io/)** for file synchronization
-- **[Ansible](https://docs.ansible.com/)** for playbook-based provisioning (optional)
-
-### Installing Mutagen
-
-=== "macOS"
-
+1.  **AWS Credentials**: You need a valid AWS account.
     ```bash
-    brew install mutagen-io/mutagen/mutagen
+    aws configure
+    # Or export AWS_PROFILE=my-profile
     ```
-
-=== "Linux"
-
-    ```bash
-    curl -fsSL https://github.com/mutagen-io/mutagen/releases/latest/download/mutagen_linux_amd64_v0.18.1.tar.gz | tar xz
-    sudo mv mutagen /usr/local/bin/
-    ```
-
-=== "Windows"
-
-    ```powershell
-    scoop install mutagen
-    ```
-
-### Configuring AWS Credentials
-
-```bash
-aws configure
-```
-
-Or set environment variables:
-
-```bash
-export AWS_ACCESS_KEY_ID=your_key
-export AWS_SECRET_ACCESS_KEY=your_secret
-export AWS_REGION=us-east-1
-```
+2.  **Mutagen**: Required for the high-performance file sync.
+    *   **macOS**: `brew install mutagen-io/mutagen/mutagen`
+    *   **Linux**: [Download binary](https://mutagen.io/download)
+    *   **Windows**: `scoop install mutagen`
 
 ## Installation
 
-### Using pip
+We recommend using **[uv](https://docs.astral.sh/uv/)** for a zero-install experience, but standard pip works too.
 
-```bash
-pip install campers
-```
+=== "Using uv (Recommended)"
 
-### Using uv (recommended)
+    No installation required! just run:
+    ```bash
+    uvx campers run
+    ```
 
-[uv](https://docs.astral.sh/uv/) lets you run Campers without installation:
+=== "Using pip"
 
-```bash
-uvx campers run
-uvx campers list
-```
-
-Or install it in a project:
-
-```bash
-uv add campers
-```
+    ```bash
+    pip install campers
+    ```
 
 ## Your First Camp
 
-### 1. Generate Configuration
+### 1. Initialize
+
+Go to a project folder (or create a dummy one) and run:
 
 ```bash
 campers init
 ```
 
-This creates a `campers.yaml` file with sensible defaults.
+This creates a `campers.yaml` file. This file is your **Infrastructure as Code**. It defines the machine you need.
 
-### 2. Review the Configuration
+### 2. Configure (Optional)
+
+Open `campers.yaml`. By default, it uses a small `t3.medium`. Let's say you want more power:
 
 ```yaml
 defaults:
   region: us-east-1
-  instance_type: t3.medium
+  instance_type: t3.xlarge  # Upgrade to 4 vCPUs, 16GB RAM
   disk_size: 50
+```
+
+### 3. Run
+
+```bash
+campers run
+```
+
+**What happens next?**
+
+1.  **Provisioning:** Campers asks AWS for the instance.
+2.  **Sync:** It establishes the Mutagen session.
+3.  **Shell:** You are dropped into an SSH shell on the remote machine.
+
+### 4. The "Localhost" Experience
+
+While inside the `campers run` session:
+
+1.  **Edit Locally:** Open a file in your local VS Code. Save it.
+2.  **Check Remotely:** Run `cat filename` in the remote shell. The change is already there.
+3.  **Web Apps:** If you run a web server (e.g., `python -m http.server 8000`) on the remote machine, Campers automatically forwards the port. Open `http://localhost:8000` on your laptop.
+
+### 5. Stop or Destroy
+
+When you are done, you have two choices:
+
+*   **Stop** (Ctrl+C or `campers stop`): Shuts down the instance. Data is preserved. You pay only for EBS storage (~$0.05/GB/month).
+*   **Destroy** (`campers destroy`): Terminates the instance and deletes the disk. Costs stop completely.
+
+## Pro Tip: Configuration with Ansible
+
+Campers supports simple shell scripts (`setup_script`), but for robust environments, we recommend **Ansible**.
+
+Ansible is a popular tool for automating software installation. It is:
+- **Idempotent:** You can run it 100 times, and it only changes what needs to be changed.
+- **Declarative:** You say "I want PostgreSQL installed," not "How to install PostgreSQL."
+
+Example `campers.yaml` using Ansible:
+
+```yaml
+playbooks:
+  web-server:
+    - name: Install Nginx
+      hosts: all
+      become: true
+      tasks:
+        - apt: {name: nginx, state: present}
 
 camps:
-  dev:
-    command: bash
+  web:
+    ansible_playbooks: [web-server]
 ```
 
-### 3. Launch Your Camp
+## Optional: VS Code Remote SSH
 
-```bash
-campers run dev
-```
+Campers is designed to let you **edit locally** while Mutagen syncs changes instantly. This gives you the fastest possible typing latency.
 
-Campers will:
+However, if you prefer to use **VS Code Remote - SSH** (e.g., for the integrated terminal, remote debugging, or extensions that need to run on the host), you can still do so:
 
-1. Create an EC2 instance in your AWS account
-2. Generate and configure SSH keys
-3. Start bidirectional file sync with Mutagen
-4. Connect you to a shell on the remote instance
-
-### 4. Work Remotely
-
-Your local directory is now synced with the remote instance. Any changes you make locally appear on the remote, and vice versa.
-
-### 5. Exit
-
-Press `Ctrl+C` or type `exit`. By default, the instance stops (preserving your data). You can resume later with:
-
-```bash
-campers start dev
-campers run dev
-```
-
-## Verifying Your Setup
-
-Run the doctor command to check your AWS credentials and permissions:
-
-```bash
-campers doctor
-```
-
-This verifies:
-
-- AWS credentials are configured
-- Required IAM permissions are present
-- Mutagen is installed (if file sync is enabled)
+1.  Run `campers run`.
+2.  Look at the **SSH** line in the TUI dashboard. It will show something like:
+    ```bash
+    ssh -i /path/to/key.pem ubuntu@1.2.3.4
+    ```
+3.  In VS Code, open the **Remote Explorer**.
+4.  Add a new SSH Host using that exact command.
+5.  Connect! You can now use the remote terminal and debugger directly.
 
 ## Next Steps
 
-- [Configuration](configuration.md) - Customize your camps
-- [Commands](commands.md) - Explore all CLI options
-- [Examples](examples.md) - Real-world configuration recipes
+- Check out [Examples](examples.md) for Data Science and Web Dev setups.
+- Learn about [Configuration](configuration.md) variables and playbooks.

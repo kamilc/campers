@@ -55,9 +55,8 @@ class TestTimeoutManagerSubBudget:
         manager = TimeoutManager(budget_seconds=0.1)
         time.sleep(0.2)
 
-        with pytest.raises(HarnessTimeoutError):
-            with manager.sub_budget("operation", 5.0):
-                pass
+        with pytest.raises(HarnessTimeoutError), manager.sub_budget("operation", 5.0):
+            pass
 
     def test_multiple_sub_budgets(self) -> None:
         """Test multiple sub-budgets in sequence."""
@@ -87,18 +86,16 @@ class TestTimeoutManagerEdgeCases:
         manager = TimeoutManager(budget_seconds=0.0)
         time.sleep(0.1)
 
-        with pytest.raises(HarnessTimeoutError):
-            with manager.sub_budget("operation", 1.0):
-                pass
+        with pytest.raises(HarnessTimeoutError), manager.sub_budget("operation", 1.0):
+            pass
 
     def test_very_small_budget(self) -> None:
         """Test manager with very small budget."""
         manager = TimeoutManager(budget_seconds=0.001)
         time.sleep(0.01)
 
-        with pytest.raises(HarnessTimeoutError):
-            with manager.sub_budget("operation", 0.1):
-                pass
+        with pytest.raises(HarnessTimeoutError), manager.sub_budget("operation", 0.1):
+            pass
 
     def test_large_budget(self) -> None:
         """Test manager with large budget."""

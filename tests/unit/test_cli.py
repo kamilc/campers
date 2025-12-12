@@ -141,9 +141,7 @@ def test_run_with_invalid_camp_name(campers, write_config) -> None:
         campers.run(camp_name="nonexistent-machine")
 
 
-def test_config_hierarchy_cli_takes_precedence(
-    campers, write_config, mock_ec2_manager
-) -> None:
+def test_config_hierarchy_cli_takes_precedence(campers, write_config, mock_ec2_manager) -> None:
     config_data = {
         "defaults": {"region": "us-west-1"},
         "camps": {"ml-training": {"region": "eu-west-1"}},
@@ -156,9 +154,7 @@ def test_config_hierarchy_cli_takes_precedence(
     assert result["state"] == "running"
 
 
-def test_run_with_no_machine_no_options(
-    campers, write_config, mock_ec2_manager
-) -> None:
+def test_run_with_no_machine_no_options(campers, write_config, mock_ec2_manager) -> None:
     config_data = {"defaults": {"region": "us-west-1"}}
     write_config(config_data)
 
@@ -178,9 +174,7 @@ def test_run_without_command(campers, write_config, mock_ec2_manager) -> None:
     assert result["state"] == "running"
 
 
-def test_config_file_only_fields_preserved(
-    campers, write_config, mock_ec2_manager
-) -> None:
+def test_config_file_only_fields_preserved(campers, write_config, mock_ec2_manager) -> None:
     config_data = {
         "defaults": {},
         "camps": {
@@ -220,9 +214,7 @@ def test_port_replaces_config_ports(campers, write_config, mock_ec2_manager) -> 
     assert result["state"] == "running"
 
 
-def test_run_with_include_vcs_capitalized_true(
-    campers, write_config, mock_ec2_manager
-) -> None:
+def test_run_with_include_vcs_capitalized_true(campers, write_config, mock_ec2_manager) -> None:
     config_data = {"defaults": {}}
     write_config(config_data)
 
@@ -232,9 +224,7 @@ def test_run_with_include_vcs_capitalized_true(
     assert result["state"] == "running"
 
 
-def test_run_with_include_vcs_capitalized_false(
-    campers, write_config, mock_ec2_manager
-) -> None:
+def test_run_with_include_vcs_capitalized_false(campers, write_config, mock_ec2_manager) -> None:
     config_data = {"defaults": {}}
     write_config(config_data)
 

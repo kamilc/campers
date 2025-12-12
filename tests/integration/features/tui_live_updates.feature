@@ -19,21 +19,21 @@ Scenario: Uptime counter updates every second
   Then uptime widget displays time elapsed
 
 @smoke @dry_run
-Scenario: Mutagen widget displays sync state and file count
+Scenario: File sync widget displays sync state and file count
   Given config file with defaults section
   And TUI application is running
   When mutagen status event with state "syncing" and 42 files is received
-  Then mutagen widget displays state "syncing"
-  And mutagen widget displays "42 files"
+  Then file sync widget displays state "syncing"
+  And file sync widget displays "42 files"
   When mutagen status event with state "error" is received
-  Then mutagen widget displays state "error"
+  Then file sync widget displays state "error"
 
 @smoke @dry_run
-Scenario: Mutagen widget displays not syncing when unconfigured
+Scenario: File sync widget displays not syncing when unconfigured
   Given config file without sync_paths configuration
   And TUI application is running
   When TUI first launches
-  Then mutagen widget displays "Not syncing"
+  Then file sync widget displays "Not syncing"
 
 @smoke @dry_run
 Scenario: Press q key initiates graceful shutdown

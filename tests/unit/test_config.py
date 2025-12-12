@@ -4,7 +4,7 @@ import pytest
 import yaml
 from omegaconf.errors import InterpolationResolutionError
 
-from campers.config import ConfigLoader
+from campers.core.config import ConfigLoader
 
 
 class TestConfigLoader:
@@ -481,17 +481,17 @@ class TestConfigLoader:
         with pytest.raises(ValueError, match="ports must be a list"):
             loader.validate_config(config)
 
-    def test_validate_config_ports_non_integer_elements(self) -> None:
+    def test_validate_config_ports_invalid_string_format(self) -> None:
         config = {
             "region": "us-east-1",
             "instance_type": "t3.medium",
             "disk_size": 50,
-            "ports": [8888, "6006"],
+            "ports": [8888, "invalid"],
         }
 
         loader = ConfigLoader()
 
-        with pytest.raises(ValueError, match="ports entries must be integers"):
+        with pytest.raises(ValueError, match="Invalid port"):
             loader.validate_config(config)
 
     def test_validate_config_ports_out_of_range(self) -> None:
@@ -504,9 +504,7 @@ class TestConfigLoader:
 
         loader = ConfigLoader()
 
-        with pytest.raises(
-            ValueError, match="ports entries must be between 1 and 65535"
-        ):
+        with pytest.raises(ValueError, match="ports entries must be between 1 and 65535"):
             loader.validate_config(config)
 
     def test_validate_config_ports_empty_list(self) -> None:
@@ -678,10 +676,7 @@ class TestConfigLoaderVariableSubstitution:
         assert "vars" in config
         assert config["vars"]["project_name"] == "ml-training"
         assert config["vars"]["base_path"] == "/home/ubuntu"
-        assert (
-            config["camps"]["dev"]["command"]
-            == "cd /home/ubuntu/ml-training && python train.py"
-        )
+        assert config["camps"]["dev"]["command"] == "cd /home/ubuntu/ml-training && python train.py"
 
     def test_nested_variable_expansion(self, tmp_path: Path) -> None:
         config_file = tmp_path / "campers.yaml"
@@ -820,8 +815,7 @@ class TestConfigLoaderVariableSubstitution:
             loader.load_config(str(config_file))
 
         assert (
-            "undefined_variable" in str(exc_info.value)
-            or "missing" in str(exc_info.value).lower()
+            "undefined_variable" in str(exc_info.value) or "missing" in str(exc_info.value).lower()
         )
 
     def test_circular_reference_handling(self, tmp_path: Path) -> None:
@@ -1016,9 +1010,7 @@ class TestConfigLoaderVariableSubstitution:
         loader = ConfigLoader()
         config = loader.load_config(str(config_file))
 
-        assert (
-            config["camps"]["dev"]["env"]["PROJECT_ROOT"] == "/home/ubuntu/project"
-        )
+        assert config["camps"]["dev"]["env"]["PROJECT_ROOT"] == "/home/ubuntu/project"
 
     def test_variable_in_list(self, tmp_path: Path) -> None:
         config_file = tmp_path / "campers.yaml"
@@ -1130,9 +1122,7 @@ class TestConfigLoaderVariableSubstitution:
         loader = ConfigLoader()
         config = loader.load_config(str(config_file))
 
-        assert (
-            config["camps"]["dev"]["working_dir"] == "/path-with-dash_and_underscore"
-        )
+        assert config["camps"]["dev"]["working_dir"] == "/path-with-dash_and_underscore"
 
     def test_variable_reference_within_vars_section(self, tmp_path: Path) -> None:
         config_file = tmp_path / "campers.yaml"
@@ -1277,9 +1267,7 @@ class TestConfigLoaderVariableSubstitution:
 
         assert "Invalid ssh_username" in str(exc_info.value)
 
-    def test_ssh_username_validation_invalid_special_chars(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ssh_username_validation_invalid_special_chars(self, tmp_path: Path) -> None:
         config = {
             "defaults": {
                 "region": "us-east-1",
@@ -1295,9 +1283,7 @@ class TestConfigLoaderVariableSubstitution:
 
         assert "Invalid ssh_username" in str(exc_info.value)
 
-    def test_ssh_username_validation_valid_underscore_start(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ssh_username_validation_valid_underscore_start(self, tmp_path: Path) -> None:
         config = {
             "defaults": {
                 "region": "us-east-1",
@@ -1378,62 +1364,59 @@ class TestConfigLoaderVariableSubstitution:
 
         assert "ansible_playbook must be a string" in str(exc_info.value)
 
-    def test_on_exit_default_value_is_stop(self) -> None:
+    def test_public_ports_default_is_empty_list(self) -> None:
         loader = ConfigLoader()
         config = loader.load_config("/nonexistent/path/campers.yaml")
 
         merged = loader.get_camp_config(config)
-        assert merged.get("on_exit", "stop") == "stop"
+        assert merged.get("public_ports") == []
 
-    def test_on_exit_stop_valid(self) -> None:
+    def test_public_ports_valid_list(self) -> None:
         config = {
             "region": "us-east-1",
             "instance_type": "t3.medium",
             "disk_size": 50,
-            "on_exit": "stop",
+            "public_ports": [80, 443],
         }
 
         loader = ConfigLoader()
         loader.validate_config(config)
 
-    def test_on_exit_terminate_valid(self) -> None:
+    def test_public_ports_invalid_type_rejected(self) -> None:
         config = {
             "region": "us-east-1",
             "instance_type": "t3.medium",
             "disk_size": 50,
-            "on_exit": "terminate",
-        }
-
-        loader = ConfigLoader()
-        loader.validate_config(config)
-
-    def test_on_exit_invalid_value_rejected(self) -> None:
-        config = {
-            "region": "us-east-1",
-            "instance_type": "t3.medium",
-            "disk_size": 50,
-            "on_exit": "invalid",
+            "public_ports": "80,443",
         }
 
         loader = ConfigLoader()
         with pytest.raises(ValueError) as exc_info:
             loader.validate_config(config)
 
-        assert "on_exit must be 'stop' or 'terminate'" in str(exc_info.value)
+        assert "public_ports must be a list" in str(exc_info.value)
 
-    def test_on_exit_per_machine_override(self, tmp_path: Path) -> None:
+    def test_public_ports_invalid_port_number_rejected(self) -> None:
+        config = {
+            "region": "us-east-1",
+            "instance_type": "t3.medium",
+            "disk_size": 50,
+            "public_ports": [80000],
+        }
+
+        loader = ConfigLoader()
+        with pytest.raises(ValueError):
+            loader.validate_config(config)
+
+    def test_public_ports_allowed_cidr_valid(self, tmp_path: Path) -> None:
         config_file = tmp_path / "campers.yaml"
         config_data = {
             "defaults": {
                 "region": "us-east-1",
                 "instance_type": "t3.medium",
                 "disk_size": 50,
-                "on_exit": "stop",
-            },
-            "camps": {
-                "test-machine": {
-                    "on_exit": "terminate",
-                }
+                "public_ports": [80, 443],
+                "public_ports_allowed_cidr": "10.0.0.0/8",
             },
         }
         config_file.write_text(yaml.dump(config_data))
@@ -1442,7 +1425,5 @@ class TestConfigLoaderVariableSubstitution:
         full_config = loader.load_config(str(config_file))
 
         defaults = full_config.get("defaults", {})
-        assert defaults.get("on_exit") == "stop"
-
-        camps = full_config.get("camps", {})
-        assert camps.get("test-machine", {}).get("on_exit") == "terminate"
+        assert defaults.get("public_ports") == [80, 443]
+        assert defaults.get("public_ports_allowed_cidr") == "10.0.0.0/8"

@@ -49,6 +49,7 @@ Scenario: Invalid regex pattern validation
 @smoke @dry_run
 Scenario: Test mode simulates environment forwarding
   Given CAMPERS_TEST_MODE is "1"
+  And local environment has AWS_ACCESS_KEY_ID and HF_TOKEN
   And config has env_filter ["AWS_.*", "HF_TOKEN"]
   When I run campers command "run -c 'echo test'"
   Then status message "Forwarding" is logged

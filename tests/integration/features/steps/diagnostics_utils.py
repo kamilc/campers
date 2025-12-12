@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import subprocess
 import time
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Sequence
-
 
 from behave.runner import Context
-from tests.harness.utils.system_snapshot import gather_system_snapshot
 
+from tests.harness.utils.system_snapshot import gather_system_snapshot
 
 DIAGNOSTIC_ENV_PREFIXES: tuple[str, ...] = ("CAMPERS_", "AWS_", "LOCALSTACK")
 
@@ -110,19 +110,15 @@ def send_signal_to_process(process: subprocess.Popen, sig: int) -> None:
     try:
         pgid = os.getpgid(pid)
     except OSError:
-        try:
+        with contextlib.suppress(OSError):
             os.kill(pid, sig)
-        except OSError:
-            pass
         return
 
     try:
         os.killpg(pgid, sig)
     except OSError:
-        try:
+        with contextlib.suppress(OSError):
             os.kill(pid, sig)
-        except OSError:
-            pass
 
 
 def collect_diagnostics(
@@ -155,7 +151,7 @@ def collect_diagnostics(
     scenario_status = getattr(scenario, "status", "unknown")
     scenario_tags = sorted(getattr(scenario, "tags", []))
 
-    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     scenario_slug = sanitize_for_path(scenario_name)
     reason_slug = sanitize_for_path(reason)
 

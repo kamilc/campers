@@ -1,45 +1,66 @@
 """SSH connection and command execution management."""
 
+import inspect
 import logging
 import os
 import re
 import shlex
-import socket
 import time
+from dataclasses import dataclass
 
 import paramiko
 from paramiko.channel import Channel, ChannelFile
 
+from campers.constants import (
+    DEFAULT_CHANNEL_TIMEOUT,
+    DEFAULT_PROVIDER,
+    DEFAULT_SSH_PORT,
+    DEFAULT_SSH_USERNAME,
+    MAX_COMMAND_LENGTH,
+    SENSITIVE_PATTERNS,
+    SSH_RETRY_DELAYS,
+)
+from campers.providers import get_provider
+
 logger = logging.getLogger(__name__)
 
-MAX_COMMAND_LENGTH = 10000
+
+@dataclass
+class SSHConnectionInfo:
+    """SSH connection information.
+
+    Attributes
+    ----------
+    host : str
+        Remote host IP address or hostname
+    port : int
+        SSH port number
+    key_file : str
+        SSH private key file path
+    username : str | None
+        SSH username (optional, defaults to system default)
+    tag_key_file : str | None
+        SSH key file from harness tags (optional, overrides key_file)
+    """
+
+    host: str
+    port: int
+    key_file: str
+    username: str | None = None
+    tag_key_file: str | None = None
 
 
-def get_ssh_connection_info(
-    instance_id: str, public_ip: str, key_file: str
-) -> tuple[str, int, str]:
+def get_ssh_connection_info(instance_id: str, public_ip: str, key_file: str) -> SSHConnectionInfo:
     """Determine SSH connection host, port, and key file.
 
-    Standard AWS path: If instance has a public IP, returns (public_ip, 22,
-    key_file) using standard AWS configuration. This is the normal path for
-    production AWS users and development on real EC2 instances.
-
-    LocalStack path: If instance has no public IP and LocalStack is detected
-    via boto3 endpoint URL inspection, reads SSH connection details from EC2
-    instance tags (MoondockSSHHost, MoondockSSHPort, MoondockSSHKeyFile).
-    This enables high-fidelity BDD testing against LocalStack.
-
-    LocalStack detection is defensive: checks actual boto3 endpoint URL for
-    "localstack" or ":4566" (default LocalStack port) rather than using
-    environment variables or test mode flags. Real AWS users with public-facing
-    instances never trigger this code path because they have public IPs. For
-    production use cases requiring private subnets, standard SSH proxy patterns
-    apply (bastion hosts, VPNs, etc.).
+    Delegates to provider-specific SSH resolution through the provider registry.
+    Currently only AWS is supported, but this interface allows for multi-cloud
+    support in the future.
 
     Parameters
     ----------
     instance_id : str
-        EC2 instance ID
+        Instance ID
     public_ip : str
         Instance public IP address
     key_file : str
@@ -47,89 +68,30 @@ def get_ssh_connection_info(
 
     Returns
     -------
-    tuple[str, int, str]
-        (host, port, key_file) tuple for SSH connection
+    SSHConnectionInfo
+        SSH connection information with host, port, and key file
 
     Raises
     ------
     ValueError
-        If instance has no public IP address and LocalStack is not detected
+        If SSH connection details cannot be determined
     """
-    logger.info(
-        f"get_ssh_connection_info: instance_id={instance_id}, public_ip={public_ip!r}"
-    )
+    provider = get_provider(DEFAULT_PROVIDER)
+    get_ssh_info_func = provider.get("get_ssh_connection_info")
 
-    if public_ip:
-        return public_ip, 22, key_file
+    if get_ssh_info_func is None:
+        raise ValueError("SSH connection info function not registered for the provider")
 
-    import boto3
-    import time
+    if callable(get_ssh_info_func):
+        sig = inspect.signature(get_ssh_info_func)
+        if len(sig.parameters) == 0:
+            get_ssh_info_func = get_ssh_info_func()
 
-    logger.info(
-        f"Instance {instance_id} has no public IP, checking for SSH tags in LocalStack"
-    )
-
-    try:
-        ec2_client = boto3.client("ec2")
-        endpoint = ec2_client.meta.endpoint_url
-        logger.info(f"EC2 endpoint: {endpoint}")
-        is_localstack = endpoint and (
-            "localstack" in endpoint.lower() or ":4566" in endpoint
-        )
-        logger.info(f"Is LocalStack: {is_localstack}")
-
-        if is_localstack:
-            max_retries = 10
-            retry_delay = 0.5
-
-            for attempt in range(max_retries):
-                response = ec2_client.describe_tags(
-                    Filters=[
-                        {"Name": "resource-id", "Values": [instance_id]},
-                        {
-                            "Name": "key",
-                            "Values": [
-                                "CampersSSHHost",
-                                "CampersSSHPort",
-                                "CampersSSHKeyFile",
-                            ],
-                        },
-                    ]
-                )
-
-                tags = {tag["Key"]: tag["Value"] for tag in response.get("Tags", [])}
-
-                if (
-                    "CampersSSHHost" in tags
-                    and "CampersSSHPort" in tags
-                    and "CampersSSHKeyFile" in tags
-                ):
-                    host = tags["CampersSSHHost"]
-                    port = int(tags["CampersSSHPort"])
-                    tag_key_file = tags["CampersSSHKeyFile"]
-                    logger.info(
-                        f"Using tag-based SSH config for {instance_id}: {host}:{port}"
-                    )
-                    return host, port, tag_key_file
-
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-
-            logger.warning(
-                f"SSH tags not found for {instance_id} after {max_retries} attempts"
-            )
-
-    except Exception as e:
-        logger.warning(f"Failed to read SSH tags from instance {instance_id}: {e}")
-
-    raise ValueError(
-        f"Instance {instance_id} does not have a public IP address. "
-        "SSH connection requires public networking configuration."
-    )
+    return get_ssh_info_func(instance_id, public_ip, key_file)
 
 
 class SSHManager:
-    """Manages SSH connections and command execution on EC2 instances.
+    """Manages SSH connections and command execution on cloud instances.
 
     Parameters
     ----------
@@ -157,7 +119,11 @@ class SSHManager:
     """
 
     def __init__(
-        self, host: str, key_file: str, username: str = "ubuntu", port: int = 22
+        self,
+        host: str,
+        key_file: str,
+        username: str = DEFAULT_SSH_USERNAME,
+        port: int = DEFAULT_SSH_PORT,
     ) -> None:
         """Initialize SSHManager with connection parameters.
 
@@ -200,13 +166,11 @@ class SSHManager:
         PermissionError
             If SSH key file has incorrect permissions or cannot be accessed
         """
-        delays = [1, 2, 4, 8, 16, 30, 30, 30, 30, 30]
         timeout_seconds = int(os.environ.get("CAMPERS_SSH_TIMEOUT", "30"))
-        effective_max_retries = int(
-            os.environ.get("CAMPERS_SSH_MAX_RETRIES", str(max_retries))
-        )
+        effective_max_retries = int(os.environ.get("CAMPERS_SSH_MAX_RETRIES", str(max_retries)))
 
         for attempt in range(effective_max_retries):
+            old_client = self.client
             try:
                 logger.info(
                     "Attempting SSH connection (attempt %s/%s)...",
@@ -214,10 +178,30 @@ class SSHManager:
                     effective_max_retries,
                 )
 
-                self.client = paramiko.SSHClient()
-                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                if old_client is not None:
+                    try:
+                        old_client.close()
+                    except (OSError, paramiko.SSHException) as e:
+                        logger.warning("Failed to close previous SSH connection: %s", e)
 
-                key = paramiko.RSAKey.from_private_key_file(self.key_file)
+                self.client = paramiko.SSHClient()
+
+                if os.environ.get("CAMPERS_STRICT_HOST_KEY", "0") == "1":
+                    self.client.load_system_host_keys()
+                    self.client.set_missing_host_key_policy(paramiko.RejectPolicy())
+                else:
+                    self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+                try:
+                    key = paramiko.Ed25519Key.from_private_key_file(self.key_file)
+                except (paramiko.SSHException, ValueError):
+                    try:
+                        key = paramiko.RSAKey.from_private_key_file(self.key_file)
+                    except (paramiko.SSHException, ValueError):
+                        try:
+                            key = paramiko.ECDSAKey.from_private_key_file(self.key_file)
+                        except (paramiko.SSHException, ValueError):
+                            key = paramiko.DSSKey.from_private_key_file(self.key_file)
 
                 self.client.connect(
                     hostname=self.host,
@@ -230,16 +214,10 @@ class SSHManager:
                 )
                 return
 
-            except (
-                paramiko.ssh_exception.NoValidConnectionsError,
-                paramiko.ssh_exception.SSHException,
-                TimeoutError,
-                ConnectionRefusedError,
-                ConnectionResetError,
-                socket.timeout,
-            ) as e:
+            except (TimeoutError, paramiko.SSHException, OSError) as e:
                 if attempt < effective_max_retries - 1:
-                    delay = delays[attempt]
+                    delay_index = min(attempt, len(SSH_RETRY_DELAYS) - 1)
+                    delay = SSH_RETRY_DELAYS[delay_index]
                     time.sleep(delay)
                     continue
                 else:
@@ -247,20 +225,20 @@ class SSHManager:
                         f"Failed to establish SSH connection after {effective_max_retries} attempts"
                     ) from e
 
-    def stream_remaining_output(self, stream: ChannelFile, stream_type: str) -> None:
+    def stream_remaining_output(self, stream: ChannelFile) -> None:
         """Stream remaining output from a channel stream.
 
         Parameters
         ----------
         stream : ChannelFile
             Channel stream to read from (stdout or stderr)
-        stream_type : str
-            Stream type identifier: "stdout" or "stderr"
         """
         for line in stream.readlines():
             logging.info(line.rstrip("\n"))
 
-    def stream_output_realtime(self, stdout: ChannelFile, stderr: ChannelFile) -> None:
+    def stream_output_realtime(
+        self, stdout: ChannelFile, stderr: ChannelFile, timeout: float | None = None
+    ) -> None:
         """Stream stdout and stderr in real-time until command completes.
 
         Parameters
@@ -269,9 +247,29 @@ class SSHManager:
             SSH channel stdout stream
         stderr : ChannelFile
             SSH channel stderr stream
+        timeout : float | None, optional
+            Maximum total time in seconds to wait for command completion.
+            Default is None (no timeout).
+
+        Raises
+        ------
+        TimeoutError
+            If command does not complete within the timeout period
         """
+        start_time = time.monotonic()
+
         while True:
-            line = stdout.readline()
+            if timeout is not None and time.monotonic() - start_time > timeout:
+                raise TimeoutError(f"Stream output timed out after {timeout} seconds")
+
+            stdout.channel.settimeout(DEFAULT_CHANNEL_TIMEOUT)
+
+            try:
+                line = stdout.readline()
+            except TimeoutError:
+                if stdout.channel.exit_status_ready():
+                    break
+                continue
 
             if line:
                 logging.info(line.rstrip("\n"))
@@ -281,7 +279,7 @@ class SSHManager:
                 if err_line:
                     logging.info(err_line.rstrip("\n"))
 
-            if stdout.channel.exit_status_ready():
+            if stdout.channel.exit_status_ready() and not line:
                 break
 
     def _execute_with_streaming(self, command: str) -> int:
@@ -317,8 +315,8 @@ class SSHManager:
 
             self.stream_output_realtime(stdout, stderr)
 
-            self.stream_remaining_output(stdout, "stdout")
-            self.stream_remaining_output(stderr, "stderr")
+            self.stream_remaining_output(stdout)
+            self.stream_remaining_output(stderr)
 
             exit_code = stdout.channel.recv_exit_status()
             return exit_code
@@ -338,6 +336,29 @@ class SSHManager:
                 stderr.close()
 
             self._active_channel = None
+
+    def validate_command_length(self, command: str) -> None:
+        """Validate that command does not exceed maximum length.
+
+        Parameters
+        ----------
+        command : str
+            Command to validate
+
+        Raises
+        ------
+        ValueError
+            If command is empty or exceeds maximum length
+        """
+        if not command or not command.strip():
+            raise ValueError("Command cannot be empty")
+
+        if len(command) > MAX_COMMAND_LENGTH:
+            msg = (
+                f"Command length ({len(command)}) exceeds maximum of "
+                f"{MAX_COMMAND_LENGTH} characters"
+            )
+            raise ValueError(msg)
 
     def execute_command(self, command: str) -> int:
         """Execute command and stream output in real-time.
@@ -361,14 +382,7 @@ class SSHManager:
         KeyboardInterrupt
             If user presses Ctrl+C during command execution
         """
-        if not command or not command.strip():
-            raise ValueError("Command cannot be empty")
-
-        if len(command) > MAX_COMMAND_LENGTH:
-            raise ValueError(
-                f"Command length ({len(command)}) exceeds maximum of {MAX_COMMAND_LENGTH} characters"
-            )
-
+        self.validate_command_length(command)
         shell_command = f"cd ~ && bash -c {shlex.quote(command)}"
         return self._execute_with_streaming(shell_command)
 
@@ -396,14 +410,7 @@ class SSHManager:
         KeyboardInterrupt
             If user presses Ctrl+C during command execution
         """
-        if not command or not command.strip():
-            raise ValueError("Command cannot be empty")
-
-        if len(command) > MAX_COMMAND_LENGTH:
-            raise ValueError(
-                f"Command length ({len(command)}) exceeds maximum of {MAX_COMMAND_LENGTH} characters"
-            )
-
+        self.validate_command_length(command)
         return self._execute_with_streaming(command)
 
     def filter_environment_variables(
@@ -441,15 +448,12 @@ class SSHManager:
 
         if filtered_vars:
             var_names = ", ".join(sorted(filtered_vars.keys()))
-            logger.info(
-                "Forwarding %s environment variables: %s", len(filtered_vars), var_names
-            )
+            logger.info("Forwarding %s environment variables: %s", len(filtered_vars), var_names)
 
-            sensitive_patterns = ["SECRET", "PASSWORD", "TOKEN", "KEY"]
             sensitive_vars = [
                 name
-                for name in filtered_vars.keys()
-                if any(pattern in name.upper() for pattern in sensitive_patterns)
+                for name in filtered_vars
+                if any(pattern in name.upper() for pattern in SENSITIVE_PATTERNS)
             ]
 
             if sensitive_vars:
@@ -497,11 +501,13 @@ class SSHManager:
         full_command = f"{export_prefix} && {command}"
 
         if len(full_command) > MAX_COMMAND_LENGTH:
-            raise ValueError(
+            msg = (
                 f"Command with environment variables ({len(full_command)} chars) "
                 f"exceeds maximum of {MAX_COMMAND_LENGTH} characters. "
-                f"Consider: 1) reducing environment variables, 2) using shorter values, or 3) simplifying the command."
+                f"Consider: 1) reducing environment variables, "
+                f"2) using shorter values, or 3) simplifying the command."
             )
+            raise ValueError(msg)
 
         return full_command
 
@@ -548,7 +554,7 @@ class SSHManager:
 
         try:
             self._active_channel.close()
-        except Exception as exc:  # pragma: no cover
-            logging.debug("Failed to close active SSH channel: %s", exc)
+        except (OSError, paramiko.SSHException) as exc:
+            logger.warning("Failed to close active SSH channel: %s", exc)
         finally:
             self._active_channel = None

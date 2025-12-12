@@ -1,6 +1,5 @@
 """Unit tests for InstanceOverviewWidget."""
 
-import asyncio
 from datetime import datetime
 from unittest.mock import Mock, patch
 
@@ -11,7 +10,7 @@ import pytest
 def mock_campers():
     """Create mock Campers instance."""
     campers = Mock()
-    campers._ec2_manager_factory = Mock()
+    campers._compute_provider_factory = Mock()
     return campers
 
 
@@ -31,32 +30,39 @@ def mock_pricing_service():
     return service
 
 
-def test_widget_initialization(mock_campers, mock_ec2_manager):
-    """Test widget initializes with correct attributes."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+@pytest.fixture
+def initialized_widget(mock_campers, mock_ec2_manager, mock_pricing_service):
+    """Create widget with mocked services pre-initialized."""
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
+    mock_campers._compute_provider_factory.return_value = mock_ec2_manager
 
-    with patch("campers.pricing.PricingService") as MockPricing:
-        mock_pricing = Mock()
-        MockPricing.return_value = mock_pricing
-
+    with patch.object(InstanceOverviewWidget, "app", new_callable=lambda: Mock()):
         widget = InstanceOverviewWidget(mock_campers)
+        widget.compute_provider = mock_ec2_manager
+        widget.pricing_service = mock_pricing_service
+        widget._initialized = True
 
-        assert widget.running_count == 0
-        assert widget.stopped_count == 0
-        assert widget.daily_cost is None
-        assert widget.last_update is None
-        assert widget.ec2_manager == mock_ec2_manager
-        assert widget.pricing_service == mock_pricing
+        yield widget
 
 
-def test_refresh_stats_counts_instances_correctly(
-    mock_campers, mock_ec2_manager, mock_pricing_service
-):
-    """Test refresh_stats correctly counts running and stopped instances."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+def test_widget_initialization(mock_campers):
+    """Test widget initializes with correct default attributes."""
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
+    widget = InstanceOverviewWidget(mock_campers)
+
+    assert widget.running_count == 0
+    assert widget.stopped_count == 0
+    assert widget.daily_cost is None
+    assert widget.last_update is None
+    assert widget.compute_provider is None
+    assert widget.pricing_service is None
+    assert widget._initialized is False
+
+
+def test_refresh_stats_counts_instances_correctly(initialized_widget, mock_ec2_manager):
+    """Test _refresh_stats_sync correctly counts running and stopped instances."""
     mock_ec2_manager.list_instances.return_value = [
         {
             "instance_id": "i-1",
@@ -95,44 +101,27 @@ def test_refresh_stats_counts_instances_correctly(
         },
     ]
 
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
+    initialized_widget._refresh_stats_sync()
 
-    with patch("campers.pricing.PricingService") as MockPricing:
-        MockPricing.return_value = mock_pricing_service
-
-        widget = InstanceOverviewWidget(mock_campers)
-        asyncio.run(widget.refresh_stats())
-
-        assert widget.running_count == 2
-        assert widget.stopped_count == 3
-        assert isinstance(widget.last_update, datetime)
+    assert initialized_widget.running_count == 2
+    assert initialized_widget.stopped_count == 3
+    assert isinstance(initialized_widget.last_update, datetime)
 
 
-def test_refresh_stats_handles_empty_list(
-    mock_campers, mock_ec2_manager, mock_pricing_service
-):
-    """Test refresh_stats handles empty instance list."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
-
+def test_refresh_stats_handles_empty_list(initialized_widget, mock_ec2_manager):
+    """Test _refresh_stats_sync handles empty instance list."""
     mock_ec2_manager.list_instances.return_value = []
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("campers.pricing.PricingService") as MockPricing:
-        MockPricing.return_value = mock_pricing_service
+    initialized_widget._refresh_stats_sync()
 
-        widget = InstanceOverviewWidget(mock_campers)
-        asyncio.run(widget.refresh_stats())
-
-        assert widget.running_count == 0
-        assert widget.stopped_count == 0
+    assert initialized_widget.running_count == 0
+    assert initialized_widget.stopped_count == 0
 
 
 def test_refresh_stats_calculates_daily_cost_when_pricing_available(
-    mock_campers, mock_ec2_manager
+    initialized_widget, mock_ec2_manager
 ):
-    """Test refresh_stats calculates daily cost when pricing is available."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
-
+    """Test _refresh_stats_sync calculates daily cost when pricing is available."""
     mock_ec2_manager.list_instances.return_value = [
         {
             "instance_id": "i-1",
@@ -150,29 +139,20 @@ def test_refresh_stats_calculates_daily_cost_when_pricing_available(
         },
     ]
 
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
+    initialized_widget.pricing_service.pricing_available = True
+    initialized_widget.pricing_service.get_ec2_hourly_rate.side_effect = [37.45, 37.45]
 
-    with patch("campers.pricing.PricingService") as MockPricing, patch(
-        "campers.pricing.calculate_monthly_cost"
-    ) as mock_calc:
-        mock_pricing = Mock()
-        mock_pricing.pricing_available = True
-        MockPricing.return_value = mock_pricing
-        mock_calc.side_effect = [899.0, 899.0]
+    initialized_widget._refresh_stats_sync()
 
-        widget = InstanceOverviewWidget(mock_campers)
-        asyncio.run(widget.refresh_stats())
-
-        assert widget.daily_cost == pytest.approx(1798.0 / 30, rel=0.01)
-        assert mock_calc.call_count == 2
+    expected_monthly = 37.45 * 24 * 30 * 2
+    expected_daily = expected_monthly / 30
+    assert initialized_widget.daily_cost == pytest.approx(expected_daily, rel=0.01)
 
 
 def test_refresh_stats_sets_none_cost_when_pricing_unavailable(
-    mock_campers, mock_ec2_manager, mock_pricing_service
+    initialized_widget, mock_ec2_manager
 ):
-    """Test refresh_stats sets None for cost when pricing unavailable."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
-
+    """Test _refresh_stats_sync sets None for cost when pricing unavailable."""
     mock_ec2_manager.list_instances.return_value = [
         {
             "instance_id": "i-1",
@@ -183,103 +163,68 @@ def test_refresh_stats_sets_none_cost_when_pricing_unavailable(
         },
     ]
 
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
-    mock_pricing_service.pricing_available = False
+    initialized_widget.pricing_service.pricing_available = False
 
-    with patch("campers.pricing.PricingService") as MockPricing:
-        MockPricing.return_value = mock_pricing_service
+    initialized_widget._refresh_stats_sync()
 
-        widget = InstanceOverviewWidget(mock_campers)
-        asyncio.run(widget.refresh_stats())
-
-        assert widget.daily_cost is None
-        assert widget.running_count == 1
+    assert initialized_widget.daily_cost is None
+    assert initialized_widget.running_count == 1
 
 
-def test_refresh_stats_handles_ec2_api_errors_gracefully(
-    mock_campers, mock_ec2_manager, mock_pricing_service
-):
-    """Test refresh_stats maintains last known state when EC2 API fails."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+def test_refresh_stats_handles_ec2_api_errors_gracefully(initialized_widget, mock_ec2_manager):
+    """Test _refresh_stats_sync maintains last known state when EC2 API fails."""
+    from campers.providers.exceptions import ProviderAPIError
 
-    mock_ec2_manager.list_instances.side_effect = Exception("EC2 API error")
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
+    mock_ec2_manager.list_instances.side_effect = ProviderAPIError("EC2 API error")
 
-    with patch("campers.pricing.PricingService") as MockPricing:
-        MockPricing.return_value = mock_pricing_service
+    initialized_widget.running_count = 5
+    initialized_widget.stopped_count = 3
 
-        widget = InstanceOverviewWidget(mock_campers)
-        widget.running_count = 5
-        widget.stopped_count = 3
+    initialized_widget._refresh_stats_sync()
 
-        asyncio.run(widget.refresh_stats())
-
-        assert widget.running_count == 5
-        assert widget.stopped_count == 3
+    assert initialized_widget.running_count == 5
+    assert initialized_widget.stopped_count == 3
 
 
-def test_render_stats_formats_with_cost(mock_campers, mock_ec2_manager):
+def test_render_stats_formats_with_cost(mock_campers):
     """Test render_stats formats display with cost."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
+    widget = InstanceOverviewWidget(mock_campers)
+    widget.running_count = 2
+    widget.stopped_count = 3
+    widget.daily_cost = 72.72
 
-    with patch("campers.pricing.PricingService") as MockPricing:
-        MockPricing.return_value = Mock()
+    result = widget.render_stats()
 
-        widget = InstanceOverviewWidget(mock_campers)
-        widget.running_count = 2
-        widget.stopped_count = 3
-        widget.daily_cost = 72.72
-
-        result = widget.render_stats()
-
-        assert result == "Running: 2  Stopped: 3  $72.72/day"
+    assert result == "Instances - Running: 2  Stopped: 3  $72.72/day"
 
 
-def test_render_stats_formats_without_cost(mock_campers, mock_ec2_manager):
+def test_render_stats_formats_without_cost(mock_campers):
     """Test render_stats formats display without cost (N/A)."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
 
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
+    widget = InstanceOverviewWidget(mock_campers)
+    widget.running_count = 1
+    widget.stopped_count = 0
+    widget.daily_cost = None
 
-    with patch("campers.pricing.PricingService") as MockPricing:
-        MockPricing.return_value = Mock()
+    result = widget.render_stats()
 
-        widget = InstanceOverviewWidget(mock_campers)
-        widget.running_count = 1
-        widget.stopped_count = 0
-        widget.daily_cost = None
-
-        result = widget.render_stats()
-
-        assert result == "Running: 1  Stopped: 0  N/A"
+    assert result == "Instances - Running: 1  Stopped: 0  N/A"
 
 
-def test_widget_queries_all_regions(
-    mock_campers, mock_ec2_manager, mock_pricing_service
-):
+def test_widget_queries_all_regions(initialized_widget, mock_ec2_manager):
     """Test widget queries all regions using region_filter=None."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
-
     mock_ec2_manager.list_instances.return_value = []
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
 
-    with patch("campers.pricing.PricingService") as MockPricing:
-        MockPricing.return_value = mock_pricing_service
+    initialized_widget._refresh_stats_sync()
 
-        widget = InstanceOverviewWidget(mock_campers)
-        asyncio.run(widget.refresh_stats())
-
-        mock_ec2_manager.list_instances.assert_called_once_with(region_filter=None)
+    mock_ec2_manager.list_instances.assert_called_once_with(region_filter=None)
 
 
-def test_refresh_stats_shows_na_when_all_prices_none(
-    mock_campers, mock_ec2_manager
-):
+def test_refresh_stats_shows_na_when_all_prices_none(initialized_widget, mock_ec2_manager):
     """Test widget shows N/A when all running instances return None for pricing."""
-    from campers.instance_overview_widget import InstanceOverviewWidget
-
     mock_ec2_manager.list_instances.return_value = [
         {
             "instance_id": "i-1",
@@ -290,18 +235,23 @@ def test_refresh_stats_shows_na_when_all_prices_none(
         },
     ]
 
-    mock_campers._ec2_manager_factory.return_value = mock_ec2_manager
+    initialized_widget.pricing_service.pricing_available = True
+    initialized_widget.pricing_service.get_ec2_hourly_rate.return_value = None
 
-    with patch("campers.pricing.PricingService") as MockPricing, patch(
-        "campers.pricing.calculate_monthly_cost"
-    ) as mock_calc:
-        mock_pricing = Mock()
-        mock_pricing.pricing_available = True
-        MockPricing.return_value = mock_pricing
-        mock_calc.return_value = None
+    initialized_widget._refresh_stats_sync()
 
-        widget = InstanceOverviewWidget(mock_campers)
-        asyncio.run(widget.refresh_stats())
+    assert initialized_widget.daily_cost is None
+    assert initialized_widget.render_stats() == "Instances - Running: 1  Stopped: 0  N/A"
 
-        assert widget.daily_cost is None
-        assert widget.render_stats() == "Running: 1  Stopped: 0  N/A"
+
+def test_refresh_stats_skips_when_not_initialized(mock_campers, mock_ec2_manager):
+    """Test _refresh_stats_sync returns early when not initialized."""
+    from campers.tui.instance_overview_widget import InstanceOverviewWidget
+
+    widget = InstanceOverviewWidget(mock_campers)
+    widget.ec2_manager = mock_ec2_manager
+    widget._initialized = False
+
+    widget._refresh_stats_sync()
+
+    mock_ec2_manager.list_instances.assert_not_called()

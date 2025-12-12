@@ -33,16 +33,10 @@ def step_setup_two_env_vars(context, var1, var2):
 
     if is_localstack:
         baseline_env = {
-            "AWS_ENDPOINT_URL": context.saved_env.get(
-                "AWS_ENDPOINT_URL", "http://localhost:4566"
-            ),
+            "AWS_ENDPOINT_URL": context.saved_env.get("AWS_ENDPOINT_URL", "http://localhost:4566"),
             "AWS_ACCESS_KEY_ID": context.saved_env.get("AWS_ACCESS_KEY_ID", "testing"),
-            "AWS_SECRET_ACCESS_KEY": context.saved_env.get(
-                "AWS_SECRET_ACCESS_KEY", "testing"
-            ),
-            "AWS_DEFAULT_REGION": context.saved_env.get(
-                "AWS_DEFAULT_REGION", "us-east-1"
-            ),
+            "AWS_SECRET_ACCESS_KEY": context.saved_env.get("AWS_SECRET_ACCESS_KEY", "testing"),
+            "AWS_DEFAULT_REGION": context.saved_env.get("AWS_DEFAULT_REGION", "us-east-1"),
         }
 
         for name, value in baseline_env.items():
@@ -85,16 +79,10 @@ def step_setup_three_env_vars(context, var1, var2, var3):
 
     if is_localstack:
         baseline_env = {
-            "AWS_ENDPOINT_URL": context.saved_env.get(
-                "AWS_ENDPOINT_URL", "http://localhost:4566"
-            ),
+            "AWS_ENDPOINT_URL": context.saved_env.get("AWS_ENDPOINT_URL", "http://localhost:4566"),
             "AWS_ACCESS_KEY_ID": context.saved_env.get("AWS_ACCESS_KEY_ID", "testing"),
-            "AWS_SECRET_ACCESS_KEY": context.saved_env.get(
-                "AWS_SECRET_ACCESS_KEY", "testing"
-            ),
-            "AWS_DEFAULT_REGION": context.saved_env.get(
-                "AWS_DEFAULT_REGION", "us-east-1"
-            ),
+            "AWS_SECRET_ACCESS_KEY": context.saved_env.get("AWS_SECRET_ACCESS_KEY", "testing"),
+            "AWS_DEFAULT_REGION": context.saved_env.get("AWS_DEFAULT_REGION", "us-east-1"),
         }
 
         for name, value in baseline_env.items():
@@ -187,15 +175,16 @@ def step_filter_environment_variables(context):
     context : behave.runner.Context
         Behave context object
     """
-    from campers.ssh import SSHManager
+    from campers.services.ssh import SSHManager
 
     ssh_manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem")
 
     env_filter = None
+    has_config_data = hasattr(context, "config_data") and context.config_data
+    has_defaults = has_config_data and "defaults" in context.config_data
 
-    if hasattr(context, "config_data") and context.config_data:
-        if "defaults" in context.config_data:
-            env_filter = context.config_data["defaults"].get("env_filter")
+    if has_defaults:
+        env_filter = context.config_data["defaults"].get("env_filter")
 
     context.filtered_vars = ssh_manager.filter_environment_variables(env_filter)
 
@@ -209,7 +198,7 @@ def step_config_validation_runs(context):
     context : behave.runner.Context
         Behave context object
     """
-    from campers.config import ConfigLoader
+    from campers.core.config import ConfigLoader
 
     config_loader = ConfigLoader()
 
@@ -246,12 +235,9 @@ def step_two_env_vars_forwarded(context):
             f"Expected 2 variables, got {len(context.filtered_vars)}"
         )
     elif hasattr(context, "stderr"):
-        assert (
-            "Forwarding 2 environment variables" in context.stderr
-            or context.exit_code == 0
-        )
+        assert "Forwarding 2 environment variables" in context.stderr or context.exit_code == 0
     else:
-        assert False, "Neither filtered_vars nor stderr available for verification"
+        raise AssertionError("Neither filtered_vars nor stderr available for verification")
 
 
 @then("command executes with export prefix")
@@ -279,9 +265,7 @@ def step_aws_credentials_available(context):
         Behave context object
     """
     if hasattr(context, "filtered_vars"):
-        assert any("AWS" in var for var in context.filtered_vars.keys()), (
-            "No AWS variables found"
-        )
+        assert any("AWS" in var for var in context.filtered_vars), "No AWS variables found"
     else:
         assert context.exit_code == 0
 
@@ -300,12 +284,9 @@ def step_three_env_vars_forwarded(context):
             f"Expected 3 variables, got {len(context.filtered_vars)}"
         )
     elif hasattr(context, "stderr"):
-        assert (
-            "Forwarding 3 environment variables" in context.stderr
-            or context.exit_code == 0
-        )
+        assert "Forwarding 3 environment variables" in context.stderr or context.exit_code == 0
     else:
-        assert False, "Neither filtered_vars nor stderr available for verification"
+        raise AssertionError("Neither filtered_vars nor stderr available for verification")
 
 
 @then("no environment variables are forwarded")
@@ -399,11 +380,9 @@ def step_test_completes_successfully(context):
     if hasattr(context, "command_executed"):
         assert context.command_executed is True, "Command execution failed"
     elif hasattr(context, "exit_code"):
-        assert context.exit_code == 0, (
-            f"Command failed with exit code {context.exit_code}"
-        )
+        assert context.exit_code == 0, f"Command failed with exit code {context.exit_code}"
     else:
-        assert False, "Neither command_executed nor exit_code available"
+        raise AssertionError("Neither command_executed nor exit_code available")
 
 
 @then('warning message "{message}" is logged')

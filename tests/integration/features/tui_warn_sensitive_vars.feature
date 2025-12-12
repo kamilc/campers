@@ -8,7 +8,7 @@ Scenario: Warn about sensitive variables
   And local environment has AWS_SECRET_ACCESS_KEY and OPENAI_API_KEY
   And config has env_filter [".*SECRET.*", ".*_API_KEY$"]
   And stdout is an interactive terminal
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "myproject" in the TUI
   Then the TUI log panel contains "Forwarding sensitive environment variables"
   And the TUI log panel contains "Command completed with exit code: 42"

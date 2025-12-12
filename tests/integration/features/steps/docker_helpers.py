@@ -5,10 +5,10 @@ in LocalStack-based high-fidelity tests.
 """
 
 import logging
-from typing import Union
+
+from behave.runner import Context
 
 import docker
-from behave.runner import Context
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +40,11 @@ def get_ssh_container(context: Context) -> docker.models.containers.Container:
     docker_client = docker.from_env()
     try:
         return docker_client.containers.get(container_name)
-    except docker.errors.NotFound:
-        raise RuntimeError(f"SSH container {container_name} not found")
+    except docker.errors.NotFound as err:
+        raise RuntimeError(f"SSH container {container_name} not found") from err
 
 
-def exec_in_ssh_container(
-    context: Context, command: Union[str, list[str]]
-) -> tuple[int, bytes]:
+def exec_in_ssh_container(context: Context, command: str | list[str]) -> tuple[int, bytes]:
     """Execute command in SSH container.
 
     Parameters
@@ -113,9 +111,7 @@ def create_directory_in_container(
         logger.error(f"chown failed with code {exit_code}: {output.decode()}")
         raise RuntimeError(f"Failed to set ownership on {path}: {output.decode()}")
 
-    logger.debug(
-        f"Successfully created directory: {path} (mode: {mode}, owner: ubuntu:ubuntu)"
-    )
+    logger.debug(f"Successfully created directory: {path} (mode: {mode}, owner: ubuntu:ubuntu)")
 
 
 def create_symlink_in_container(
@@ -168,9 +164,7 @@ def create_symlink_in_container(
     exit_code, output = container.exec_run(["ln", "-sf", target, link_name])
 
     if exit_code != 0:
-        raise RuntimeError(
-            f"Failed to create symlink {link_name} -> {target}: {output.decode()}"
-        )
+        raise RuntimeError(f"Failed to create symlink {link_name} -> {target}: {output.decode()}")
 
     logger.debug(f"Created symlink: {link_name} -> {target}")
 
@@ -202,9 +196,7 @@ def create_synced_directories(context: Context) -> None:
         logger.debug("No instance_id - skipping directory creation")
         return
 
-    logger.debug(
-        f"create_synced_directories - has config_data: {hasattr(context, 'config_data')}"
-    )
+    logger.debug(f"create_synced_directories - has config_data: {hasattr(context, 'config_data')}")
     if not hasattr(context, "config_data"):
         logger.debug("No config_data - skipping directory creation")
         return

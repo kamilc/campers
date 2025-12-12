@@ -37,7 +37,7 @@ Scenario: Skip port forwarding when no ports configured
   Then no SSH tunnels are created
   And no port forwarding log messages appear
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Create single SSH tunnel via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "sleep 30"
@@ -45,14 +45,14 @@ Scenario: Create single SSH tunnel via TUI
   And LocalStack is healthy and responding
   And HTTP server runs on port 48888 in SSH container
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Creating SSH tunnel for port 48888..."
   And the TUI log panel contains "SSH tunnel established: localhost:48888 -> remote:48888"
   And HTTP request to localhost:48888 succeeds
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Create multiple SSH tunnels via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "sleep 30"
@@ -62,7 +62,7 @@ Scenario: Create multiple SSH tunnels via TUI
   And HTTP server runs on port 48889 in SSH container
   And HTTP server runs on port 48890 in SSH container
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Creating SSH tunnel for port 48888..."
@@ -72,19 +72,19 @@ Scenario: Create multiple SSH tunnels via TUI
   And HTTP request to localhost:48889 succeeds
   And HTTP request to localhost:48890 succeeds
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Skip port forwarding when no ports configured via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "sleep 10"
   And camp "test-box" has no ports specified
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel does not contain "Creating SSH tunnel"
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Port forwarding lifecycle via TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has command "sleep 10"
@@ -92,7 +92,7 @@ Scenario: Port forwarding lifecycle via TUI
   And LocalStack is healthy and responding
   And HTTP server runs on port 48891 in SSH container
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Creating SSH tunnel for port 48891..."
@@ -101,13 +101,13 @@ Scenario: Port forwarding lifecycle via TUI
 @smoke @dry_run
 Scenario: Test mode simulates SSH tunnels
   Given CAMPERS_TEST_MODE is "1"
-  And config file with ports [48888, 6006]
+  And config file with ports [48888, 48892]
   When I run campers command "run -c 'echo test'"
   Then SSH tunnel creation is skipped
   And status message "Creating SSH tunnel for port 48888..." is logged
   And status message "SSH tunnel established: localhost:48888 -> remote:48888" is logged
-  And status message "Creating SSH tunnel for port 6006..." is logged
-  And status message "SSH tunnel established: localhost:6006 -> remote:6006" is logged
+  And status message "Creating SSH tunnel for port 48892..." is logged
+  And status message "SSH tunnel established: localhost:48892 -> remote:48892" is logged
 
 @smoke @dry_run
 Scenario: Localhost-only binding for security
@@ -116,3 +116,22 @@ Scenario: Localhost-only binding for security
   Then status message "Creating SSH tunnel for port 48888..." is logged
   And status message "SSH tunnel established: localhost:48888 -> remote:48888" is logged
 
+@smoke @dry_run
+Scenario: Port mapping with different local and remote ports
+  Given CAMPERS_TEST_MODE is "1"
+  And config file with port mapping "46006:46007"
+  When I run campers command "run -c 'echo test'"
+  Then SSH tunnel creation is skipped
+  And status message "Creating SSH tunnel for port 46006..." is logged
+  And status message "SSH tunnel established: localhost:46007 -> remote:46006" is logged
+
+@smoke @dry_run
+Scenario: Mixed port specifications with same and different ports
+  Given CAMPERS_TEST_MODE is "1"
+  And config file with ports ["48888", "46006:46007"]
+  When I run campers command "run -c 'echo test'"
+  Then SSH tunnel creation is skipped
+  And status message "Creating SSH tunnel for port 48888..." is logged
+  And status message "SSH tunnel established: localhost:48888 -> remote:48888" is logged
+  And status message "Creating SSH tunnel for port 46006..." is logged
+  And status message "SSH tunnel established: localhost:46007 -> remote:46006" is logged

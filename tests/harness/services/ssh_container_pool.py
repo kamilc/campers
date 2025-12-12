@@ -5,8 +5,9 @@ from __future__ import annotations
 import socket
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 
 class PortExhaustedError(Exception):
@@ -85,10 +86,10 @@ class SSHContainerPool:
         self._port_probe = port_probe or self._probe_port
         self._lock = threading.RLock()
         self._next_port = base_port
-        self._allocated_ports: Dict[str, List[int]] = {}
+        self._allocated_ports: dict[str, list[int]] = {}
         self._in_use_ports: set[int] = set()
-        self._recycled_ports: List[int] = []
-        self._containers: Dict[str, SSHContainerRecord] = {}
+        self._recycled_ports: list[int] = []
+        self._containers: dict[str, SSHContainerRecord] = {}
 
     def allocate_port(self, instance_id: str) -> int:
         """Allocate a unique port for the provided instance.
@@ -113,9 +114,7 @@ class SSHContainerPool:
         with self._lock:
             ports = self._allocated_ports.setdefault(instance_id, [])
             if len(ports) >= self._max_containers_per_instance:
-                raise PortExhaustedError(
-                    f"Instance '{instance_id}' reached allocation limit"
-                )
+                raise PortExhaustedError(f"Instance '{instance_id}' reached allocation limit")
 
             port = self._next_available_port()
             ports.append(port)

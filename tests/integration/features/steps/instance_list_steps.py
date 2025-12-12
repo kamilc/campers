@@ -1,16 +1,59 @@
 """BDD step definitions for instance list command."""
 
-import sys
-from datetime import datetime
-from io import StringIO
+import contextlib
+import re
+from datetime import UTC, datetime
 from typing import Any
 
 import boto3
 from behave import given, then, when
 from behave.runner import Context
 
+from tests.integration.features.environment import LogCapture
+
 TEST_AMI_ID = "ami-12345678"
 """Test AMI ID used for creating mock EC2 instances in BDD tests."""
+
+INSTANCE_ROW_PATTERN = re.compile(r"^\S+\s+i-[\w]+\s+(running|stopped|stopping)\s+")
+"""Pattern to match instance table rows in output."""
+
+
+def extract_instance_rows(stdout: str) -> list[str]:
+    """Extract instance table rows from output, filtering out log lines.
+
+    Parameters
+    ----------
+    stdout : str
+        Raw output from campers list command
+
+    Returns
+    -------
+    list[str]
+        List of instance table rows
+    """
+    lines = stdout.strip().split("\n")
+    data_lines = []
+
+    for line in lines:
+        if not line:
+            continue
+        if line.startswith("Instances in"):
+            continue
+        if line.startswith("NAME"):
+            continue
+        if line.startswith("-"):
+            continue
+        if re.search(r"^(INFO|ERROR|WARNING|DEBUG):", line):
+            continue
+        if "has root volume size" in line:
+            continue
+        if "Failed to fetch" in line:
+            continue
+
+        if INSTANCE_ROW_PATTERN.search(line):
+            data_lines.append(line)
+
+    return data_lines
 
 
 def create_test_instance(
@@ -43,9 +86,7 @@ def create_test_instance(
 
     subnet_id = None
     if vpc_id:
-        subnets = ec2_client.describe_subnets(
-            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
-        )
+        subnets = ec2_client.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
         if subnets.get("Subnets"):
             subnet_id = subnets["Subnets"][0]["SubnetId"]
 
@@ -74,9 +115,7 @@ def create_test_instance(
 
     ec2_resource = boto3.resource("ec2", region_name=region)
     instance = ec2_resource.Instance(instance_id)
-    instance.modify_attribute(
-        Attribute="instanceInitiatedShutdownBehavior", Value="terminate"
-    )
+    instance.modify_attribute(Attribute="instanceInitiatedShutdownBehavior", Value="terminate")
 
     return instance_id, launch_time
 
@@ -114,7 +153,7 @@ def step_instances_exist_in_region(context: Context, count: int, region: str) ->
         tags = {
             "ManagedBy": "campers",
             "Name": f"campers-test-{i}",
-            "CampConfig": f"test-machine-{i}",
+            "MachineConfig": f"test-machine-{i}",
         }
 
         instance_id, launch_time = create_test_instance(region, tags)
@@ -141,6 +180,7 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
     region : str | None
         Optional region filter
     """
+    import logging
     from unittest.mock import patch
 
     if context.region_patches is not None and context.region_patches:
@@ -149,37 +189,49 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
 
     campers = context.campers_module.Campers()
 
-    captured_output = StringIO()
-    original_stdout = sys.stdout
-    sys.stdout = captured_output
+    log_handler = LogCapture()
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_handler)
+    original_level = root_logger.level
+    root_logger.setLevel(logging.INFO)
 
     try:
         if context.mock_time_instances is not None and context.mock_time_instances:
-            with patch("campers.ec2.EC2Manager.list_instances") as mock_list, \
-                 patch("campers.ec2.EC2Manager.get_volume_size") as mock_volume:
+            with (
+                patch("campers.providers.aws.compute.EC2Manager.list_instances") as mock_list,
+                patch("campers.providers.aws.compute.EC2Manager.get_volume_size") as mock_volume,
+            ):
                 mock_list.return_value = context.instances
                 mock_volume.return_value = 0
                 campers.list(region=region)
         else:
+            import logging as py_logging
+
+            py_logging.debug(f"DEBUG: context.instances = {context.instances}")
             campers.list(region=region)
 
-        context.stdout = captured_output.getvalue()
+        output_lines = []
+        for record in log_handler.records:
+            output_lines.append(record.getMessage())
+        context.stdout = "\n".join(output_lines)
         context.exit_code = 0
         context.stderr = ""
     except Exception as e:
         context.exception = e
-        context.stdout = captured_output.getvalue()
+        output_lines = []
+        for record in log_handler.records:
+            output_lines.append(record.getMessage())
+        context.stdout = "\n".join(output_lines)
         context.stderr = str(e)
         context.exit_code = 1
     finally:
-        sys.stdout = original_stdout
+        root_logger.removeHandler(log_handler)
+        root_logger.setLevel(original_level)
 
         if context.region_patches is not None and context.region_patches:
             for patch_obj in context.region_patches:
-                try:
+                with contextlib.suppress(RuntimeError):
                     patch_obj.stop()
-                except RuntimeError:
-                    pass
 
 
 @then('output displays "{text}"')
@@ -202,9 +254,7 @@ def step_output_displays_text(context: Context, text: str) -> None:
             f"in output but got: {context.stdout}"
         )
     else:
-        assert text in context.stdout, (
-            f"Expected '{text}' in output but got: {context.stdout}"
-        )
+        assert text in context.stdout, f"Expected '{text}' in output but got: {context.stdout}"
 
 
 @then("output displays {count:d} instance")
@@ -219,16 +269,7 @@ def step_output_displays_count(context: Context, count: int) -> None:
     count : int
         Expected number of instances in output
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) == count, (
         f"Expected {count} instances but got {len(data_lines)}: {data_lines}"
@@ -290,9 +331,12 @@ def step_output_displays_header(context: Context, header: str) -> None:
         Header text to verify
     """
     lines = context.stdout.strip().split("\n")
-    first_line = lines[0] if lines else ""
 
-    assert header in first_line, f"Expected header '{header}' but got: {first_line}"
+    for line in lines:
+        if header in line:
+            return
+
+    raise AssertionError(f"Expected header '{header}' not found in output: {context.stdout}")
 
 
 @then("instances are sorted by launch time descending")
@@ -304,16 +348,7 @@ def step_instances_sorted_by_launch_time(context: Context) -> None:
     context : Context
         Behave test context
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) >= 2, "Need at least 2 instances to verify sorting"
 
@@ -335,9 +370,7 @@ def step_instances_sorted_by_launch_time(context: Context) -> None:
 
 
 @given('instance "{instance_id}" exists with no CampConfig tag')
-def step_instance_exists_without_camp_config(
-    context: Context, instance_id: str
-) -> None:
+def step_instance_exists_without_camp_config(context: Context, instance_id: str) -> None:
     """Create instance without CampConfig tag.
 
     Parameters
@@ -369,10 +402,41 @@ def step_instance_exists_without_camp_config(
     context.test_instance_id_mapping = {instance_id: actual_instance_id}
 
 
+@given('instance "{instance_id}" exists with no MachineConfig tag')
+def step_instance_exists_without_machine_config(context: Context, instance_id: str) -> None:
+    """Create instance without MachineConfig tag.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    instance_id : str
+        Instance ID to create
+    """
+    if context.instances is None:
+        context.instances = []
+
+    region = "us-east-1"
+    tags = {
+        "ManagedBy": "campers",
+        "Name": "test-instance",
+    }
+
+    actual_instance_id, launch_time = create_test_instance(region, tags)
+
+    context.instances.append(
+        {
+            "instance_id": actual_instance_id,
+            "region": region,
+            "launch_time": launch_time,
+            "camp_config": "ad-hoc",
+        }
+    )
+    context.test_instance_id_mapping = {instance_id: actual_instance_id}
+
+
 @then('instance "{instance_id}" shows NAME as "{expected_name}"')
-def step_instance_shows_name(
-    context: Context, instance_id: str, expected_name: str
-) -> None:
+def step_instance_shows_name(context: Context, instance_id: str, expected_name: str) -> None:
     """Verify instance shows specific name in output.
 
     Parameters
@@ -384,16 +448,7 @@ def step_instance_shows_name(
     expected_name : str
         Expected name to verify
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     actual_instance_id = context.test_instance_id_mapping.get(instance_id, instance_id)
 
@@ -404,16 +459,12 @@ def step_instance_shows_name(
             instance_line = line
             break
 
-    assert instance_line is not None, (
-        f"Instance {actual_instance_id} not found in output"
-    )
+    assert instance_line is not None, f"Instance {actual_instance_id} not found in output"
 
     parts = instance_line.split()
     actual_name = parts[0]
 
-    assert actual_name == expected_name, (
-        f"Expected name '{expected_name}' but got '{actual_name}'"
-    )
+    assert actual_name == expected_name, f"Expected name '{expected_name}' but got '{actual_name}'"
 
 
 @given("instance launched {hours:d} hours ago")
@@ -427,7 +478,7 @@ def step_instance_launched_hours_ago(context: Context, hours: int) -> None:
     hours : int
         Hours ago the instance was launched
     """
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     if context.instances is None:
         context.instances = []
@@ -437,7 +488,7 @@ def step_instance_launched_hours_ago(context: Context, hours: int) -> None:
 
     region = "us-east-1"
     instance_id = f"i-time{hours}h"
-    launch_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+    launch_time = datetime.now(UTC) - timedelta(hours=hours)
 
     context.instances.append(
         {
@@ -467,7 +518,7 @@ def step_instance_launched_minutes_ago(context: Context, minutes: int) -> None:
     minutes : int
         Minutes ago the instance was launched
     """
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     if context.instances is None:
         context.instances = []
@@ -477,7 +528,7 @@ def step_instance_launched_minutes_ago(context: Context, minutes: int) -> None:
 
     region = "us-east-1"
     instance_id = f"i-time{minutes}m"
-    launch_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    launch_time = datetime.now(UTC) - timedelta(minutes=minutes)
 
     context.instances.append(
         {
@@ -507,7 +558,7 @@ def step_instance_launched_days_ago(context: Context, days: int) -> None:
     days : int
         Days ago the instance was launched
     """
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     if context.instances is None:
         context.instances = []
@@ -517,7 +568,7 @@ def step_instance_launched_days_ago(context: Context, days: int) -> None:
 
     region = "us-east-1"
     instance_id = f"i-time{days}d"
-    launch_time = datetime.now(timezone.utc) - timedelta(days=days)
+    launch_time = datetime.now(UTC) - timedelta(days=days)
 
     context.instances.append(
         {
@@ -547,16 +598,7 @@ def step_first_instance_shows_time(context: Context, time_str: str) -> None:
     time_str : str
         Expected time string
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) >= 1, "No instances found in output"
 
@@ -575,23 +617,12 @@ def step_second_instance_shows_time(context: Context, time_str: str) -> None:
     time_str : str
         Expected time string
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) >= 2, "Less than 2 instances found in output"
 
     second_line = data_lines[1]
-    assert time_str in second_line, (
-        f"Expected '{time_str}' in second line: {second_line}"
-    )
+    assert time_str in second_line, f"Expected '{time_str}' in second line: {second_line}"
 
 
 @then('third instance shows "{time_str}"')
@@ -605,16 +636,7 @@ def step_third_instance_shows_time(context: Context, time_str: str) -> None:
     time_str : str
         Expected time string
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) >= 3, "Less than 3 instances found in output"
 
@@ -639,7 +661,7 @@ def step_campers_instances_exist_in_region(context: Context, region: str) -> Non
     tags = {
         "ManagedBy": "campers",
         "Name": "test-instance",
-        "CampConfig": "test-machine",
+        "MachineConfig": "test-machine",
     }
 
     instance_id, launch_time = create_test_instance(region, tags)
@@ -725,9 +747,8 @@ def step_output_displays_instances_from_region(context: Context, region: str) ->
 
 
 @given('instance "{instance_id}" in state "{state}"')
-@given(
-    'instance "{instance_id}" in state "{state}" with CampConfig "{camp_config}"'
-)
+@given('instance "{instance_id}" in state "{state}" with CampConfig "{camp_config}"')
+@given('instance "{instance_id}" in state "{state}" with MachineConfig "{camp_config}"')
 def step_instance_in_state(
     context: Context, instance_id: str, state: str, camp_config: str | None = None
 ) -> None:
@@ -742,7 +763,7 @@ def step_instance_in_state(
     state : str
         Instance state
     camp_config : str | None
-        Optional CampConfig tag value
+        Optional MachineConfig tag value
     """
     if context.instances is None:
         context.instances = []
@@ -755,16 +776,14 @@ def step_instance_in_state(
     tags = {
         "ManagedBy": "campers",
         "Name": f"test-{state}",
-        "CampConfig": config_name,
+        "MachineConfig": config_name,
     }
 
     actual_instance_id, launch_time = create_test_instance(region, tags)
 
     ec2_client = boto3.client("ec2", region_name=region)
 
-    if state == "stopped":
-        ec2_client.stop_instances(InstanceIds=[actual_instance_id])
-    elif state == "stopping":
+    if state == "stopped" or state == "stopping":
         ec2_client.stop_instances(InstanceIds=[actual_instance_id])
 
     context.instances.append(
@@ -794,20 +813,9 @@ def step_all_instances_displayed(context: Context, count: int) -> None:
     count : int
         Expected instance count
     """
-    lines = context.stdout.strip().split("\n")
+    data_lines = extract_instance_rows(context.stdout)
 
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
-
-    assert len(data_lines) == count, (
-        f"Expected {count} instances but got {len(data_lines)}"
-    )
+    assert len(data_lines) == count, f"Expected {count} instances but got {len(data_lines)}"
 
 
 @then("STATUS column shows correct state for each instance")
@@ -819,23 +827,14 @@ def step_status_column_shows_correct_state(context: Context) -> None:
     context : Context
         Behave test context
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) > 0, "No instances found in output"
 
 
 @given('instance with CampConfig "{camp_config}"')
 def step_instance_with_camp_config(context: Context, camp_config: str) -> None:
-    """Create instance with specific CampConfig.
+    """Create instance with specific MachineConfig.
 
     Parameters
     ----------
@@ -851,7 +850,7 @@ def step_instance_with_camp_config(context: Context, camp_config: str) -> None:
     tags = {
         "ManagedBy": "campers",
         "Name": "test-long-name",
-        "CampConfig": camp_config,
+        "MachineConfig": camp_config,
     }
 
     instance_id, launch_time = create_test_instance(region, tags)
@@ -867,7 +866,41 @@ def step_instance_with_camp_config(context: Context, camp_config: str) -> None:
     context.long_camp_config = camp_config
 
 
-@then("machine config name is truncated to {length:d} characters")
+@given('instance with MachineConfig "{machine_config}"')
+def step_instance_with_machine_config(context: Context, machine_config: str) -> None:
+    """Create instance with specific MachineConfig.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    machine_config : str
+        Machine config name
+    """
+    if context.instances is None:
+        context.instances = []
+
+    region = "us-east-1"
+    tags = {
+        "ManagedBy": "campers",
+        "Name": "test-long-name",
+        "MachineConfig": machine_config,
+    }
+
+    instance_id, launch_time = create_test_instance(region, tags)
+
+    context.instances.append(
+        {
+            "instance_id": instance_id,
+            "region": region,
+            "launch_time": launch_time,
+            "camp_config": machine_config,
+        }
+    )
+    context.long_camp_config = machine_config
+
+
+@then("camp config name is truncated to {length:d} characters")
 def step_camp_config_truncated(context: Context, length: int) -> None:
     """Verify machine config name is truncated.
 
@@ -878,16 +911,7 @@ def step_camp_config_truncated(context: Context, length: int) -> None:
     length : int
         Expected truncation length
     """
-    lines = context.stdout.strip().split("\n")
-
-    data_lines = [
-        line
-        for line in lines
-        if line
-        and not line.startswith("Instances in")
-        and not line.startswith("NAME")
-        and not line.startswith("-")
-    ]
+    data_lines = extract_instance_rows(context.stdout)
 
     assert len(data_lines) > 0, "No instances found"
 

@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from campers.providers.aws.keypair import KeyPairInfo
+
 
 class FakeEC2Manager:
     """Fake EC2Manager that simulates EC2 operations for testing.
@@ -37,7 +39,7 @@ class FakeEC2Manager:
         self.security_groups: dict[str, dict[str, Any]] = {}
         self.all_managers = all_managers
 
-    def create_key_pair(self, unique_id: str) -> tuple[str, Path]:
+    def create_key_pair(self, unique_id: str) -> KeyPairInfo:
         """Create a fake SSH key pair.
 
         Parameters
@@ -47,8 +49,8 @@ class FakeEC2Manager:
 
         Returns
         -------
-        tuple[str, Path]
-            Tuple of (key_name, key_file_path)
+        KeyPairInfo
+            Key pair information with name and file path
         """
         key_name = f"campers-{unique_id}"
         campers_dir = Path("/tmp/test-campers")
@@ -62,7 +64,7 @@ class FakeEC2Manager:
         key_file.chmod(0o600)
 
         self.key_pairs[key_name] = str(key_file)
-        return key_name, key_file
+        return KeyPairInfo(name=key_name, file_path=key_file)
 
     def create_security_group(self, unique_id: str) -> str:
         """Create a fake security group.
@@ -112,18 +114,16 @@ class FakeEC2Manager:
         unique_id = str(int(time.time()))
         instance_id = f"i-fake{unique_id}"
 
-        key_name, key_file = self.create_key_pair(unique_id)
+        key_pair_info = self.create_key_pair(unique_id)
         sg_id = self.create_security_group(unique_id)
 
-        public_ip = (
-            None if os.environ.get("CAMPERS_NO_PUBLIC_IP") == "1" else "203.0.113.1"
-        )
+        public_ip = None if os.environ.get("CAMPERS_NO_PUBLIC_IP") == "1" else "203.0.113.1"
 
         instance = {
             "instance_id": instance_id,
             "public_ip": public_ip,
             "state": "running",
-            "key_file": str(key_file),
+            "key_file": str(key_pair_info.file_path),
             "security_group_id": sg_id,
             "unique_id": unique_id,
             "camp_config": instance_name,
@@ -157,11 +157,10 @@ class FakeEC2Manager:
                             "state": instance["state"],
                             "region": instance.get("region", manager.region),
                             "instance_type": instance.get("instance_type", "t3.medium"),
-                            "launch_time": instance.get(
-                                "launch_time", "2024-01-01T00:00:00+00:00"
-                            ),
+                            "launch_time": instance.get("launch_time", "2024-01-01T00:00:00+00:00"),
                             "camp_config": instance.get("camp_config", "test"),
                             "volume_size": instance.get("volume_size", 30),
+                            "unique_id": instance.get("unique_id"),
                         }
                     )
         else:
@@ -173,11 +172,10 @@ class FakeEC2Manager:
                         "state": instance["state"],
                         "region": instance.get("region", self.region),
                         "instance_type": instance.get("instance_type", "t3.medium"),
-                        "launch_time": instance.get(
-                            "launch_time", "2024-01-01T00:00:00+00:00"
-                        ),
+                        "launch_time": instance.get("launch_time", "2024-01-01T00:00:00+00:00"),
                         "camp_config": instance.get("camp_config", "test"),
                         "volume_size": instance.get("volume_size", 30),
+                        "unique_id": instance.get("unique_id"),
                     }
                 )
         return instances_list

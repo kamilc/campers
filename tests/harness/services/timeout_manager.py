@@ -2,8 +2,8 @@
 
 import logging
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from tests.harness.exceptions import HarnessTimeoutError
 

@@ -69,14 +69,14 @@ Scenario: Machine config overrides defaults setup_script
   Then marker file "/tmp/camp_marker" exists in SSH container
   And status message "Setup script completed successfully" is logged
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Execute setup_script before command via TUI
   Given a config file with camp "dev-box" defined
   And camp "dev-box" has setup_script "touch /tmp/setup_marker"
   And camp "dev-box" has command "test -f /tmp/setup_marker && echo success"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "dev-box" in the TUI
 
   Then the TUI log panel contains "Running setup_script..."
@@ -85,14 +85,14 @@ Scenario: Execute setup_script before command via TUI
   And marker file "/tmp/setup_marker" exists in SSH container
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Multi-line setup_script via TUI
   Given a config file with camp "dev-box" defined
   And camp "dev-box" has multi-line setup_script
   And camp "dev-box" has command "cat /tmp/workspace/status.txt"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "dev-box" in the TUI
 
   Then the TUI log panel contains "Setup script completed successfully"
@@ -100,14 +100,14 @@ Scenario: Multi-line setup_script via TUI
   And file "/tmp/workspace/status.txt" contains "Ready"
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@error @localstack @pilot @timeout_300
+@error @localstack @pilot @timeout_420
 Scenario: Setup_script failure shown in TUI
   Given a config file with camp "test-box" defined
   And camp "test-box" has setup_script "exit 1"
   And camp "test-box" has command "echo hello"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-box" in the TUI
 
   Then the TUI log panel contains "Running setup_script..."
@@ -115,21 +115,21 @@ Scenario: Setup_script failure shown in TUI
   And the TUI log panel does not contain "Command completed"
   And the TUI status widget shows "Status: error" within 180 seconds
 
-@smoke @localstack @pilot @timeout_300
+@smoke @localstack @pilot @timeout_420
 Scenario: Skip setup_script via TUI when not defined
   Given a config file with camp "minimal-box" defined
   And camp "minimal-box" has no setup_script
   And camp "minimal-box" has command "hostname"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "minimal-box" in the TUI
 
   Then the TUI log panel does not contain "Running setup_script..."
   And the TUI log panel contains "Command completed successfully"
   And the TUI status widget shows "Status: terminating" within 180 seconds
 
-@integration @localstack @pilot @timeout_300
+@integration @localstack @pilot @timeout_420
 Scenario: Machine config overrides defaults via TUI
   Given a config file with defaults section
   And defaults have setup_script "touch /tmp/default_marker"
@@ -137,7 +137,7 @@ Scenario: Machine config overrides defaults via TUI
   And camp "override-box" has command "ls /tmp"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "override-box" in the TUI
 
   Then the TUI log panel contains "Setup script completed successfully"

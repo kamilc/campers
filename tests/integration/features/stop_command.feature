@@ -30,7 +30,7 @@ Scenario: Ambiguous MachineConfig name
   And running instance "i-second" with MachineConfig "dev-workstation"
   When I run stop command with "dev-workstation"
   Then command fails with exit code 1
-  And error message contains "Ambiguous camp config"
+  And error message contains "Ambiguous machine config"
   And disambiguation help lists instance IDs "i-first" and "i-second"
   And error is printed to stderr
 
@@ -53,7 +53,7 @@ Scenario: Insufficient AWS permissions
   Given user has AWS credentials with no EC2 permissions
   When I run stop command with "some-instance"
   Then command fails with exit code 1
-  And error message contains "Insufficient AWS permissions"
+  And error message contains "Insufficient cloud provider permissions"
   And error is printed to stderr
 
 @error @dry_run
@@ -92,7 +92,7 @@ Scenario: Instance not found during termination
   And terminate_instance raises ClientError "InvalidInstanceID.NotFound"
   When I run stop command with "i-found"
   Then command fails with exit code 1
-  And error message contains "AWS API error"
+  And error message contains "Cloud provider API error"
   And error is printed to stderr
 
 @error @dry_run
@@ -101,5 +101,5 @@ Scenario: Permission denied during termination
   And terminate_instance raises ClientError "UnauthorizedOperation"
   When I run stop command with "i-denied"
   Then command fails with exit code 1
-  And error message contains "Insufficient AWS permissions"
+  And error message contains "Insufficient cloud provider permissions"
   And error is printed to stderr

@@ -13,22 +13,27 @@ export CAMPERS_CONFIG=/path/to/config.yaml
 ## Structure Overview
 
 ```yaml
+# 1. Variables (DRY configuration)
 vars:
-  # Reusable variables
+  project_name: my-app
 
+# 2. Ansible Playbooks (Provisioning)
 playbooks:
-  # Ansible playbooks for provisioning
+  base-setup: ...
 
+# 3. Defaults (Global settings)
 defaults:
-  # Base settings for all camps
+  region: us-east-1
 
+# 4. Camps (Machine definitions)
 camps:
-  # Named configurations
+  dev: ...
+  prod: ...
 ```
 
-## Variables
+## Variables (`vars`)
 
-Define reusable values that can be referenced anywhere using `${var_name}`:
+Define reusable values that can be referenced anywhere using `${var_name}`. This is great for paths and project names.
 
 ```yaml
 vars:
@@ -42,27 +47,24 @@ Variables support:
 - **Nested references**: `${remote_dir}/data` expands to `/home/ubuntu/my-ml-project/data`
 - **Environment variables**: `${oc.env:HOME}` or `${oc.env:MY_VAR,default_value}`
 
-## Playbooks
+## Playbooks (`playbooks`)
 
-Ansible playbooks for provisioning instances. Define once, reuse across camps:
+Ansible playbooks for provisioning instances. Define them once, reuse them across camps.
+
+**Why Ansible?** It's idempotent. You can run it 100 times, and it only changes what's necessary.
 
 ```yaml
 playbooks:
+  # A simple playbook to install tools
   base:
     - name: Base system setup
       hosts: all
       become: true
       tasks:
-        - name: Update apt cache
-          apt:
-            update_cache: yes
-            cache_valid_time: 3600
-
         - name: Install packages
-          apt:
-            name: [git, htop, tmux, curl]
-            state: present
+          apt: {name: [git, htop, tmux, curl], state: present}
 
+  # A playbook for Python dev
   python-dev:
     - name: Python environment
       hosts: all
@@ -73,9 +75,9 @@ playbooks:
             creates: ~/.local/bin/uv
 ```
 
-## Defaults
+## Defaults (`defaults`)
 
-Base settings inherited by all camps:
+Base settings inherited by all camps. Useful for setting a common region or SSH user.
 
 ```yaml
 defaults:
@@ -84,186 +86,192 @@ defaults:
   disk_size: 50
   ssh_username: ubuntu
 
+  # Sync current directory to remote directory
   sync_paths:
     - local: .
       remote: /home/ubuntu/${project}
 
-  ports:
-    - 8888
-
+  # Don't sync these local files
   ignore:
     - "*.pyc"
     - __pycache__
     - .venv/
     - .git/
-
-  env_filter:
-    - AWS_.*
-    - HF_TOKEN
-
-  ansible_playbook: base
-  on_exit: stop
 ```
 
-## Camps
+## Camps (`camps`)
 
-Named configurations that override defaults:
+Named configurations that override defaults. Each key under `camps` is a valid argument for `campers run <NAME>`.
 
 ```yaml
 camps:
+  # Simple dev machine
   dev:
     instance_type: t3.large
-    ansible_playbooks: [base, python-dev]
-    command: cd ${remote_dir} && bash
+    command: bash
 
-  jupyter:
-    instance_type: m5.xlarge
-    disk_size: 200
-    ports: [8888, 6006]
-    ansible_playbooks: [base, python-dev]
-    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
-
-  gpu:
+  # GPU machine for experiments
+  experiment:
     instance_type: g5.xlarge
-    region: us-west-2
-    ansible_playbooks: [base, python-dev]
-    env_filter:
-      - AWS_.*
-      - CUDA_.*
-      - HF_.*
+    ami:
+      query:
+        name: "Deep Learning Base AMI (Ubuntu*)*"
+        owner: "amazon"
+    ports: [8888]
+    command: jupyter lab --ip=0.0.0.0 --port=8888
 ```
 
 ## Settings Reference
 
-### Instance Settings
+### AMI Selection (`ami`)
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `region` | string | `us-east-1` | AWS region |
-| `instance_type` | string | `t3.medium` | EC2 instance type |
-| `disk_size` | integer | `50` | Root volume size in GB |
-| `ssh_username` | string | `ubuntu` | SSH username for connection |
-| `ami` | object | — | AMI selection (see below) |
+You can specify an exact AMI ID or a dynamic query to find the latest one.
 
-### AMI Selection
-
+**Option 1: Dynamic Query (Recommended)**
+Finds the latest image matching the name pattern.
 ```yaml
 ami:
-  name: "ubuntu/images/hvm-ssd/ubuntu-*-24.04-amd64-server-*"
-  owner: "099720109477"  # Canonical
+  query:
+    name: "Deep Learning Base AMI (Ubuntu*)*"
+    owner: "amazon"
+    architecture: "x86_64" # or arm64
 ```
 
-### File Synchronization
+**Option 2: Exact ID**
+Pins the instance to a specific image.
+```yaml
+ami:
+  image_id: ami-0123456789abcdef0
+```
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `sync_paths` | list | — | Local/remote directory pairs |
-| `include_vcs` | boolean | `false` | Include `.git` directories |
-| `ignore` | list | `[]` | File patterns to exclude |
+### SSH Configuration (`ssh_username`)
+
+By default, Campers assumes an Ubuntu AMI (`ssh_username: ubuntu`). If you use Amazon Linux or another distro, you must set the correct user.
+
+```yaml
+camps:
+  amazon-linux:
+    ssh_username: ec2-user
+    ami:
+      query: {name: "al2023-ami-*", owner: "amazon"}
+```
+
+### Network Security (`ssh_allowed_cidr`)
+
+By default, Campers opens SSH (port 22) to the world (`0.0.0.0/0`). You can restrict this to a specific IP range for better security.
+
+```yaml
+defaults:
+  # Only allow SSH from my corporate VPN
+  ssh_allowed_cidr: "203.0.113.0/24"
+```
+
+### Lifecycle Scripts
+
+Campers has three distinct phases for running code:
+
+1.  **Provisioning (`ansible_playbooks`)**:
+    *   **When:** Runs on first boot (and on subsequent runs).
+    *   **Purpose:** Installing system packages (apt, yum), drivers (CUDA), and global tools.
+    *   **Tool:** Ansible.
+
+2.  **One-time Setup (`setup_script`)**:
+    *   **When:** Runs *only once* when the instance is first created.
+    *   **Purpose:** Cloning repos, simple pip installs (if not using Ansible).
+    *   **Tool:** Shell script.
+
+3.  **Startup (`startup_script`)**:
+    *   **When:** Runs *every time* you run `campers run`.
+    *   **Purpose:** Fetching latest data (DVC), activating venvs, setting env vars.
+    *   **Tool:** Shell script.
+
+```yaml
+camps:
+  training:
+    # 1. Install system deps
+    ansible_playbooks: [python-setup]
+    
+    # 2. Pull latest data (every run)
+    startup_script: |
+      cd ${remote_dir}
+      dvc pull data/
+      source .venv/bin/activate
+    
+    # 3. Run the job
+    command: python train.py
+```
+
+### Environment Forwarding (`env_filter`)
+
+By default, Campers does **not** forward your local environment variables to the remote instance for security. You must explicitly allow them using regex patterns.
+
+```yaml
+defaults:
+  env_filter:
+    - ^AWS_.*       # Forward all AWS_ACCESS_KEY_...
+    - ^HF_TOKEN$    # Forward specific token
+    - ^WANDB_.*     # Forward Weights & Biases keys
+```
+
+### File Synchronization (`sync_paths`)
+
+Campers uses **Mutagen** for high-performance, bi-directional sync.
+
+| Setting | Description |
+|---------|-------------|
+| `sync_paths` | List of `local` and `remote` pairs. |
+| `ignore` | List of file patterns to exclude (like `.git`, `node_modules`). |
+| `include_vcs` | Boolean. Set to `true` to sync `.git` folder (default `false`). |
 
 ```yaml
 sync_paths:
   - local: .
     remote: /home/ubuntu/project
-  - local: ~/data
-    remote: /home/ubuntu/data
 ```
 
-### Port Forwarding
+### Port Forwarding (`ports`)
 
-| Setting | Type | Description |
-|---------|------|-------------|
-| `port` | integer | Single port to forward |
-| `ports` | list | Multiple ports to forward |
+Automatically tunnels remote ports to `localhost` via SSH. This is ideal for development - services appear on your local machine.
 
 ```yaml
 ports:
-  - 8888   # Jupyter
-  - 6006   # TensorBoard
-  - 5432   # PostgreSQL
+  - 8888   # Jupyter → localhost:8888
+  - 6006   # TensorBoard → localhost:6006
+  - 5432   # PostgreSQL → localhost:5432
 ```
 
-Ports are forwarded from `localhost:<port>` to the remote instance.
+### Public Ports (`public_ports`)
 
-### Environment Variables
-
-| Setting | Type | Description |
-|---------|------|-------------|
-| `env_filter` | list | Regex patterns matching env vars to forward |
+Opens ports directly on the instance's public IP for external access. This is ideal for **client demos** where others need to access your running application.
 
 ```yaml
-env_filter:
-  - AWS_.*       # All AWS credentials
-  - HF_TOKEN     # Hugging Face token
-  - WANDB_.*     # Weights & Biases
-  - ^DB_.*       # Database credentials
+camps:
+  demo:
+    instance_type: t3.medium
+    public_ports: [80, 443, 3000]
+    command: npm start
 ```
 
-!!! warning "Security Note"
-    Be careful with environment forwarding. Campers warns when forwarding variables containing `SECRET`, `PASSWORD`, `TOKEN`, or `KEY`.
+With this configuration, clients can access your app at `http://<public-ip>:3000`.
 
-### Commands and Scripts
-
-| Setting | Type | Description |
-|---------|------|-------------|
-| `command` | string | Command to execute after setup |
-| `setup_script` | string | One-time setup script (runs once per instance) |
-| `startup_script` | string | Script to run before each command |
+**Security Note:** By default, public ports are open to the internet (`0.0.0.0/0`). You can restrict access to specific IP ranges:
 
 ```yaml
-setup_script: |
-  pip install -r requirements.txt
-
-startup_script: |
-  source ~/.bashrc
-  cd ${remote_dir}
-
-command: python train.py
+defaults:
+  public_ports_allowed_cidr: "203.0.113.0/24"  # Only your office IP
 ```
 
-### Provisioning
+| Setting | Purpose |
+|---------|---------|
+| `ports` | SSH tunneling to localhost (developer access) |
+| `public_ports` | Security group rules (external/client access) |
 
-| Setting | Type | Description |
-|---------|------|-------------|
-| `ansible_playbook` | string | Single playbook name |
-| `ansible_playbooks` | list | Multiple playbooks (run in order) |
+### Session Exit
 
-```yaml
-ansible_playbooks:
-  - base
-  - python-dev
-  - jupyter
-```
+When you exit a `campers run` session (Q or Ctrl+C), you'll be prompted to choose:
 
-### Lifecycle
+- **Stop** (default): Instance is stopped. Disk is preserved. You pay for storage only.
+- **Keep running**: Disconnect locally but keep the instance running. Useful for demos where clients still need access.
+- **Destroy**: Terminate the instance and delete all data. You pay nothing.
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `on_exit` | string | `stop` | Action when session ends: `stop` or `terminate` |
-
-- `stop`: Instance stops, data preserved, can be restarted
-- `terminate`: Instance and data destroyed
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `CAMPERS_CONFIG` | Path to configuration file |
-| `CAMPERS_DIR` | Data directory for keys (default: `~/.campers`) |
-| `CAMPERS_DEBUG` | Enable debug logging (`1` to enable) |
-| `AWS_PROFILE` | AWS credentials profile |
-| `AWS_REGION` | Default AWS region |
-
-## Configuration Merging
-
-Settings are merged in this order (later overrides earlier):
-
-1. Built-in defaults
-2. `defaults:` section in config
-3. Camp-specific settings
-4. CLI arguments
-
-```bash
-# CLI arguments override everything
-campers run dev --instance-type t3.xlarge --disk-size 100
-```
+This interactive prompt replaces the need for pre-configured exit behavior.

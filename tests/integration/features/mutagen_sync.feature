@@ -71,7 +71,7 @@ Scenario: startup_script without sync_paths raises error
   Then command fails with ValueError
   And error message contains "startup_script is defined but no sync_paths configured"
 
-@smoke @localstack @pilot
+@smoke @localstack @pilot @timeout_420
 Scenario: Command executes from synced directory
   Given config file with defaults section
   And LocalStack is healthy and responding

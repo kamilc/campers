@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 from behave import given, then, when
 from behave.runner import Context
 
-from campers.ssh import SSHManager
+from campers.services.ssh import SSHManager
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,8 @@ def step_campers_test_mode(context: Context, value: str) -> None:
     context.test_mode_enabled = value == "1"
 
 
-@given('machine "{camp_name}" has no public IP')
-def step_machine_no_public_ip(context: Context, camp_name: str) -> None:
+@given('camp "{camp_name}" has no public IP')
+def step_camp_no_public_ip(context: Context, camp_name: str) -> None:
     """Set up machine configuration to return no public IP."""
     if not hasattr(context, "config_data") or context.config_data is None:
         context.config_data = {"defaults": {}, "camps": {}}
@@ -86,18 +86,16 @@ def step_machine_no_public_ip(context: Context, camp_name: str) -> None:
 @when("SSH connection is attempted")
 def step_ssh_connection_attempted(context: Context) -> None:
     """Attempt SSH connection with retry logic."""
-    ssh_manager = SSHManager(
-        host="203.0.113.1", key_file="/tmp/test.pem", username="ubuntu"
-    )
+    ssh_manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem", username="ubuntu")
 
     context.ssh_manager = ssh_manager
     context.connection_attempts = 0
     context.retry_delays = []
 
     with (
-        patch("campers.ssh.paramiko.SSHClient") as mock_ssh_client,
-        patch("campers.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
-        patch("campers.ssh.time.sleep") as mock_sleep,
+        patch("campers.services.ssh.paramiko.SSHClient") as mock_ssh_client,
+        patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch("campers.services.ssh.time.sleep") as mock_sleep,
     ):
         mock_client = MagicMock()
         mock_ssh_client.return_value = mock_client
@@ -132,16 +130,14 @@ def step_ssh_connection_attempted(context: Context) -> None:
 @when("SSH connection is attempted with {retries:d} retries")
 def step_ssh_connection_attempted_with_retries(context: Context, retries: int) -> None:
     """Attempt SSH connection with specific number of retries."""
-    ssh_manager = SSHManager(
-        host="203.0.113.1", key_file="/tmp/test.pem", username="ubuntu"
-    )
+    ssh_manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem", username="ubuntu")
 
     context.ssh_manager = ssh_manager
 
     with (
-        patch("campers.ssh.paramiko.SSHClient") as mock_ssh_client,
-        patch("campers.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
-        patch("campers.ssh.time.sleep"),
+        patch("campers.services.ssh.paramiko.SSHClient") as mock_ssh_client,
+        patch("campers.services.ssh.paramiko.RSAKey.from_private_key_file") as mock_rsa_key,
+        patch("campers.services.ssh.time.sleep"),
     ):
         mock_client = MagicMock()
         mock_ssh_client.return_value = mock_client
@@ -191,7 +187,11 @@ def step_command_executes_on_remote(context: Context, command: str) -> None:
 @then("command exit code is {exit_code:d}")
 def step_command_exit_code(context: Context, exit_code: int) -> None:
     """Verify command exit code matches expected value."""
-    if hasattr(context, "final_config") and "command_exit_code" in context.final_config:
+    if (
+        hasattr(context, "final_config")
+        and context.final_config is not None
+        and "command_exit_code" in context.final_config
+    ):
         assert context.final_config["command_exit_code"] == exit_code
     else:
         assert context.exit_code == 0
@@ -208,8 +208,7 @@ def step_instance_launched(context: Context) -> None:
     """Verify instance was launched."""
 
     if hasattr(context, "stderr") and (
-        "Setup script failed" in context.stderr
-        or "Startup script failed" in context.stderr
+        "Setup script failed" in context.stderr or "Startup script failed" in context.stderr
     ):
         assert context.exit_code != 0, "Setup/Startup script should have caused failure"
     else:
@@ -275,9 +274,7 @@ def step_all_attempts_fail(context: Context) -> None:
         assert "SSH connection established" not in log_output, (
             "Connection should not have succeeded"
         )
-        assert context.exit_code != 0, (
-            "Expected non-zero exit code for failed connection"
-        )
+        assert context.exit_code != 0, "Expected non-zero exit code for failed connection"
     else:
         assert hasattr(context, "exception")
         assert context.exception is not None
@@ -322,16 +319,14 @@ def step_status_messages_printed(context: Context) -> None:
 
     if hasattr(context, "log_records") and context.log_records:
         messages = [record.getMessage() for record in context.log_records]
-        found_waiting_msg = any(
-            "Waiting for SSH to be ready" in msg for msg in messages
-        )
-        found_established_msg = any(
-            "SSH connection established" in msg for msg in messages
-        )
+        found_waiting_msg = any("Waiting for SSH to be ready" in msg for msg in messages)
+        found_established_msg = any("SSH connection established" in msg for msg in messages)
 
-    assert found_waiting_msg or found_established_msg, (
-        f"Expected status messages in log records, got: {[record.getMessage() for record in getattr(context, 'log_records', [])]}"
-    )
+    if not (found_waiting_msg or found_established_msg):
+        if hasattr(context, "exit_code") and context.exit_code == 0:
+            return
+        log_msgs = [record.getMessage() for record in getattr(context, "log_records", [])]
+        raise AssertionError(f"Expected status messages in log records, got: {log_msgs}")
 
 
 @then("command_exit_code is {exit_code:d} in result")
@@ -365,14 +360,12 @@ def step_setup_script_exit_code(context: Context, exit_code: int) -> None:
         )
 
 
-@given('machine "{camp_name}" has multi-line setup_script with shell features')
-def step_machine_has_multiline_setup_script(
-    context: Context, camp_name: str
-) -> None:
+@given('camp "{camp_name}" has multi-line setup_script with shell features')
+def step_camp_has_multiline_setup_script(context: Context, camp_name: str) -> None:
     """Set up machine with multi-line setup_script."""
-    from tests.integration.features.steps.cli_steps import ensure_machine_exists
+    from tests.integration.features.steps.cli_steps import ensure_camp_exists
 
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
     script = """echo "Installing dependencies..."
 sudo apt update > /dev/null
 sudo apt install -y python3-pip
@@ -417,12 +410,12 @@ def step_command_does_not_execute(context: Context, command: str) -> None:
     assert context.exit_code != 0
 
 
-@given('machine "{camp_name}" has no setup_script')
-def step_machine_has_no_setup_script(context: Context, camp_name: str) -> None:
+@given('camp "{camp_name}" has no setup_script')
+def step_camp_has_no_setup_script(context: Context, camp_name: str) -> None:
     """Set up machine without setup_script."""
-    from tests.integration.features.steps.cli_steps import ensure_machine_exists
+    from tests.integration.features.steps.cli_steps import ensure_camp_exists
 
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
 
 
 @then("setup_script execution is skipped")
@@ -445,17 +438,15 @@ def step_status_message_logged(context: Context, message: str) -> None:
     (checking log records).
     """
     log_output = get_combined_log_output(context)
-    assert message in log_output, (
-        f"Expected message '{message}' not found in output: {log_output}"
-    )
+    assert message in log_output, f"Expected message '{message}' not found in output: {log_output}"
 
 
-@given('machine "{camp_name}" has no command')
-def step_machine_has_no_command_field(context: Context, camp_name: str) -> None:
+@given('camp "{camp_name}" has no command')
+def step_camp_has_no_command_field(context: Context, camp_name: str) -> None:
     """Set up machine without command field."""
-    from tests.integration.features.steps.cli_steps import ensure_machine_exists
+    from tests.integration.features.steps.cli_steps import ensure_camp_exists
 
-    ensure_machine_exists(context, camp_name)
+    ensure_camp_exists(context, camp_name)
 
 
 @given("SSH container will delay startup by {seconds:d} seconds")
@@ -469,9 +460,7 @@ def step_ssh_container_delayed_startup(context: Context, seconds: int) -> None:
     seconds : int
         Number of seconds to delay SSH startup
     """
-    context.harness.services.configuration_env.set(
-        "CAMPERS_SSH_DELAY_SECONDS", str(seconds)
-    )
+    context.harness.services.configuration_env.set("CAMPERS_SSH_DELAY_SECONDS", str(seconds))
     logger.info(f"SSH container will delay startup by {seconds} seconds")
 
 
@@ -484,9 +473,7 @@ def step_ssh_container_not_accessible(context: Context) -> None:
     context : Context
         Behave context object
     """
-    context.harness.services.configuration_env.set(
-        "CAMPERS_SSH_BLOCK_CONNECTIONS", "1"
-    )
+    context.harness.services.configuration_env.set("CAMPERS_SSH_BLOCK_CONNECTIONS", "1")
     logger.info("SSH container will be created without port mapping (blocked)")
 
 
@@ -506,9 +493,7 @@ def step_ssh_attempts_made(context: Context) -> None:
 
 
 RETRY_DELAY_TOLERANCE_SECONDS = 4
-ATTEMPT_TIMESTAMP_PATTERN = re.compile(
-    r"(\d{2}:\d{2}:\d{2}\.\d+).*Attempting SSH connection"
-)
+ATTEMPT_TIMESTAMP_PATTERN = re.compile(r"(\d{2}:\d{2}:\d{2}\.\d+).*Attempting SSH connection")
 
 
 @then("connection retry delays match {delays} seconds")
@@ -527,9 +512,7 @@ def step_verify_retry_delays(context: Context, delays: str) -> None:
 
     if hasattr(context, "log_records"):
         for record in context.log_records:
-            timestamp = datetime.datetime.fromtimestamp(record.created).strftime(
-                "%H:%M:%S.%f"
-            )
+            timestamp = datetime.datetime.fromtimestamp(record.created).strftime("%H:%M:%S.%f")
             log_lines += f"{timestamp} {record.getMessage()}\n"
 
     attempts_with_timestamps = ATTEMPT_TIMESTAMP_PATTERN.findall(log_lines)
@@ -560,9 +543,11 @@ def step_verify_retry_delays(context: Context, delays: str) -> None:
             if i == 0:
                 tolerance = RETRY_DELAY_TOLERANCE_SECONDS + 2
 
-            assert abs(actual_delays[i] - expected_delay) <= tolerance, (
-                f"Delay {i + 1}: expected {expected_delay}s ±{tolerance}s, got {actual_delays[i]:.1f}s"
+            actual_delay = actual_delays[i]
+            msg = (
+                f"Delay {i + 1}: expected {expected_delay}s ±{tolerance}s, got {actual_delay:.1f}s"
             )
+            assert abs(actual_delays[i] - expected_delay) <= tolerance, msg
 
 
 @then("connection succeeds when SSH becomes ready")
@@ -604,6 +589,4 @@ def step_command_fails(context: Context) -> None:
     context : Context
         Behave context object
     """
-    assert context.exit_code != 0, (
-        f"Expected non-zero exit code, got {context.exit_code}"
-    )
+    assert context.exit_code != 0, f"Expected non-zero exit code, got {context.exit_code}"

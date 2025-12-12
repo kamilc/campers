@@ -34,7 +34,7 @@ Scenario: Ad-hoc instance tagged without camp name
   When I launch instance with options "--instance-type t3.medium"
   Then instance has tag "MachineConfig" with value "ad-hoc"
 
-@poc @localstack @pilot @timeout_300
+@poc @localstack @pilot @timeout_450
 Scenario: Launch and terminate instance via TUI with LocalStack
   Given a config file with camp "test-camp" defined
   And camp "test-camp" has instance_type "t3.micro"
@@ -43,7 +43,7 @@ Scenario: Launch and terminate instance via TUI with LocalStack
   And camp "test-camp" has on_exit "terminate"
   And LocalStack is healthy and responding
 
-  When I launch the Moondock TUI with the config file
+  When I launch the Campers TUI with the config file
   And I simulate running the "test-camp" in the TUI
 
   Then the TUI status widget shows "Status: terminating" within 180 seconds

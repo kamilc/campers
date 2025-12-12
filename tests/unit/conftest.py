@@ -3,10 +3,10 @@
 import importlib.util
 import os
 import sys
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
-from collections.abc import Generator
 
 import pytest
 import yaml
@@ -41,6 +41,52 @@ def cleanup_test_mode_env() -> Generator[None, None, None]:
         os.environ.pop("CAMPERS_TEST_MODE", None)
 
 
+@pytest.fixture(autouse=True)
+def mock_isatty() -> Generator[None, None, None]:
+    """Mock sys.stdout.isatty() to return False for all unit tests.
+
+    Yields
+    ------
+    None
+        Control back to test with isatty mocked
+
+    Notes
+    -----
+    This prevents the Campers.run() method from starting the interactive TUI
+    during unit tests. When isatty() returns True, run() launches a Textual
+    app that blocks waiting for user input, causing tests to hang.
+    """
+    with patch("sys.stdout.isatty", return_value=False):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def disable_mutagen_sync() -> Generator[None, None, None]:
+    """Disable Mutagen file sync during unit tests.
+
+    Yields
+    ------
+    None
+        Control back to test with Mutagen disabled
+
+    Notes
+    -----
+    The RunExecutor._phase_file_sync method polls get_sync_status in a while
+    loop waiting for 'watching' status. Tests that create MagicMock MutagenManager
+    instances without properly setting get_sync_status.return_value will hang
+    indefinitely. Setting CAMPERS_DISABLE_MUTAGEN=1 skips the sync phase entirely.
+    """
+    original = os.environ.get("CAMPERS_DISABLE_MUTAGEN")
+    os.environ["CAMPERS_DISABLE_MUTAGEN"] = "1"
+
+    yield
+
+    if original is not None:
+        os.environ["CAMPERS_DISABLE_MUTAGEN"] = original
+    else:
+        os.environ.pop("CAMPERS_DISABLE_MUTAGEN", None)
+
+
 @pytest.fixture(scope="session")
 def campers_module() -> Any:
     """Load campers package as a module.
@@ -50,12 +96,8 @@ def campers_module() -> Any:
     Any
         The campers module with Campers class available.
     """
-    campers_script_path = (
-        Path(__file__).parent.parent.parent / "campers" / "__main__.py"
-    )
-    spec = importlib.util.spec_from_file_location(
-        "campers_script", campers_script_path
-    )
+    campers_script_path = Path(__file__).parent.parent.parent / "campers" / "__main__.py"
+    spec = importlib.util.spec_from_file_location("campers_script", campers_script_path)
     campers_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(campers_module)
 
@@ -173,11 +215,14 @@ def mock_ec2_manager(campers_module):
         "unique_id": "1234567890",
     }
 
-    with patch.object(campers_module, "EC2Manager") as MockEC2Manager:
+    with patch("campers.providers.aws.compute.EC2Manager") as MockEC2Manager:
         mock_manager = MagicMock()
+        mock_manager.find_instances_by_name_or_id.return_value = []
         mock_manager.launch_instance.return_value = mock_instance_details
         MockEC2Manager.return_value = mock_manager
-        yield mock_manager
+
+        with patch.object(campers_module, "get_provider", return_value={"compute": MockEC2Manager}):
+            yield mock_manager
 
 
 @pytest.fixture
@@ -253,12 +298,26 @@ def mock_portforward_manager(campers_module):
 
 
 @pytest.fixture
+def mock_port_availability() -> Generator[None, None, None]:
+    """Mock is_port_in_use to always return False (ports available).
+
+    Yields
+    ------
+    None
+        Control back to test with mocked port availability check
+    """
+    with patch("campers.core.run_executor.is_port_in_use", return_value=False):
+        yield
+
+
+@pytest.fixture
 def campers(
     campers_module: Any,
     mock_ec2_manager: MagicMock,
     mock_ssh_manager: MagicMock,
     mock_mutagen_manager: MagicMock,
     mock_portforward_manager: MagicMock,
+    mock_port_availability: None,
 ) -> Any:
     """Create Campers instance with all managers mocked.
 
@@ -281,3 +340,32 @@ def campers(
         Campers instance with all managers mocked
     """
     return campers_module.Campers()
+
+
+@pytest.fixture
+def campers_tui(campers_module: Any) -> Any:
+    """Create CampersTUI instance with mocked widgets.
+
+    Parameters
+    ----------
+    campers_module : Any
+        The campers module from campers_module fixture
+
+    Returns
+    -------
+    Any
+        CampersTUI instance with mocked widgets
+    """
+    import queue
+
+    mock_campers = MagicMock()
+    mock_update_queue = queue.Queue()
+    app = campers_module.CampersTUI(
+        campers_instance=mock_campers,
+        run_kwargs={},
+        update_queue=mock_update_queue,
+    )
+
+    mock_uptime_widget = MagicMock()
+    app.query_one = MagicMock(return_value=mock_uptime_widget)
+    return app

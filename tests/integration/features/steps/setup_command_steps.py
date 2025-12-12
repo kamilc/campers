@@ -16,21 +16,15 @@ def step_setup_completed_successfully(context: Context) -> None:
         Behave context
     """
     if not hasattr(context, "patched_ec2_client"):
-        raise AssertionError(
-            '"campers setup" precondition requires patched_ec2_client'
-        )
+        raise AssertionError('"campers setup" precondition requires patched_ec2_client')
 
     context.setup_user_input = "n"
     execute_command_direct(context, "setup")
 
     if getattr(context, "exit_code", 0) != 0:
-        raise AssertionError(
-            f'Expected "campers setup" to succeed, exit code {context.exit_code}'
-        )
+        raise AssertionError(f'Expected "campers setup" to succeed, exit code {context.exit_code}')
 
-    context.initial_vpc_count = len(
-        context.patched_ec2_client.describe_vpcs().get("Vpcs", [])
-    )
+    context.initial_vpc_count = len(context.patched_ec2_client.describe_vpcs().get("Vpcs", []))
 
 
 @then('VPC count in "{region}" is unchanged')

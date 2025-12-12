@@ -87,9 +87,7 @@ class TestArtifactManagerTempFile:
         assert file_path.exists()
         assert file_path.parent.exists()
 
-    def test_create_temp_file_without_scenario_dir_raises(
-        self, temp_base_dir: Path
-    ) -> None:
+    def test_create_temp_file_without_scenario_dir_raises(self, temp_base_dir: Path) -> None:
         """Test creating temp file without scenario dir raises."""
         manager = ArtifactManager(base_dir=temp_base_dir)
 

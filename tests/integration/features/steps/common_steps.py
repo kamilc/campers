@@ -8,12 +8,17 @@ import subprocess
 import sys
 import unittest.mock
 from pathlib import Path
+from typing import Any
 
 from behave import given, then, when
 from behave.runner import Context
 from botocore.exceptions import ClientError
 
+from campers.logging import StreamFormatter, StreamRoutingFilter
+from campers.services.portforward import PortForwardManager
+
 logger = logging.getLogger(__name__)
+portforward_logger = logging.getLogger("campers.services.portforward")
 
 
 def execute_command_direct(
@@ -49,6 +54,19 @@ def execute_command_direct(
     original_log_level = root_logger.level
     root_logger.setLevel(logging.INFO)
 
+    stdout_handler = logging.StreamHandler(stdout_capture)
+    stdout_handler.setFormatter(StreamFormatter("%(message)s"))
+    stdout_handler.addFilter(StreamRoutingFilter("stdout"))
+
+    stderr_handler = logging.StreamHandler(stderr_capture)
+    stderr_handler.setFormatter(StreamFormatter("%(message)s"))
+    stderr_handler.addFilter(StreamRoutingFilter("stderr"))
+
+    original_handlers = root_logger.handlers[:]
+    root_logger.handlers = []
+    root_logger.addHandler(stdout_handler)
+    root_logger.addHandler(stderr_handler)
+
     def timeout_handler(signum, frame):
         raise TimeoutError(f"Command '{command}' execution timed out after 180 seconds")
 
@@ -69,7 +87,7 @@ def execute_command_direct(
 
             return boto3.client(service_name, region_name=region_name)
 
-    def ec2_manager_factory(region: str) -> FakeEC2Manager:
+    def compute_provider_factory(region: str) -> FakeEC2Manager:
         if not hasattr(context, "fake_ec2_managers"):
             context.fake_ec2_managers = {}
 
@@ -84,19 +102,46 @@ def execute_command_direct(
         manager = context.fake_ec2_managers[region]
         return manager
 
+    def mock_validate_key_file(self: Any, key_file: str) -> None:
+        logger.debug("Mocked: validate_key_file skipped for %s", key_file)
+
+    def mock_create_tunnels(
+        self: Any,
+        ports: list[tuple[int, int]],
+        host: str,
+        key_file: str,
+        username: str = "ubuntu",
+        ssh_port: int = 22,
+    ) -> None:
+        for remote_port, _local_port in ports:
+            portforward_logger.info("Creating SSH tunnel for port %s...", remote_port)
+        for remote_port, local_port in ports:
+            portforward_logger.info(
+                "SSH tunnel established: localhost:%s -> remote:%s", local_port, remote_port
+            )
+        self.ports = ports
+
+    def mock_stop_all_tunnels(self: Any) -> None:
+        for remote_port, _local_port in getattr(self, "ports", []):
+            portforward_logger.info("Stopping SSH tunnel for port %s...", remote_port)
+
+    portforward_patchers = [
+        unittest.mock.patch.object(PortForwardManager, "validate_key_file", mock_validate_key_file),
+        unittest.mock.patch.object(PortForwardManager, "create_tunnels", mock_create_tunnels),
+        unittest.mock.patch.object(PortForwardManager, "stop_all_tunnels", mock_stop_all_tunnels),
+    ]
+
+    for patcher in portforward_patchers:
+        patcher.start()
+
     try:
         campers = Campers(
-            ec2_manager_factory=ec2_manager_factory,
+            compute_provider_factory=compute_provider_factory,
             ssh_manager_factory=FakeSSHManager,
-            boto3_client_factory=mock_boto3_client_factory,
         )
 
-        campers._create_ec2_manager = ec2_manager_factory
-
-        ec2_client = getattr(context, "patched_ec2_client", None)
-
         if command == "doctor":
-            campers.doctor(region=region, ec2_client=ec2_client)
+            campers.doctor(region=region)
             context.exit_code = 0
 
         elif command == "setup":
@@ -107,7 +152,7 @@ def execute_command_direct(
                 return user_input
 
             with unittest.mock.patch("builtins.input", side_effect=mocked_input):
-                campers.setup(region=region, ec2_client=ec2_client)
+                campers.setup(region=region)
             context.exit_code = 0
 
         elif command == "list":
@@ -129,6 +174,14 @@ def execute_command_direct(
             name_or_id = args["name_or_id"]
             region = args.get("region")
             campers.start(name_or_id=name_or_id, region=region)
+            context.exit_code = 0
+
+        elif command == "info":
+            if not args or "name_or_id" not in args:
+                raise ValueError("info command requires name_or_id argument")
+            name_or_id = args["name_or_id"]
+            region = args.get("region")
+            campers.info(name_or_id=name_or_id, region=region)
             context.exit_code = 0
 
         elif command == "run":
@@ -177,10 +230,13 @@ def execute_command_direct(
         logger.error("Command execution failed: %s", e, exc_info=True)
 
     finally:
+        for patcher in portforward_patchers:
+            patcher.stop()
         signal.alarm(0)
         signal.signal(signal.SIGALRM, old_handler)
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+        root_logger.handlers = original_handlers
         root_logger.setLevel(original_log_level)
         context.stdout = stdout_capture.getvalue()
         context.stderr = stderr_capture.getvalue()
@@ -250,9 +306,7 @@ def step_run_setup_with_input(context: Context, user_input: str) -> None:
     vpc_exists = bool(vpcs.get("Vpcs", []))
     vpc_env_value = "true" if vpc_exists else "false"
 
-    context.harness.services.configuration_env.set(
-        "CAMPERS_TEST_VPC_EXISTS", vpc_env_value
-    )
+    context.harness.services.configuration_env.set("CAMPERS_TEST_VPC_EXISTS", vpc_env_value)
 
     result = subprocess.run(
         ["uv", "run", "python", "-m", "campers", "setup"],
@@ -300,20 +354,14 @@ def step_run_simple_command(context: Context, command: str) -> None:
 
         try:
             ec2_client = boto3.client("ec2", region_name="us-east-1")
-            vpcs = ec2_client.describe_vpcs(
-                Filters=[{"Name": "isDefault", "Values": ["true"]}]
-            )
+            vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
             vpc_exists = bool(vpcs.get("Vpcs", []))
             vpc_env_value = "true" if vpc_exists else "false"
 
-            context.harness.services.configuration_env.set(
-                "CAMPERS_TEST_VPC_EXISTS", vpc_env_value
-            )
+            context.harness.services.configuration_env.set("CAMPERS_TEST_VPC_EXISTS", vpc_env_value)
         except Exception:
             vpc_env_value = "false"
-            context.harness.services.configuration_env.set(
-                "CAMPERS_TEST_VPC_EXISTS", vpc_env_value
-            )
+            context.harness.services.configuration_env.set("CAMPERS_TEST_VPC_EXISTS", vpc_env_value)
 
     result = subprocess.run(
         ["uv", "run", "python", "-m", "campers", command],

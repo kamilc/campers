@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 from tests.harness.exceptions import HarnessTimeoutError
 from tests.harness.services.diagnostics import DiagnosticsCollector
@@ -227,9 +228,7 @@ class MonitorController:
         Clears a prior pause request and allows polling to continue.
         """
         self._pause_event.set()
-        self._diagnostics.record(
-            "monitor", "resumed", {"thread": threading.get_ident()}
-        )
+        self._diagnostics.record("monitor", "resumed", {"thread": threading.get_ident()})
 
     def shutdown(self, timeout_sec: float) -> MonitorShutdownResult:
         """Shutdown the monitor thread and return status.
@@ -260,9 +259,7 @@ class MonitorController:
                 error="monitor thread did not terminate",
             )
 
-        self._event_bus.publish(
-            Event(type="monitor-shutdown", instance_id=None, data={})
-        )
+        self._event_bus.publish(Event(type="monitor-shutdown", instance_id=None, data={}))
         return MonitorShutdownResult(success=True)
 
     def statistics(self) -> MonitorStatistics:
@@ -344,7 +341,7 @@ class MonitorController:
                         },
                     )
                     logger.debug(
-                        "Action provider attempt %d/%d failed (%s): %s. Retrying in %.2f seconds...",
+                        "Action provider attempt %d/%d failed (%s): %s. Retrying in %.2fs",
                         attempt + 1,
                         max_retries,
                         error_classification,
@@ -592,6 +589,7 @@ class MonitorController:
                     {"Key": "CampersSSHHost", "Value": "localhost"},
                     {"Key": "CampersSSHPort", "Value": str(port)},
                     {"Key": "CampersSSHKeyFile", "Value": str(key_file)},
+                    {"Key": "CampersSSHUsername", "Value": "ubuntu"},
                 ],
             )
         except Exception as exc:  # pylint: disable=broad-except
@@ -601,9 +599,7 @@ class MonitorController:
                 {"instance_id": instance_id, "error": str(exc)},
             )
 
-    def _publish_event(
-        self, event_type: str, instance_id: str, data: dict[str, Any]
-    ) -> None:
+    def _publish_event(self, event_type: str, instance_id: str, data: dict[str, Any]) -> None:
         """Publish typed event with diagnostics side effects."""
         event = Event(type=event_type, instance_id=instance_id, data=data)
         self._event_bus.publish(event)

@@ -24,9 +24,11 @@ def step_create_running_instances(context: Context, count: int) -> None:
         instance_name = f"test-running-{i}"
         step_create_running_instance(context, instance_name)
         context.running_instances.append(instance_name)
-        if hasattr(context, "test_instance_id"):
-            if context.test_instance_id not in context.created_instance_ids:
-                context.created_instance_ids.append(context.test_instance_id)
+        has_test_id = hasattr(context, "test_instance_id")
+        is_new = has_test_id and context.test_instance_id not in context.created_instance_ids
+
+        if is_new:
+            context.created_instance_ids.append(context.test_instance_id)
 
 
 @given("I have {count:d} stopped instances")
@@ -44,9 +46,11 @@ def step_create_stopped_instances(context: Context, count: int) -> None:
         instance_name = f"test-stopped-{i}"
         step_create_stopped_instance(context, instance_name)
         context.stopped_instances.append(instance_name)
-        if hasattr(context, "test_instance_id"):
-            if context.test_instance_id not in context.created_instance_ids:
-                context.created_instance_ids.append(context.test_instance_id)
+        has_test_id = hasattr(context, "test_instance_id")
+        is_new = has_test_id and context.test_instance_id not in context.created_instance_ids
+
+        if is_new:
+            context.created_instance_ids.append(context.test_instance_id)
 
 
 @given("I have {count:d} instances")
@@ -61,6 +65,7 @@ def step_have_zero_instances(context: Context, count: int) -> None:
         Expected number of instances (must be 0)
     """
     import logging
+
     from tests.integration.features.steps.instance_lifecycle_steps import (
         setup_ec2_manager,
     )
@@ -78,9 +83,7 @@ def step_have_zero_instances(context: Context, count: int) -> None:
                 ec2_manager.terminate_instance(instance["instance_id"])
                 logger.debug(f"Terminated instance {instance['instance_id']}")
             except Exception as e:
-                logger.debug(
-                    f"Failed to terminate instance {instance['instance_id']}: {e}"
-                )
+                logger.debug(f"Failed to terminate instance {instance['instance_id']}: {e}")
     except Exception as e:
         logger.debug(f"Error cleaning up instances: {e}")
 
@@ -94,26 +97,20 @@ def step_have_zero_instances(context: Context, count: int) -> None:
 
 
 @given("I have {count:d} running instance in {region}")
-def step_create_running_instance_in_region(
-    context: Context, count: int, region: str
-) -> None:
+def step_create_running_instance_in_region(context: Context, count: int, region: str) -> None:
     """Create running instance in specified region."""
     step_create_running_instances(context, count)
 
 
 @given("I have {count:d} stopped instances in {region}")
-def step_create_stopped_instances_in_region(
-    context: Context, count: int, region: str
-) -> None:
+def step_create_stopped_instances_in_region(context: Context, count: int, region: str) -> None:
     """Create stopped instances in specified region."""
     step_create_stopped_instances(context, count)
 
 
 @given("I have {count:d} running {instance_type} instance")
 @given("I have {count:d} running {instance_type} instances")
-def step_create_running_instances_of_type(
-    context: Context, count: int, instance_type: str
-) -> None:
+def step_create_running_instances_of_type(context: Context, count: int, instance_type: str) -> None:
     """Create running instances of specified type."""
     from tests.integration.features.steps.instance_lifecycle_steps import (
         step_create_running_instance,
@@ -128,9 +125,11 @@ def step_create_running_instances_of_type(
         context.pending_instance_type = instance_type
         step_create_running_instance(context, instance_name)
         context.running_instances.append(instance_name)
-        if hasattr(context, "test_instance_id"):
-            if context.test_instance_id not in context.created_instance_ids:
-                context.created_instance_ids.append(context.test_instance_id)
+        has_test_id = hasattr(context, "test_instance_id")
+        is_new = has_test_id and context.test_instance_id not in context.created_instance_ids
+
+        if is_new:
+            context.created_instance_ids.append(context.test_instance_id)
 
     if not hasattr(context, "instance_types"):
         context.instance_types = {}
@@ -141,27 +140,23 @@ def step_create_running_instances_of_type(
 def step_view_tui(context: Context) -> None:
     """Launch TUI and verify widget is visible."""
     import boto3
-    from campers.ec2 import EC2Manager
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    from campers.providers.aws.compute import EC2Manager
+
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
     if is_localstack:
+
         def localstack_client_factory(service: str, **kwargs: Any) -> Any:
             kwargs.setdefault("endpoint_url", "http://localhost:4566")
             return boto3.client(service, **kwargs)
 
         def localstack_ec2_factory(region: str = "us-east-1", **kwargs: Any) -> EC2Manager:
             return EC2Manager(
-                region=region,
-                boto3_client_factory=localstack_client_factory,
-                **kwargs
+                region=region, boto3_client_factory=localstack_client_factory, **kwargs
             )
 
-        campers = context.campers_module.Campers(
-            ec2_manager_factory=localstack_ec2_factory
-        )
+        campers = context.campers_module.Campers(compute_provider_factory=localstack_ec2_factory)
     else:
         campers = context.campers_module.Campers()
 
@@ -228,23 +223,23 @@ def step_launch_new_instance(context: Context) -> None:
         context.created_instance_ids = []
 
     step_create_running_instance(context, "test-new-instance")
-    if hasattr(context, "test_instance_id"):
-        if context.test_instance_id not in context.created_instance_ids:
-            context.created_instance_ids.append(context.test_instance_id)
+    has_test_id = hasattr(context, "test_instance_id")
+    is_new = has_test_id and context.test_instance_id not in context.created_instance_ids
+
+    if is_new:
+        context.created_instance_ids.append(context.test_instance_id)
 
 
 @then('overview widget shows "{expected_text}"')
 def step_overview_widget_shows_text(context: Context, expected_text: str) -> None:
     """Verify overview widget displays expected text."""
-    assert (
-        context.overview_widget_text == expected_text
-    ), f"Expected '{expected_text}', got '{context.overview_widget_text}'"
+    assert context.overview_widget_text == expected_text, (
+        f"Expected '{expected_text}', got '{context.overview_widget_text}'"
+    )
 
 
 @then("overview widget daily cost is approximately ${expected_cost:f}")
-def step_overview_widget_shows_approximate_cost(
-    context: Context, expected_cost: float
-) -> None:
+def step_overview_widget_shows_approximate_cost(context: Context, expected_cost: float) -> None:
     """Verify overview widget displays approximate cost."""
     import re
 
@@ -278,5 +273,5 @@ def step_widget_refreshes(context: Context) -> None:
     running_count = sum(1 for i in instances if i["state"] == "running")
     stopped_count = sum(1 for i in instances if i["state"] == "stopped")
 
-    widget_text = f"Running: {running_count}  Stopped: {stopped_count}  N/A"
+    widget_text = f"Instances - Running: {running_count}  Stopped: {stopped_count}  N/A"
     context.overview_widget_text = widget_text

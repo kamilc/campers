@@ -13,9 +13,9 @@ import yaml
 from behave import given, then, when
 from behave.runner import Context
 
+from campers.cli.main import CampersCLI
+from campers.services.portforward import PortForwardManager
 from tests.integration.features.steps.common_steps import execute_command_direct
-from campers.__main__ import CampersCLI
-from campers.portforward import PortForwardManager
 
 JSON_OUTPUT_TRUNCATE_LENGTH = 200
 
@@ -122,9 +122,7 @@ def create_cli_test_boto3_factory():
                     {"RegionName": "eu-west-1"},
                 ]
             }
-            mock_client.describe_vpcs.return_value = {
-                "Vpcs": [{"VpcId": "vpc-12345678"}]
-            }
+            mock_client.describe_vpcs.return_value = {"Vpcs": [{"VpcId": "vpc-12345678"}]}
             return mock_client
         elif service_name == "sts":
             mock_client = MagicMock()
@@ -140,17 +138,18 @@ def create_cli_test_boto3_factory():
     return mock_boto3_client
 
 
-def create_cli_test_ec2_manager_factory():
-    """Create an EC2Manager factory that returns mock managers for CLI tests.
+def create_cli_test_compute_provider_factory():
+    """Create a compute provider factory that returns mock managers for CLI tests.
 
     Returns
     -------
     callable
-        Factory function that returns mock EC2Manager instances
+        Factory function that returns mock compute provider instances
     """
 
     def mock_ec2_manager(region: str, **kwargs):
         mock_mgr = MagicMock()
+        mock_mgr.find_instances_by_name_or_id.return_value = []
         mock_mgr.launch_instance.return_value = {
             "instance_id": "i-test123456789",
             "public_ip": "192.168.1.1",
@@ -216,15 +215,15 @@ def create_cli_test_ssh_manager_factory():
     return mock_ssh_manager
 
 
-def ensure_machine_exists(context: Context, camp_name: str) -> None:
-    """Ensure machine configuration structure exists in context.
+def ensure_camp_exists(context: Context, camp_name: str) -> None:
+    """Ensure camp configuration structure exists in context.
 
     Parameters
     ----------
     context : behave.runner.Context
         Behave test context
     camp_name : str
-        Name of the machine configuration
+        Name of the camp configuration
     """
 
     if not hasattr(context, "config_data") or context.config_data is None:
@@ -242,92 +241,78 @@ def step_config_with_defaults_section_only(context: Context) -> None:
     context.config_data = {"defaults": {}, "camps": {}}
 
 
-@given('config file with machine "{camp_name}" defined')
-def step_config_with_machine_defined(context: Context, camp_name: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('config file with camp "{camp_name}" defined')
+def step_config_with_camp_defined(context: Context, camp_name: str) -> None:
+    ensure_camp_exists(context, camp_name)
 
 
-@given('machine "{camp_name}" has instance_type "{instance_type}"')
-def step_machine_has_instance_type(
-    context: Context, camp_name: str, instance_type: str
-) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has instance_type "{instance_type}"')
+def step_camp_has_instance_type(context: Context, camp_name: str, instance_type: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["instance_type"] = instance_type
 
 
-@given('machine "{camp_name}" has disk_size {disk_size:d}')
-def step_machine_has_disk_size(
-    context: Context, camp_name: str, disk_size: int
-) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has disk_size {disk_size:d}')
+def step_camp_has_disk_size(context: Context, camp_name: str, disk_size: int) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["disk_size"] = disk_size
 
 
-@given('machine "{camp_name}" has region "{region}"')
-def step_machine_has_region(context: Context, camp_name: str, region: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has region "{region}"')
+def step_camp_has_region(context: Context, camp_name: str, region: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["region"] = region
 
 
-@given('machine "{camp_name}" overrides region to "{region}"')
-def step_machine_overrides_region(
-    context: Context, camp_name: str, region: str
-) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" overrides region to "{region}"')
+def step_camp_overrides_region(context: Context, camp_name: str, region: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["region"] = region
 
 
-@given('machine "{camp_name}" has command "{command}"')
-def step_machine_has_command(context: Context, camp_name: str, command: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has command "{command}"')
+def step_camp_has_command(context: Context, camp_name: str, command: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["command"] = command
 
 
-@given('machine "{camp_name}" has no command field')
-def step_machine_has_no_command(context: Context, camp_name: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has no command field')
+def step_camp_has_no_command(context: Context, camp_name: str) -> None:
+    ensure_camp_exists(context, camp_name)
 
 
-@given('machine "{camp_name}" has setup_script "{script}"')
-def step_machine_has_setup_script(
-    context: Context, camp_name: str, script: str
-) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has setup_script "{script}"')
+def step_camp_has_setup_script(context: Context, camp_name: str, script: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["setup_script"] = script
 
 
-@given('machine "{camp_name}" has startup_script "{script}"')
-def step_machine_has_startup_script(
-    context: Context, camp_name: str, script: str
-) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has startup_script "{script}"')
+def step_camp_has_startup_script(context: Context, camp_name: str, script: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["startup_script"] = script
 
 
-@given('machine "{camp_name}" has env_filter "{env_filter}"')
-def step_machine_has_env_filter(
-    context: Context, camp_name: str, env_filter: str
-) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has env_filter "{env_filter}"')
+def step_camp_has_env_filter(context: Context, camp_name: str, env_filter: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["env_filter"] = [env_filter]
 
 
-@given('machine "{camp_name}" has on_exit "{on_exit_value}"')
-def step_machine_has_on_exit(
-    context: Context, camp_name: str, on_exit_value: str
-) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has on_exit "{on_exit_value}"')
+def step_camp_has_on_exit(context: Context, camp_name: str, on_exit_value: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["on_exit"] = on_exit_value
 
 
-@given("config file with camps {machine_list}")
-def step_config_with_camps(context: Context, machine_list: str) -> None:
-    camps = json.loads(machine_list)
+@given("config file with camps {camp_list}")
+def step_config_with_camps(context: Context, camp_list: str) -> None:
+    camps = json.loads(camp_list)
 
     context.config_data = {"defaults": {}, "camps": {}}
 
-    for machine in camps:
-        context.config_data["camps"][machine] = {}
+    for camp in camps:
+        context.config_data["camps"][camp] = {}
 
 
 @given('YAML defaults with region "{region}"')
@@ -387,9 +372,14 @@ def parse_cli_args(args: list[str]) -> dict[str, any]:
         "port": None,
         "include_vcs": None,
         "ignore": None,
+        "name_or_id": None,
     }
 
-    if not args or args[0] != "run":
+    if not args:
+        return params
+
+    command = args[0]
+    if command not in ("run", "info", "stop", "start"):
         return params
 
     i = 1
@@ -445,8 +435,11 @@ def parse_cli_args(args: list[str]) -> dict[str, any]:
             else:
                 i += 1
 
-        elif not arg.startswith("-") and params["camp_name"] is None:
-            params["camp_name"] = arg
+        elif not arg.startswith("-"):
+            if command == "run" and params["camp_name"] is None:
+                params["camp_name"] = arg
+            elif command in ("info", "stop", "start") and params["name_or_id"] is None:
+                params["name_or_id"] = arg
             i += 1
 
         else:
@@ -488,9 +481,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
 
     args = shlex.split(campers_args)
 
-    is_localstack = (
-        hasattr(context, "scenario") and "localstack" in context.scenario.tags
-    )
+    is_localstack = hasattr(context, "scenario") and "localstack" in context.scenario.tags
 
     is_cli_test = (
         hasattr(context, "scenario")
@@ -512,6 +503,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                 "port": params.get("port"),
                 "include_vcs": params.get("include_vcs"),
                 "ignore": params.get("ignore"),
+                "name_or_id": params.get("name_or_id"),
             },
         )
         return
@@ -524,13 +516,12 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
 
         from tests.integration.features.steps.mutagen_mocking import mutagen_mocked
 
-        boto3_factory = None
-        ec2_manager_factory = None
+        compute_provider_factory = None
         ssh_manager_factory = None
 
         if is_cli_test and not is_localstack:
-            boto3_factory = create_cli_test_boto3_factory()
-            ec2_manager_factory = create_cli_test_ec2_manager_factory()
+            create_cli_test_boto3_factory()
+            compute_provider_factory = create_cli_test_compute_provider_factory()
             ssh_manager_factory = create_cli_test_ssh_manager_factory()
 
         stderr_capture = io.StringIO()
@@ -550,9 +541,8 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
 
             with mutagen_mocked(context):
                 cli = CampersCLI(
-                    ec2_manager_factory=ec2_manager_factory,
+                    compute_provider_factory=compute_provider_factory,
                     ssh_manager_factory=ssh_manager_factory,
-                    boto3_client_factory=boto3_factory,
                 )
 
                 if args[0] == "run":
@@ -570,9 +560,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                     )
 
                     context.exit_code = 0
-                    context.stdout = (
-                        result if isinstance(result, str) else json.dumps(result)
-                    )
+                    context.stdout = result if isinstance(result, str) else json.dumps(result)
                     context.stderr = stderr_capture.getvalue()
 
                     if isinstance(result, str):
@@ -586,14 +574,11 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                     if context.final_config and "instance_id" in context.final_config:
                         context.instance_id = context.final_config["instance_id"]
 
-                    logger.debug(
-                        f"In-process execution succeeded, instance: {context.final_config.get('instance_id', 'unknown')}"
-                    )
+                    instance_id = context.final_config.get("instance_id", "unknown")
+                    logger.debug(f"In-process execution succeeded, instance: {instance_id}")
 
                     if hasattr(context, "monitor_error") and context.monitor_error:
-                        logger.error(
-                            f"Monitor thread reported error: {context.monitor_error}"
-                        )
+                        logger.error(f"Monitor thread reported error: {context.monitor_error}")
 
                     if hasattr(cli, "_resources"):
                         portforward_mgr = cli._resources.get("portforward_mgr")
@@ -603,12 +588,21 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
                     from tests.integration.features.steps.port_forwarding_steps import (
                         start_http_servers_for_all_configured_ports,
                     )
+
                     logger.info("Starting HTTP servers for configured ports")
                     start_http_servers_for_all_configured_ports(context)
-                else:
-                    raise ValueError(
-                        f"Unsupported command for in-process execution: {args[0]}"
+
+                elif args[0] == "info":
+                    cli.info(
+                        name_or_id=params["name_or_id"],
+                        region=params["region"],
                     )
+                    context.exit_code = 0
+                    context.stdout = stderr_capture.getvalue()
+                    context.stderr = ""
+
+                else:
+                    raise ValueError(f"Unsupported command for in-process execution: {args[0]}")
 
         except SystemExit as e:
             logger.debug(f"CLI raised SystemExit with code {e.code}")
@@ -616,9 +610,7 @@ def step_run_campers_command(context: Context, campers_args: str) -> None:
             captured_stderr = stderr_capture.getvalue()
             context.stderr = captured_stderr
             context.stdout = ""
-            context.error = (
-                captured_stderr if captured_stderr else f"SystemExit: {e.code}"
-            )
+            context.error = captured_stderr if captured_stderr else f"SystemExit: {e.code}"
         except Exception as e:
             logger.error(f"In-process execution failed: {e}", exc_info=True)
             context.exit_code = 1
@@ -727,12 +719,8 @@ def step_command_fails_with_value_error(context: Context) -> None:
             f"Expected ValueError, got {type(context.exception).__name__}: {context.exception}"
         )
     else:
-        assert context.exit_code != 0, (
-            f"Expected failure, got exit code {context.exit_code}"
-        )
-        assert context.stderr.strip(), (
-            "Expected error message in stderr but got nothing"
-        )
+        assert context.exit_code != 0, f"Expected failure, got exit code {context.exit_code}"
+        assert context.stderr.strip(), "Expected error message in stderr but got nothing"
 
         assert "Configuration error" in context.stderr, (
             f"Expected 'Configuration error' in stderr but got: {context.stderr}"
@@ -769,8 +757,8 @@ def step_final_config_contains_env_filter(context: Context, expected: str) -> No
     assert context.exit_code == 0
 
 
-@given('machine "{camp_name}" has sync_paths configured')
-def step_machine_has_sync_paths_configured(context: Context, camp_name: str) -> None:
+@given('camp "{camp_name}" has sync_paths configured')
+def step_camp_has_sync_paths_configured(context: Context, camp_name: str) -> None:
     if not hasattr(context, "config_data"):
         context.config_data = {"defaults": {}, "camps": {}}
 
@@ -785,18 +773,16 @@ def step_machine_has_sync_paths_configured(context: Context, camp_name: str) -> 
     ]
 
 
-@given('machine "{camp_name}" has ports {ports_list}')
-def step_machine_has_ports(
-    context: Context, camp_name: str, ports_list: str
-) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has ports {ports_list}')
+def step_camp_has_ports(context: Context, camp_name: str, ports_list: str) -> None:
+    ensure_camp_exists(context, camp_name)
     ports = json.loads(ports_list)
     context.config_data["camps"][camp_name]["ports"] = ports
 
 
-@given('machine "{camp_name}" has no ports specified')
-def step_machine_has_no_ports(context: Context, camp_name: str) -> None:
-    ensure_machine_exists(context, camp_name)
+@given('camp "{camp_name}" has no ports specified')
+def step_camp_has_no_ports(context: Context, camp_name: str) -> None:
+    ensure_camp_exists(context, camp_name)
     context.config_data["camps"][camp_name]["ports"] = []
 
 

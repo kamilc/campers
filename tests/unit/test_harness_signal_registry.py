@@ -114,9 +114,7 @@ class TestSignalRegistryThreadSafety:
 
         threads = []
         for i in range(10):
-            thread = threading.Thread(
-                target=publish_signal, args=(f"signal-{i}", f"data-{i}")
-            )
+            thread = threading.Thread(target=publish_signal, args=(f"signal-{i}", f"data-{i}"))
             threads.append(thread)
             thread.start()
 

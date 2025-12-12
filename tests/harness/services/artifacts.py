@@ -2,6 +2,7 @@
 
 import logging
 import shutil
+from datetime import UTC
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -42,10 +43,10 @@ class ArtifactManager:
         Path
             Path to created scenario directory
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         scenario_id = scenario_name.lower().replace(" ", "-").replace("/", "-")
-        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+        run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
 
         root_dir = self.base_dir / scenario_id
         root_dir.mkdir(parents=True, exist_ok=True)
@@ -59,9 +60,7 @@ class ArtifactManager:
         logger.debug(f"Created artifact directory: {self.scenario_dir}")
         return self.scenario_dir
 
-    def create_temp_file(
-        self, filename: str, content: str = "", mode: str = "w"
-    ) -> Path:
+    def create_temp_file(self, filename: str, content: str = "", mode: str = "w") -> Path:
         """Create a temporary file in scenario directory.
 
         Parameters
@@ -79,9 +78,7 @@ class ArtifactManager:
             Path to created file
         """
         if self.scenario_dir is None:
-            raise RuntimeError(
-                "No scenario directory created. Call create_scenario_dir first."
-            )
+            raise RuntimeError("No scenario directory created. Call create_scenario_dir first.")
 
         file_path = self.scenario_dir / filename
         file_path.parent.mkdir(parents=True, exist_ok=True)

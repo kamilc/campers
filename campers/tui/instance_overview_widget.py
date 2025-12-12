@@ -2,9 +2,14 @@
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from textual.widgets import Static
+
+from campers.constants import DEFAULT_PROVIDER, STATS_REFRESH_INTERVAL_SECONDS
+from campers.core.interfaces import ComputeProvider, PricingProvider
+from campers.providers import get_provider
+from campers.providers.exceptions import ProviderError
 
 if TYPE_CHECKING:
     from campers import Campers
@@ -18,8 +23,8 @@ class InstanceOverviewWidget(Static):
     Parameters
     ----------
     campers_instance : Campers
-        Campers instance providing access to EC2 manager factory for creating
-        EC2 managers
+        Campers instance providing access to compute provider factory for creating
+        compute providers
 
     Attributes
     ----------
@@ -38,13 +43,16 @@ class InstanceOverviewWidget(Static):
     def __init__(self, campers_instance: "Campers") -> None:
         super().__init__("Initializing...", id="instance-overview-widget")
         self._campers_instance = campers_instance
-        self._ec2_manager_factory = campers_instance._ec2_manager_factory
-        self.ec2_manager = None
-        self.pricing_service = None
+        self._compute_provider_factory = (
+            campers_instance._compute_provider_factory_override
+            or campers_instance._create_compute_provider
+        )
+        self.compute_provider: ComputeProvider | None = None
+        self.pricing_service: PricingProvider | None = None
         self.running_count = 0
         self.stopped_count = 0
-        self.daily_cost: Optional[float] = None
-        self.last_update: Optional[datetime] = None
+        self.daily_cost: float | None = None
+        self.last_update: datetime | None = None
         self._interval_timer = None
         self._initialized = False
 
@@ -58,23 +66,24 @@ class InstanceOverviewWidget(Static):
             self._interval_timer.stop()
 
     def _initialize_services(self) -> None:
-        """Initialize AWS services in background thread."""
-        from campers.config import ConfigLoader
-        from campers.pricing import PricingService
+        """Initialize cloud provider services in background thread."""
+        from campers.core.config import ConfigLoader
 
         try:
-            default_region = ConfigLoader.BUILT_IN_DEFAULTS["region"]
-            self.ec2_manager = self._ec2_manager_factory(region=default_region)
-            self.pricing_service = PricingService()
+            default_region = ConfigLoader().BUILT_IN_DEFAULTS["region"]
+            self.compute_provider = self._compute_provider_factory(region=default_region)
+            provider_info = get_provider(DEFAULT_PROVIDER)
+            pricing_class = provider_info["pricing"]
+            self.pricing_service = pricing_class()
             self._initialized = True
             self.app.call_from_thread(self._start_refresh_timer)
-        except Exception as e:
-            logger.debug(f"Failed to initialize AWS services: {e}")
+        except (RuntimeError, ValueError, OSError) as e:
+            logger.warning("Failed to initialize cloud provider services: %s", e)
             self.app.call_from_thread(self._show_init_error)
 
     def _start_refresh_timer(self) -> None:
         """Start the refresh timer and do initial refresh after initialization."""
-        self._interval_timer = self.set_interval(30, self.refresh_stats)
+        self._interval_timer = self.set_interval(STATS_REFRESH_INTERVAL_SECONDS, self.refresh_stats)
         self.run_worker(self._refresh_stats_sync, thread=True)
 
     def _show_init_error(self) -> None:
@@ -83,11 +92,11 @@ class InstanceOverviewWidget(Static):
 
     def _refresh_stats_sync(self) -> None:
         """Synchronous version of refresh_stats for worker thread."""
-        if not self._initialized or self.ec2_manager is None:
+        if not self._initialized or self.compute_provider is None:
             return
 
         try:
-            all_instances = self.ec2_manager.list_instances(region_filter=None)
+            all_instances = self.compute_provider.list_instances(region_filter=None)
 
             running = [i for i in all_instances if i["state"] == "running"]
             stopped = [i for i in all_instances if i["state"] == "stopped"]
@@ -96,7 +105,8 @@ class InstanceOverviewWidget(Static):
             self.stopped_count = len(stopped)
 
             if self.pricing_service and self.pricing_service.pricing_available:
-                from campers.pricing import calculate_monthly_cost
+                provider_info = get_provider(DEFAULT_PROVIDER)
+                calculate_monthly_cost = provider_info["calculate_monthly_cost"]
 
                 monthly_costs = [
                     calculate_monthly_cost(
@@ -117,8 +127,8 @@ class InstanceOverviewWidget(Static):
             self.last_update = datetime.now()
             self.app.call_from_thread(self._update_display)
 
-        except Exception as e:
-            logger.debug(f"Failed to refresh instance stats: {e}")
+        except (ProviderError, KeyError, ValueError, AttributeError) as e:
+            logger.warning("Failed to refresh instance stats: %s", e)
 
     def _update_display(self) -> None:
         """Update the widget display on the main thread."""
@@ -139,6 +149,5 @@ class InstanceOverviewWidget(Static):
         """
         cost_str = f"${self.daily_cost:.2f}/day" if self.daily_cost else "N/A"
         return (
-            f"Instances - Running: {self.running_count}  "
-            f"Stopped: {self.stopped_count}  {cost_str}"
+            f"Instances - Running: {self.running_count}  Stopped: {self.stopped_count}  {cost_str}"
         )

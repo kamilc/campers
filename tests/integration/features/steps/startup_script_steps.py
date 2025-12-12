@@ -135,7 +135,7 @@ def step_startup_script_executes_successfully(context: Context) -> None:
     logger.info("Verified startup_script executed successfully")
 
 
-@when("I simulate running the machine in the TUI")
+@when("I simulate running the camp in the TUI")
 def step_simulate_running_machine_in_tui(context: Context) -> None:
     """Simulate running the machine in the TUI using Textual Pilot.
 
@@ -160,9 +160,7 @@ def step_simulate_running_machine_in_tui(context: Context) -> None:
 
     max_wait = 180
     logger.info(f"=== STARTING TUI TEST FOR MACHINE: {camp_name} ===")
-    result = run_tui_test_with_machine(
-        camp_name, context.config_path, max_wait, context
-    )
+    result = run_tui_test_with_machine(camp_name, context.config_path, max_wait, context)
     context.tui_result = result
 
     if hasattr(context, "harness") and hasattr(context.harness, "current_instance_id"):

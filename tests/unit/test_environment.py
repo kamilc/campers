@@ -3,7 +3,6 @@
 import tempfile
 from pathlib import Path
 
-
 from tests.integration.features.environment import (
     SSH_BLOCK_END,
     SSH_BLOCK_START,
@@ -74,9 +73,7 @@ class TestRemoveTestSshBlock:
             config_path = Path(tmpdir) / "config"
             user_config = "Host production\n    User ubuntu\n"
             block = get_localhost_config_block()
-            config_path.write_text(
-                user_config + block + "Host staging\n    User admin\n"
-            )
+            config_path.write_text(user_config + block + "Host staging\n    User admin\n")
 
             remove_test_ssh_block(config_path)
 
@@ -251,10 +248,7 @@ class TestAppendTestSshBlock:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "config"
             existing_block = (
-                f"\n{SSH_BLOCK_START}\nHost something\n"
-                "    Line1\n"
-                "    Line2\n"
-                f"{SSH_BLOCK_END}\n"
+                f"\n{SSH_BLOCK_START}\nHost something\n    Line1\n    Line2\n{SSH_BLOCK_END}\n"
             )
             config_path.write_text(existing_block)
 

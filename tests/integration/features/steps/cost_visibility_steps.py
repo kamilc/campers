@@ -1,40 +1,30 @@
 """BDD step definitions for cost visibility feature."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 from behave import given, then, when
 from behave.runner import Context
-
+from botocore.exceptions import ClientError
 
 SAMPLE_EC2_PRICING_T3_MEDIUM = {
     "terms": {
         "OnDemand": {
-            "OFFER123": {
-                "priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}
-            }
+            "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}}
         }
     }
 }
 
 SAMPLE_EC2_PRICING_G5_2XLARGE = {
     "terms": {
-        "OnDemand": {
-            "OFFER789": {
-                "priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "1.21"}}}
-            }
-        }
+        "OnDemand": {"OFFER789": {"priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "1.21"}}}}}
     }
 }
 
 SAMPLE_EBS_PRICING_GP3 = {
     "terms": {
-        "OnDemand": {
-            "OFFER456": {
-                "priceDimensions": {"DIM789": {"pricePerUnit": {"USD": "0.08"}}}
-            }
-        }
+        "OnDemand": {"OFFER456": {"priceDimensions": {"DIM789": {"pricePerUnit": {"USD": "0.08"}}}}}
     }
 }
 
@@ -43,6 +33,7 @@ SAMPLE_EBS_PRICING_GP3 = {
 def step_mock_pricing_api_with_sample_rates(context: Context) -> None:
     """Mock AWS Pricing API with realistic sample pricing data."""
     import boto3
+
     original_boto3_client = boto3.client
 
     context.use_direct_instantiation = True
@@ -52,11 +43,21 @@ def step_mock_pricing_api_with_sample_rates(context: Context) -> None:
     def mock_get_products(**kwargs):
         filters = {f["Field"]: f["Value"] for f in kwargs.get("Filters", [])}
 
-        if filters.get("instanceType") == "t3.medium" and filters.get("location") == "US East (N. Virginia)":
+        if (
+            filters.get("instanceType") == "t3.medium"
+            and filters.get("location") == "US East (N. Virginia)"
+        ):
             return {"PriceList": [json.dumps(SAMPLE_EC2_PRICING_T3_MEDIUM)]}
-        elif filters.get("instanceType") == "g5.2xlarge" and filters.get("location") == "US East (N. Virginia)":
+        elif (
+            filters.get("instanceType") == "g5.2xlarge"
+            and filters.get("location") == "US East (N. Virginia)"
+        ):
             return {"PriceList": [json.dumps(SAMPLE_EC2_PRICING_G5_2XLARGE)]}
-        elif filters.get("productFamily") == "Storage" and filters.get("volumeApiName") == "gp3" and filters.get("location") == "US East (N. Virginia)":
+        elif (
+            filters.get("productFamily") == "Storage"
+            and filters.get("volumeApiName") == "gp3"
+            and filters.get("location") == "US East (N. Virginia)"
+        ):
             return {"PriceList": [json.dumps(SAMPLE_EBS_PRICING_GP3)]}
 
         return {"PriceList": []}
@@ -78,6 +79,7 @@ def step_mock_pricing_api_with_sample_rates(context: Context) -> None:
 def step_mock_pricing_api_with_call_counter(context: Context) -> None:
     """Mock AWS Pricing API and track number of API calls."""
     import boto3
+
     original_boto3_client = boto3.client
 
     context.use_direct_instantiation = True
@@ -90,7 +92,9 @@ def step_mock_pricing_api_with_call_counter(context: Context) -> None:
         instance_type = filters.get("instanceType", "")
 
         if instance_type:
-            context.pricing_api_call_count[instance_type] = context.pricing_api_call_count.get(instance_type, 0) + 1
+            context.pricing_api_call_count[instance_type] = (
+                context.pricing_api_call_count.get(instance_type, 0) + 1
+            )
 
         if filters.get("instanceType") == "t3.medium":
             return {"PriceList": [json.dumps(SAMPLE_EC2_PRICING_T3_MEDIUM)]}
@@ -116,6 +120,7 @@ def step_mock_pricing_api_with_call_counter(context: Context) -> None:
 def step_pricing_api_not_accessible(context: Context) -> None:
     """Mock AWS Pricing API as unavailable (LocalStack scenario)."""
     import boto3
+
     original_boto3_client = boto3.client
 
     context.use_direct_instantiation = True
@@ -125,7 +130,15 @@ def step_pricing_api_not_accessible(context: Context) -> None:
 
     def client_factory(service_name, region_name=None, **kwargs):
         if service_name == "pricing":
-            raise Exception("Pricing API not available in LocalStack")
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "UnknownEndpoint",
+                        "Message": "Pricing API not available in LocalStack",
+                    }
+                },
+                "CreateClient",
+            )
         return original_boto3_client(service_name, region_name=region_name, **kwargs)
 
     mock_boto_client.side_effect = client_factory
@@ -135,6 +148,7 @@ def step_pricing_api_not_accessible(context: Context) -> None:
 def step_pricing_api_available(context: Context) -> None:
     """Set up AWS Pricing API as available."""
     import boto3
+
     original_boto3_client = boto3.client
 
     context.use_direct_instantiation = True
@@ -189,7 +203,7 @@ def step_running_instance_with_type(context: Context, instance_type: str) -> Non
         "state": "running",
         "region": region,
         "instance_type": instance_type,
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": f"test-{instance_type}",
         "volume_size": 50,
     }
@@ -227,7 +241,7 @@ def step_stopped_instance_with_type(context: Context, instance_type: str) -> Non
         "state": "stopped",
         "region": region,
         "instance_type": instance_type,
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": f"test-{instance_type}",
         "volume_size": 40,
     }
@@ -270,7 +284,7 @@ def step_running_instance_with_type_and_volume(
         "state": "running",
         "region": region,
         "instance_type": instance_type,
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": instance_name,
         "volume_size": volume_size,
     }
@@ -315,7 +329,7 @@ def step_stopped_instance_with_type_and_volume(
         "state": "stopped",
         "region": region,
         "instance_type": instance_type,
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": instance_name,
         "volume_size": volume_size,
     }
@@ -355,7 +369,7 @@ def step_instance_in_unsupported_region(context: Context, region: str) -> None:
         "name": "campers-test-unsupported",
         "state": "running",
         "instance_type": "t3.medium",
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": "test-unsupported",
         "region": region,
     }
@@ -392,7 +406,7 @@ def step_running_instance_generic(context: Context) -> None:
         "state": "running",
         "region": region,
         "instance_type": "t3.medium",
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": "test-generic",
         "volume_size": 50,
     }
@@ -436,7 +450,7 @@ def step_stopped_instance_generic(context: Context) -> None:
         "state": "stopped",
         "region": region,
         "instance_type": "t3.medium",
-        "launch_time": datetime.now(timezone.utc),
+        "launch_time": datetime.now(UTC),
         "camp_config": "test-generic",
         "volume_size": 50,
     }
@@ -537,8 +551,7 @@ def step_api_called_once_per_type(context: Context) -> None:
     for instance_type, count in call_count.items():
         if count != 1:
             raise AssertionError(
-                f"Expected 1 API call for {instance_type}, got {count}. "
-                f"All calls: {call_count}"
+                f"Expected 1 API call for {instance_type}, got {count}. All calls: {call_count}"
             )
 
 

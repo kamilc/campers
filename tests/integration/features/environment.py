@@ -1,11 +1,12 @@
 """Behave environment configuration for campers tests."""
 
+import contextlib
+import gc
 import importlib.util
 import logging
 import logging.handlers
 import os
 import signal
-import gc
 import socket
 import sys
 import threading
@@ -16,6 +17,7 @@ from typing import Any
 from behave.model import Scenario
 from behave.runner import Context
 from moto import mock_aws
+
 from tests.integration.features.steps.diagnostics_utils import (
     collect_diagnostics,
     send_signal_to_process,
@@ -154,7 +156,7 @@ class ScenarioTimeoutWatchdog:
                 logger.debug("Failed to record watchdog diagnostics: %s", exc)
 
         if diag_path is not None:
-            setattr(self._context, "watchdog_artifact_path", diag_path)
+            self._context.watchdog_artifact_path = diag_path
 
         logger.error(
             "Scenario '%s' exceeded %ss timeout. Diagnostics: %s",
@@ -166,18 +168,14 @@ class ScenarioTimeoutWatchdog:
         try:
             os.kill(os.getpid(), self._signal_number)
         except OSError as exc:  # pragma: no cover - process teardown best effort
-            logger.error(
-                "Failed to signal timeout for scenario '%s': %s", scenario_name, exc
-            )
+            logger.error("Failed to signal timeout for scenario '%s': %s", scenario_name, exc)
 
     def _signal_handler(self, signum, frame):  # type: ignore[override]
         """Raise TimeoutError when the watchdog signal is delivered."""
 
         scenario = getattr(self._context, "scenario", None)
         scenario_name = scenario.name if scenario else "unknown-scenario"
-        message = (
-            f"Scenario '{scenario_name}' exceeded {self._timeout_seconds}s timeout"
-        )
+        message = f"Scenario '{scenario_name}' exceeded {self._timeout_seconds}s timeout"
         raise TimeoutError(message)
 
     def _get_diagnostics_service(self):
@@ -248,8 +246,7 @@ def run_mutagen_command_with_retry(
                 return result.stdout if text_output else True
 
             logger.warning(
-                f"Mutagen command failed with returncode={result.returncode}: "
-                f"{' '.join(args)}"
+                f"Mutagen command failed with returncode={result.returncode}: {' '.join(args)}"
             )
         except subprocess.TimeoutExpired:
             logger.warning(f"Mutagen command timed out after {timeout}s")
@@ -259,9 +256,7 @@ def run_mutagen_command_with_retry(
         if attempt < max_attempts - 1:
             time.sleep(2)
 
-    error_msg = (
-        f"Mutagen command failed after {max_attempts} attempts: {' '.join(args)}"
-    )
+    error_msg = f"Mutagen command failed after {max_attempts} attempts: {' '.join(args)}"
     logger.error(error_msg)
     return "" if text_output else False
 
@@ -323,8 +318,7 @@ def check_mutagen_daemon_health() -> bool:
             )
         except subprocess.TimeoutExpired:
             logger.warning(
-                f"Mutagen daemon check timed out "
-                f"(attempt {attempt + 1}/{max_health_checks})"
+                f"Mutagen daemon check timed out (attempt {attempt + 1}/{max_health_checks})"
             )
         except FileNotFoundError:
             logger.warning("Mutagen command not found - Mutagen may not be installed")
@@ -335,9 +329,7 @@ def check_mutagen_daemon_health() -> bool:
         if attempt < max_health_checks - 1:
             time.sleep(2)
 
-    logger.warning(
-        "Mutagen daemon not responsive after all attempts - test may be unstable"
-    )
+    logger.warning("Mutagen daemon not responsive after all attempts - test may be unstable")
     return False
 
 
@@ -379,10 +371,7 @@ def append_test_ssh_block(config_path: Path) -> None:
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if config_path.exists():
-        config = config_path.read_text()
-    else:
-        config = ""
+    config = config_path.read_text() if config_path.exists() else ""
 
     config = re.sub(
         rf"\n?{SSH_BLOCK_START}.*?{SSH_BLOCK_END}\n?",
@@ -488,7 +477,7 @@ def cleanup_test_ports(port_list: list[int]) -> None:
                 if filtered_pids:
                     logger.info(
                         f"Attempt {attempt + 1}/{max_retries}: "
-                        f"Cleaning up {len(filtered_pids)} process(es) using port {port}: {filtered_pids}"
+                        f"Cleaning up {len(filtered_pids)} process(es) on port {port}"
                     )
 
                     killed_pids = []
@@ -504,21 +493,17 @@ def cleanup_test_ports(port_list: list[int]) -> None:
                         except subprocess.TimeoutExpired:
                             logger.warning(f"Timeout killing process {pid} on port {port}")
                         except Exception as e:
-                            logger.warning(
-                                f"Failed to kill process {pid} on port {port}: {e}"
-                            )
+                            logger.warning(f"Failed to kill process {pid} on port {port}: {e}")
 
                     if killed_pids and attempt < max_retries - 1:
-                        logger.info(
-                            f"Waiting {retry_delay}s for OS to release port {port}..."
-                        )
+                        logger.info(f"Waiting {retry_delay}s for OS to release port {port}...")
                         time.sleep(retry_delay)
                         continue
 
                 if not filtered_pids:
                     if pids and current_pid in pids:
                         logger.debug(
-                            f"Attempting to stop portforward managers for port {port} owned by current PID {current_pid}"
+                            f"Stopping portforward managers for port {port}, PID {current_pid}"
                         )
                         _stop_portforward_managers_via_gc()
                     break
@@ -538,9 +523,7 @@ def cleanup_test_ports(port_list: list[int]) -> None:
                 ["lsof", "-i", f":{port}"], capture_output=True, text=True
             )
             owner_info = owner_result.stdout.strip() if owner_result.stdout else ""
-            message = (
-                f"Port {port} remains in use after cleanup attempts. Owner info: {owner_info}"
-            )
+            message = f"Port {port} remains in use after cleanup attempts. Owner info: {owner_info}"
             logger.error(message)
             raise RuntimeError(message)
 
@@ -570,7 +553,7 @@ def _port_is_free(port: int) -> bool:
 def _stop_portforward_managers_via_gc() -> None:
     """Best-effort stop of any PortForwardManager instances reachable via GC."""
     try:
-        from campers.portforward import PortForwardManager
+        from campers.services.portforward import PortForwardManager
     except Exception:  # pragma: no cover - defensive import
         return
 
@@ -596,6 +579,7 @@ def before_all(context: Context) -> None:
     cleanup_test_ports(test_ports)
 
     import time
+
     logger.info("Waiting 2 seconds for OS to release ports...")
     time.sleep(2)
 
@@ -667,7 +651,6 @@ def before_all(context: Context) -> None:
 
     context.campers_module = campers_module
 
-
     logging.info("Installing campers in editable mode...")
     result = subprocess.run(
         ["uv", "pip", "install", "-e", "."],
@@ -716,6 +699,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     if hasattr(context, "mock_aws_env") and context.mock_aws_env:
         try:
             context.mock_aws_env.stop()
+            delattr(context, "mock_aws_env")
         except (RuntimeError, Exception):
             pass
 
@@ -734,10 +718,17 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         os.environ["AWS_ACCESS_KEY_ID"] = "testing"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-        os.environ["CAMPERS_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
-        os.environ["CAMPERS_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
+
+        if is_pilot_scenario:
+            os.environ["CAMPERS_SSH_TIMEOUT"] = "45"
+            os.environ["CAMPERS_SSH_MAX_RETRIES"] = "10"
+            logger.info("Using extended SSH retry config for @pilot scenario")
+        else:
+            os.environ["CAMPERS_SSH_TIMEOUT"] = str(TEST_SSH_TIMEOUT_SECONDS)
+            os.environ["CAMPERS_SSH_MAX_RETRIES"] = str(TEST_SSH_MAX_RETRIES)
 
         import time
+
         time.sleep(2)
 
         try:
@@ -749,9 +740,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
             ec2_manager = setup_ec2_manager(context)
             all_instances = ec2_manager.list_instances(region_filter=None)
             if all_instances:
-                logger.info(
-                    f"Cleaning up {len(all_instances)} stale instances from LocalStack"
-                )
+                logger.info(f"Cleaning up {len(all_instances)} stale instances from LocalStack")
                 for instance in all_instances:
                     try:
                         ec2_manager.terminate_instance(instance["instance_id"])
@@ -775,7 +764,10 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     else:
         context.use_direct_instantiation = False
 
-    if is_localstack_scenario or is_pilot_scenario:
+    is_cli_test = "smoke" in scenario.tags or "error" in scenario.tags
+    should_cleanup_ports = is_localstack_scenario or is_pilot_scenario or is_cli_test
+
+    if should_cleanup_ports:
         try:
             from tests.integration.features.steps.cli_steps import (
                 stop_registered_portforward_managers,
@@ -795,9 +787,12 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 
         import time
 
-        common_test_ports = [48888, 48889, 48890, 48891, 6006]
+        common_test_ports = [48888, 48889, 48890, 48891, 6006, 5000]
         logger.info("Forcefully cleaning up test ports before scenario...")
-        cleanup_test_ports(common_test_ports)
+        try:
+            cleanup_test_ports(common_test_ports)
+        except RuntimeError as e:
+            logger.warning(f"Port cleanup failed (will retry), continuing with scenario: {e}")
 
         logger.info("Killing any lingering sshtunnel processes before scenario...")
         cleanup_sshtunnel_processes()
@@ -809,9 +804,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
             import docker
 
             docker_client = docker.from_env()
-            orphaned_containers = docker_client.containers.list(
-                all=True, filters={"name": "ssh-"}
-            )
+            orphaned_containers = docker_client.containers.list(all=True, filters={"name": "ssh-"})
 
             for container in orphaned_containers:
                 try:
@@ -828,9 +821,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                 known_hosts_content = known_hosts_path.read_text()
                 lines = known_hosts_content.split("\n")
                 filtered_lines = [
-                    line
-                    for line in lines
-                    if line.strip() and not line.startswith("[localhost]:")
+                    line for line in lines if line.strip() and not line.startswith("[localhost]:")
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
@@ -867,9 +858,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                             try:
                                 ec2_client.delete_subnet(SubnetId=subnet["SubnetId"])
                             except Exception as e:
-                                logger.debug(
-                                    f"Could not delete subnet {subnet['SubnetId']}: {e}"
-                                )
+                                logger.debug(f"Could not delete subnet {subnet['SubnetId']}: {e}")
 
                         igws = ec2_client.describe_internet_gateways(
                             Filters=[{"Name": "attachment.vpc-id", "Values": [vpc_id]}]
@@ -885,9 +874,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                                 )
                             except Exception as e:
                                 igw_id = igw["InternetGatewayId"]
-                                logger.debug(
-                                    f"Could not delete internet gateway {igw_id}: {e}"
-                                )
+                                logger.debug(f"Could not delete internet gateway {igw_id}: {e}")
 
                         ec2_client.delete_vpc(VpcId=vpc_id)
                     except Exception as e:
@@ -897,9 +884,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
             vpc_id = vpc_response["Vpc"]["VpcId"]
             logger.debug(f"Created test VPC: {vpc_id}")
 
-            subnet_response = ec2_client.create_subnet(
-                VpcId=vpc_id, CidrBlock="10.0.1.0/24"
-            )
+            subnet_response = ec2_client.create_subnet(VpcId=vpc_id, CidrBlock="10.0.1.0/24")
             subnet_id = subnet_response["Subnet"]["SubnetId"]
             logger.debug(f"Created test subnet: {subnet_id}")
 
@@ -924,11 +909,10 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     else:
         context.mock_aws_env = None
 
-    if is_localstack_scenario:
-        if "error" in scenario.tags:
-            os.environ["CAMPERS_SSH_TIMEOUT"] = "2"
-            os.environ["CAMPERS_SSH_MAX_RETRIES"] = "3"
-            logger.info("Using reduced SSH retry config for @error scenario")
+    if is_localstack_scenario and "error" in scenario.tags:
+        os.environ["CAMPERS_SSH_TIMEOUT"] = "2"
+        os.environ["CAMPERS_SSH_MAX_RETRIES"] = "3"
+        logger.info("Using reduced SSH retry config for @error scenario")
 
     log_handler = LogCapture()
     log_handler.setLevel(logging.DEBUG)
@@ -939,17 +923,17 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     campers_ec2_logger.addHandler(log_handler)
     campers_ec2_logger.setLevel(logging.DEBUG)
 
-    campers_ssh_logger = logging.getLogger("campers.ssh")
+    campers_ssh_logger = logging.getLogger("campers.services.ssh")
     campers_ssh_logger.addHandler(log_handler)
     campers_ssh_logger.setLevel(logging.DEBUG)
 
     if is_localstack_scenario or "dry_run" in scenario.tags:
-        campers_portforward_logger = logging.getLogger("campers.portforward")
+        campers_portforward_logger = logging.getLogger("campers.services.portforward")
         campers_portforward_logger.addHandler(log_handler)
         campers_portforward_logger.setLevel(logging.INFO)
         campers_portforward_logger.propagate = True
 
-        campers_sync_logger = logging.getLogger("campers.sync")
+        campers_sync_logger = logging.getLogger("campers.services.sync")
         campers_sync_logger.addHandler(log_handler)
         campers_sync_logger.setLevel(logging.INFO)
         campers_sync_logger.propagate = True
@@ -1052,9 +1036,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
                         ec2_client.delete_security_group(GroupId=sg["GroupId"])
                         logger.debug(f"Cleaned up security group: {sg['GroupName']}")
                     except Exception as e:
-                        logger.debug(
-                            f"Could not delete security group {sg['GroupName']}: {e}"
-                        )
+                        logger.debug(f"Could not delete security group {sg['GroupName']}: {e}")
         except Exception as e:
             logger.debug(f"Error during security group cleanup: {e}")
 
@@ -1134,9 +1116,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     is_localstack_scenario = "localstack" in scenario.tags
 
     if is_localstack_scenario:
-        logger.info(
-            "LocalStack container kept running for next @localstack scenario in feature"
-        )
+        logger.info("LocalStack container kept running for next @localstack scenario in feature")
 
     try:
         instance_ids_to_terminate = []
@@ -1152,19 +1132,37 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         if hasattr(context, "started_instance_id") and context.started_instance_id:
             instance_ids_to_terminate.append(context.started_instance_id)
 
+        if hasattr(context, "instance_id") and context.instance_id:
+            instance_ids_to_terminate.append(context.instance_id)
+
         if hasattr(context, "created_instance_ids") and context.created_instance_ids:
             instance_ids_to_terminate.extend(context.created_instance_ids)
 
         instance_ids_to_terminate = list(set(instance_ids_to_terminate))
 
         if instance_ids_to_terminate:
-            if is_localstack_scenario and hasattr(context, "ec2_manager"):
+            has_valid_ec2_manager = (
+                is_localstack_scenario
+                and hasattr(context, "ec2_manager")
+                and context.ec2_manager is not None
+            )
+            if has_valid_ec2_manager:
                 for instance_id in instance_ids_to_terminate:
                     logger.info(f"Terminating instance: {instance_id}")
                     try:
-                        context.ec2_manager.ec2_client.terminate_instances(
-                            InstanceIds=[instance_id]
+                        has_valid_client = (
+                            hasattr(context.ec2_manager, "ec2_client")
+                            and context.ec2_manager.ec2_client is not None
                         )
+                        if has_valid_client:
+                            context.ec2_manager.ec2_client.terminate_instances(
+                                InstanceIds=[instance_id]
+                            )
+                        else:
+                            logger.debug(
+                                f"ec2_client is None for instance {instance_id} "
+                                "- skipping termination"
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to terminate instance {instance_id}: {e}")
 
@@ -1192,14 +1190,16 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
         logger.debug(f"Error cleaning up instances: {e}")
 
     try:
-        if "localstack" in scenario.tags and hasattr(context, "app_process"):
-            if context.app_process and context.app_process.poll() is None:
-                logger.info("Killing orphaned app_process from graceful shutdown test")
-                send_signal_to_process(context.app_process, signal.SIGKILL)
-                try:
-                    context.app_process.wait(timeout=5)
-                except Exception as e:
-                    logger.warning(f"Error waiting for app_process to terminate: {e}")
+        is_localstack = "localstack" in scenario.tags and hasattr(context, "app_process")
+        is_running = is_localstack and context.app_process and context.app_process.poll() is None
+
+        if is_running:
+            logger.info("Killing orphaned app_process from graceful shutdown test")
+            send_signal_to_process(context.app_process, signal.SIGKILL)
+            try:
+                context.app_process.wait(timeout=5)
+            except Exception as e:
+                logger.warning(f"Error waiting for app_process to terminate: {e}")
     except Exception as e:
         logger.debug(f"Error cleaning up app_process: {e}")
 
@@ -1211,10 +1211,10 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
             campers_ssh_logger = logging.getLogger("campers.ssh")
             campers_ssh_logger.removeHandler(context.log_handler)
 
-            campers_portforward_logger = logging.getLogger("campers.portforward")
+            campers_portforward_logger = logging.getLogger("campers.services.portforward")
             campers_portforward_logger.removeHandler(context.log_handler)
 
-            campers_sync_logger = logging.getLogger("campers.sync")
+            campers_sync_logger = logging.getLogger("campers.services.sync")
             campers_sync_logger.removeHandler(context.log_handler)
 
             root_logger = logging.getLogger()
@@ -1232,27 +1232,34 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     try:
         if hasattr(context, "mock_aws_env") and context.mock_aws_env:
             context.mock_aws_env.stop()
+            delattr(context, "mock_aws_env")
     except (RuntimeError, AttributeError) as e:
         logger.debug(f"Expected error stopping mock AWS: {e}")
     except Exception as e:
         logger.error(f"Unexpected error stopping mock AWS: {e}", exc_info=True)
 
+    if hasattr(context, "instance_id"):
+        delattr(context, "instance_id")
+
     try:
-        if hasattr(context, "cleanup_key_file") and context.cleanup_key_file:
-            if (
-                hasattr(context.cleanup_key_file, "exists")
-                and context.cleanup_key_file.exists()
-            ):
-                context.cleanup_key_file.unlink()
+        if (
+            hasattr(context, "cleanup_key_file")
+            and context.cleanup_key_file
+            and (hasattr(context.cleanup_key_file, "exists") and context.cleanup_key_file.exists())
+        ):
+            context.cleanup_key_file.unlink()
     except (RuntimeError, AttributeError, OSError) as e:
         logger.debug(f"Expected error cleaning cleanup_key_file: {e}")
     except Exception as e:
         logger.error(f"Unexpected error cleaning cleanup_key_file: {e}", exc_info=True)
 
     try:
-        if hasattr(context, "key_file") and context.key_file:
-            if hasattr(context.key_file, "exists") and context.key_file.exists():
-                context.key_file.unlink()
+        has_key_file = hasattr(context, "key_file") and context.key_file
+        has_exists_method = has_key_file and hasattr(context.key_file, "exists")
+        key_exists = has_exists_method and context.key_file.exists()
+
+        if key_exists:
+            context.key_file.unlink()
     except (RuntimeError, AttributeError, OSError) as e:
         logger.debug(f"Expected error cleaning key_file: {e}")
     except Exception as e:
@@ -1270,9 +1277,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     except (RuntimeError, AttributeError, OSError) as e:
         logger.debug(f"Expected error removing empty keys directory: {e}")
     except Exception as e:
-        logger.error(
-            f"Unexpected error removing empty keys directory: {e}", exc_info=True
-        )
+        logger.error(f"Unexpected error removing empty keys directory: {e}", exc_info=True)
 
     try:
         if hasattr(context, "aws_keys_backup"):
@@ -1282,23 +1287,23 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     except AttributeError as e:
         logger.debug(f"Expected error with AWS credentials restoration: {e}")
     except Exception as e:
-        logger.error(
-            f"Unexpected error with AWS credentials restoration: {e}", exc_info=True
-        )
+        logger.error(f"Unexpected error with AWS credentials restoration: {e}", exc_info=True)
 
     try:
-        if hasattr(context, "temp_config_file") and context.temp_config_file:
-            if os.path.exists(context.temp_config_file):
-                os.unlink(context.temp_config_file)
+        has_temp_config = hasattr(context, "temp_config_file") and context.temp_config_file
+
+        if has_temp_config and os.path.exists(context.temp_config_file):
+            os.unlink(context.temp_config_file)
     except (RuntimeError, AttributeError, OSError) as e:
         logger.debug(f"Expected error deleting temp_config_file: {e}")
     except Exception as e:
         logger.error(f"Unexpected error deleting temp_config_file: {e}", exc_info=True)
 
     try:
-        if hasattr(context, "env_config_file") and context.env_config_file:
-            if os.path.exists(context.env_config_file):
-                os.unlink(context.env_config_file)
+        has_env_config = hasattr(context, "env_config_file") and context.env_config_file
+
+        if has_env_config and os.path.exists(context.env_config_file):
+            os.unlink(context.env_config_file)
     except (RuntimeError, AttributeError, OSError) as e:
         logger.debug(f"Expected error deleting env_config_file: {e}")
     except Exception as e:
@@ -1318,9 +1323,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     except KeyError as e:
         logger.debug(f"Expected error removing CAMPERS_NO_PUBLIC_IP: {e}")
     except Exception as e:
-        logger.error(
-            f"Unexpected error removing CAMPERS_NO_PUBLIC_IP: {e}", exc_info=True
-        )
+        logger.error(f"Unexpected error removing CAMPERS_NO_PUBLIC_IP: {e}", exc_info=True)
 
     try:
         if "CAMPERS_SYNC_TIMEOUT" in os.environ:
@@ -1328,9 +1331,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     except KeyError as e:
         logger.debug(f"Expected error removing CAMPERS_SYNC_TIMEOUT: {e}")
     except Exception as e:
-        logger.error(
-            f"Unexpected error removing CAMPERS_SYNC_TIMEOUT: {e}", exc_info=True
-        )
+        logger.error(f"Unexpected error removing CAMPERS_SYNC_TIMEOUT: {e}", exc_info=True)
 
     cleanup_env_var("CAMPERS_MUTAGEN_NOT_INSTALLED", logger)
     cleanup_env_var("CAMPERS_TUNNEL_FAIL_PORT", logger)
@@ -1361,21 +1362,19 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     except Exception as e:
         logger.debug(f"Error during port forwarding cleanup: {e}")
 
-    ssh_port_vars = [k for k in os.environ.keys() if k.startswith("SSH_PORT_")]
+    ssh_port_vars = [k for k in os.environ if k.startswith("SSH_PORT_")]
     for var in ssh_port_vars:
         cleanup_env_var(var, logger)
 
-    ssh_key_file_vars = [k for k in os.environ.keys() if k.startswith("SSH_KEY_FILE_")]
+    ssh_key_file_vars = [k for k in os.environ if k.startswith("SSH_KEY_FILE_")]
     for var in ssh_key_file_vars:
         cleanup_env_var(var, logger)
 
-    ssh_ready_vars = [k for k in os.environ.keys() if k.startswith("SSH_READY_")]
+    ssh_ready_vars = [k for k in os.environ if k.startswith("SSH_READY_")]
     for var in ssh_ready_vars:
         cleanup_env_var(var, logger)
 
-    monitor_error_vars = [
-        k for k in os.environ.keys() if k.startswith("MONITOR_ERROR_")
-    ]
+    monitor_error_vars = [k for k in os.environ if k.startswith("MONITOR_ERROR_")]
     for var in monitor_error_vars:
         cleanup_env_var(var, logger)
 
@@ -1390,11 +1389,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     except ImportError:
         harness_managed = False
 
-    if (
-        is_localstack_scenario
-        and hasattr(context, "config_data")
-        and not harness_managed
-    ):
+    if is_localstack_scenario and hasattr(context, "config_data") and not harness_managed:
         try:
             import shutil
 
@@ -1411,9 +1406,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                                 session_name = parts[0]
                                 msg = f"Terminating Mutagen session: {session_name}"
                                 logger.info(msg)
-                                terminate_mutagen_with_retry(
-                                    session_name, max_attempts=3
-                                )
+                                terminate_mutagen_with_retry(session_name, max_attempts=3)
                 else:
                     logger.warning("Could not list Mutagen sessions, skipping cleanup")
 
@@ -1439,9 +1432,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
                 known_hosts_content = known_hosts_path.read_text()
                 lines = known_hosts_content.split("\n")
                 filtered_lines = [
-                    line
-                    for line in lines
-                    if line.strip() and not line.startswith("[localhost]:")
+                    line for line in lines if line.strip() and not line.startswith("[localhost]:")
                 ]
                 if len(filtered_lines) < len(lines):
                     known_hosts_path.write_text("\n".join(filtered_lines) + "\n")
@@ -1466,17 +1457,14 @@ def before_feature(context: Context, feature) -> None:
         "localstack" in getattr(scenario, "tags", []) for scenario in scenarios
     )
 
-    print(f"DEBUG: before_feature - has_localstack_scenario={has_localstack_scenario}")
-
     if not has_localstack_scenario:
-        print("DEBUG: skipping before_feature - no localstack scenarios")
         return
 
     try:
         import time
+
         import boto3
 
-        print("DEBUG: before_feature - starting cleanup")
         time.sleep(1)
 
         logger.info("Cleaning up stale instances before feature starts...")
@@ -1489,17 +1477,12 @@ def before_feature(context: Context, feature) -> None:
             return boto3.client(service, **kwargs)
 
         try:
-            print("DEBUG: creating EC2Manager")
             ec2_manager = EC2Manager(
                 region="us-east-1", boto3_client_factory=localstack_client_factory
             )
-            print("DEBUG: listing instances")
             all_instances = ec2_manager.list_instances(region_filter=None)
-            print(f"DEBUG: found {len(all_instances)} instances")
             if all_instances:
-                logger.info(
-                    f"Cleaning up {len(all_instances)} stale instances from LocalStack before feature"
-                )
+                logger.info(f"Cleaning up {len(all_instances)} stale instances from LocalStack")
                 for instance in all_instances:
                     try:
                         ec2_manager.terminate_instance(instance["instance_id"])
@@ -1509,7 +1492,6 @@ def before_feature(context: Context, feature) -> None:
             else:
                 logger.info("LocalStack is clean - no stale instances found at feature start")
         except Exception as e:
-            print(f"DEBUG: exception in cleanup: {e}")
             logger.debug(f"Could not connect to LocalStack: {e}")
     except Exception as e:
         logger.warning(f"Error in before_feature cleanup: {e}", exc_info=True)
@@ -1525,7 +1507,10 @@ def after_all(context: Context) -> None:
 
     test_ports = [48888, 48889, 48890, 48891, 6006]
     logger.info("Performing forceful cleanup of test ports after all tests...")
-    cleanup_test_ports(test_ports)
+    try:
+        cleanup_test_ports(test_ports)
+    except RuntimeError as e:
+        logger.warning(f"Port cleanup failed in after_all, continuing cleanup: {e}")
 
     logger.info("Killing any lingering sshtunnel processes after all tests...")
     cleanup_sshtunnel_processes()
@@ -1536,10 +1521,8 @@ def after_all(context: Context) -> None:
     logger.info("Stopped LocalStack container after all tests complete")
 
     if hasattr(context, "mock_aws_env") and context.mock_aws_env:
-        try:
+        with contextlib.suppress(RuntimeError):
             context.mock_aws_env.stop()
-        except RuntimeError:
-            pass
 
     try:
         ssh_config_path = Path.home() / ".ssh" / "config"

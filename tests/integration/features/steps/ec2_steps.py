@@ -1,5 +1,6 @@
 """BDD step definitions for EC2 instance management."""
 
+import contextlib
 import os
 import uuid
 from pathlib import Path
@@ -8,10 +9,11 @@ from unittest.mock import MagicMock, patch
 import boto3
 from behave import given, then, when
 from behave.runner import Context
-from botocore.exceptions import ClientError, NoCredentialsError, WaiterError
+from botocore.exceptions import ClientError, WaiterError
 from moto import mock_aws
 
-from campers.ec2 import EC2Manager
+from campers.providers.aws.compute import EC2Manager
+from campers.providers.exceptions import ProviderAPIError, ProviderCredentialsError
 
 
 def setup_moto_environment(context: Context) -> None:
@@ -27,12 +29,8 @@ def setup_moto_environment(context: Context) -> None:
         context.mock_aws_env.start()
 
         context.harness.services.configuration_env.set("AWS_ACCESS_KEY_ID", "testing")
-        context.harness.services.configuration_env.set(
-            "AWS_SECRET_ACCESS_KEY", "testing"
-        )
-        context.harness.services.configuration_env.set(
-            "AWS_DEFAULT_REGION", "us-east-1"
-        )
+        context.harness.services.configuration_env.set("AWS_SECRET_ACCESS_KEY", "testing")
+        context.harness.services.configuration_env.set("AWS_DEFAULT_REGION", "us-east-1")
 
 
 def patch_ec2_manager_for_canonical_owner(ec2_manager: EC2Manager) -> None:
@@ -49,8 +47,7 @@ def patch_ec2_manager_for_canonical_owner(ec2_manager: EC2Manager) -> None:
         modified_kwargs = kwargs.copy()
 
         if "Owners" in modified_kwargs and (
-            "099720109477" in modified_kwargs["Owners"]
-            or "amazon" in modified_kwargs["Owners"]
+            "099720109477" in modified_kwargs["Owners"] or "amazon" in modified_kwargs["Owners"]
         ):
             del modified_kwargs["Owners"]
 
@@ -91,10 +88,8 @@ def simulate_launch_timeout(context: Context) -> None:
 
     vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     if not vpcs["Vpcs"]:
-        try:
+        with contextlib.suppress(ClientError):
             ec2_client.create_default_vpc()
-        except ClientError:
-            pass
 
     ec2_manager = EC2Manager(region="us-east-1")
     patch_ec2_manager_for_canonical_owner(ec2_manager)
@@ -112,15 +107,15 @@ def simulate_launch_timeout(context: Context) -> None:
         last_response={"Error": {"Code": "Timeout"}},
     )
 
-    with patch.object(ec2_manager.ec2_client, "get_waiter", return_value=waiter_mock):
-        with patch.object(
-            ec2_manager, "create_key_pair", side_effect=capture_unique_id_wrapper
-        ):
-            try:
-                ec2_manager.launch_instance(context.ec2_config)
-                context.exception = None
-            except RuntimeError as e:
-                context.exception = e
+    with (
+        patch.object(ec2_manager.ec2_client, "get_waiter", return_value=waiter_mock),
+        patch.object(ec2_manager, "create_key_pair", side_effect=capture_unique_id_wrapper),
+    ):
+        try:
+            ec2_manager.launch_instance(context.ec2_config)
+            context.exception = None
+        except ProviderAPIError as e:
+            context.exception = e
 
     context.ec2_client = ec2_manager.ec2_client
 
@@ -146,7 +141,7 @@ def simulate_termination_timeout(context: Context) -> None:
         try:
             ec2_manager.terminate_instance(context.instance_id)
             context.exception = None
-        except RuntimeError as e:
+        except ProviderAPIError as e:
             context.exception = e
 
 
@@ -191,10 +186,8 @@ def step_region_with_no_ami(context: Context) -> None:
         images = ec2_client.describe_images(Owners=["self"])
 
         for image in images.get("Images", []):
-            try:
+            with contextlib.suppress(Exception):
                 ec2_client.deregister_image(ImageId=image["ImageId"])
-            except Exception:
-                pass
     except Exception:
         pass
 
@@ -217,13 +210,9 @@ def step_running_instance_with_unique_id(context: Context, unique_id: str) -> No
 
     vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     if not vpcs["Vpcs"]:
-        try:
+        with contextlib.suppress(ClientError):
             ec2_client.create_default_vpc()
-        except ClientError:
-            pass
-        vpcs = ec2_client.describe_vpcs(
-            Filters=[{"Name": "isDefault", "Values": ["true"]}]
-        )
+        vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
     sg_response = ec2_client.create_security_group(
@@ -334,17 +323,11 @@ def step_security_group_exists(context: Context, sg_name: str) -> None:
         setup_moto_environment(context)
         context.ec2_client = boto3.client("ec2", region_name="us-east-1")
 
-    vpcs = context.ec2_client.describe_vpcs(
-        Filters=[{"Name": "isDefault", "Values": ["true"]}]
-    )
+    vpcs = context.ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     if not vpcs["Vpcs"]:
-        try:
+        with contextlib.suppress(ClientError):
             context.ec2_client.create_default_vpc()
-        except ClientError:
-            pass
-        vpcs = context.ec2_client.describe_vpcs(
-            Filters=[{"Name": "isDefault", "Values": ["true"]}]
-        )
+        vpcs = context.ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
     response = context.ec2_client.create_security_group(
@@ -416,10 +399,8 @@ def step_launch_instance(context: Context) -> None:
 
     vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     if not vpcs["Vpcs"]:
-        try:
+        with contextlib.suppress(ClientError):
             ec2_client.create_default_vpc()
-        except ClientError:
-            pass
 
     ec2_manager = EC2Manager(region="us-east-1")
     patch_ec2_manager_for_canonical_owner(ec2_manager)
@@ -431,7 +412,7 @@ def step_launch_instance(context: Context) -> None:
     context.ec2_client = ec2_manager.ec2_client
 
 
-@when('I launch instance with machine "{camp_name}"')
+@when('I launch instance with camp "{camp_name}"')
 def step_launch_instance_with_machine(context: Context, camp_name: str) -> None:
     """Launch instance using machine config."""
     if hasattr(context, "config_data") and context.config_data:
@@ -558,7 +539,7 @@ def step_attempt_to_launch_instance(context: Context) -> None:
                 from tests.unit.fakes.fake_ssh_manager import FakeSSHManager
 
                 campers = Campers(
-                    ec2_manager_factory=FakeEC2Manager,
+                    compute_provider_factory=FakeEC2Manager,
                     ssh_manager_factory=FakeSSHManager,
                 )
                 campers.run(camp_name="test", json_output=True, plain=True)
@@ -650,7 +631,9 @@ def step_launch_with_same_unique_id(context: Context) -> None:
 
     config = {"instance_type": "t3.medium", "disk_size": 50, "region": "us-east-1"}
 
-    with patch("time.time", return_value=123):
+    mock_uuid = MagicMock()
+    mock_uuid.__str__ = MagicMock(return_value="123")
+    with patch("campers.providers.aws.compute.uuid.uuid4", return_value=mock_uuid):
         context.instance_details = ec2_manager.launch_instance(config)
 
     context.ec2_manager = ec2_manager
@@ -709,9 +692,7 @@ def step_verify_disk_size(context: Context, disk_size: int) -> None:
     block_devices = instance["BlockDeviceMappings"]
     root_device_name = instance["RootDeviceName"]
 
-    root_volume = next(
-        (bd for bd in block_devices if bd["DeviceName"] == root_device_name), None
-    )
+    root_volume = next((bd for bd in block_devices if bd["DeviceName"] == root_device_name), None)
 
     assert root_volume is not None, f"Root volume {root_device_name} not found"
 
@@ -719,18 +700,13 @@ def step_verify_disk_size(context: Context, disk_size: int) -> None:
     volumes = ec2_client.describe_volumes(VolumeIds=[volume_id])
     actual_size = volumes["Volumes"][0]["Size"]
 
-    assert actual_size == disk_size, (
-        f"Expected disk size {disk_size} GB, got {actual_size} GB"
-    )
+    assert actual_size == disk_size, f"Expected disk size {disk_size} GB, got {actual_size} GB"
 
 
 @then('instance state is "{state}"')
 def step_verify_instance_state(context: Context, state: str) -> None:
     """Verify instance state."""
-    assert (
-        context.instance_details["state"] == state
-        or context.instance.state["Name"] == state
-    )
+    assert context.instance_details["state"] == state or context.instance.state["Name"] == state
 
 
 @then('instance has tag "{tag_key}" with value "{tag_value}"')
@@ -746,9 +722,7 @@ def step_verify_instance_tag(context: Context, tag_key: str, tag_value: str) -> 
 
 
 @then('instance has tag "{tag_key}" starting with "{prefix}"')
-def step_verify_instance_tag_prefix(
-    context: Context, tag_key: str, prefix: str
-) -> None:
+def step_verify_instance_tag_prefix(context: Context, tag_key: str, prefix: str) -> None:
     """Verify instance tag starts with prefix."""
     ec2_resource = boto3.resource("ec2", region_name="us-east-1")
     instance = ec2_resource.Instance(context.instance_details["instance_id"])
@@ -827,9 +801,7 @@ def step_verify_sg_tag(context: Context, tag_key: str, tag_value: str) -> None:
     """Verify security group has tag."""
     sg_id = context.instance_details["security_group_id"]
     sgs = context.ec2_client.describe_security_groups(GroupIds=[sg_id])
-    tags = {
-        tag["Key"]: tag["Value"] for tag in sgs["SecurityGroups"][0].get("Tags", [])
-    }
+    tags = {tag["Key"]: tag["Value"] for tag in sgs["SecurityGroups"][0].get("Tags", [])}
     assert tags.get(tag_key) == tag_value
 
 
@@ -844,13 +816,10 @@ def step_verify_sg_inbound_rule(context: Context, port: int, cidr: str) -> None:
 
     for perm in permissions:
         if (
-            perm["IpProtocol"] == "tcp"
-            and perm["FromPort"] == port
-            and perm["ToPort"] == port
-        ):
-            if any(ip_range["CidrIp"] == cidr for ip_range in perm.get("IpRanges", [])):
-                found = True
-                break
+            perm["IpProtocol"] == "tcp" and perm["FromPort"] == port and perm["ToPort"] == port
+        ) and any(ip_range["CidrIp"] == cidr for ip_range in perm.get("IpRanges", [])):
+            found = True
+            break
 
     assert found
 
@@ -876,10 +845,7 @@ def step_verify_sg_outbound(context: Context) -> None:
             rule
             for rule in egress_rules
             if rule.get("IpProtocol") == "-1"
-            and any(
-                ip_range.get("CidrIp") == "0.0.0.0/0"
-                for ip_range in rule.get("IpRanges", [])
-            )
+            and any(ip_range.get("CidrIp") == "0.0.0.0/0" for ip_range in rule.get("IpRanges", []))
         ),
         None,
     )
@@ -902,10 +868,7 @@ def step_verify_sg_id_matches(context: Context) -> None:
     ec2_resource = boto3.resource("ec2", region_name="us-east-1")
     instance = ec2_resource.Instance(context.instance_details["instance_id"])
     instance.load()
-    assert (
-        instance.security_groups[0]["GroupId"]
-        == context.instance_details["security_group_id"]
-    )
+    assert instance.security_groups[0]["GroupId"] == context.instance_details["security_group_id"]
 
 
 @then('AMI is from Canonical owner "{owner_id}"')
@@ -1002,10 +965,8 @@ def step_verify_sg_deleted(context: Context) -> None:
 
     if hasattr(context, "security_group_id") and context.security_group_id is not None:
         try:
-            context.ec2_client.describe_security_groups(
-                GroupIds=[context.security_group_id]
-            )
-            assert False, "Security group should be deleted"
+            context.ec2_client.describe_security_groups(GroupIds=[context.security_group_id])
+            raise AssertionError("Security group should be deleted")
         except ClientError as e:
             assert "InvalidGroup.NotFound" in str(e)
     elif hasattr(context, "initial_sg_ids"):
@@ -1016,9 +977,7 @@ def step_verify_sg_deleted(context: Context) -> None:
             f"Found {len(new_sgs)} uncleaned security groups after failed launch"
         )
     else:
-        assert False, (
-            "Either security_group_id or initial_sg_ids must be set in context"
-        )
+        raise AssertionError("Either security_group_id or initial_sg_ids must be set in context")
 
 
 @then('termination waits for "{state}" state')
@@ -1087,7 +1046,7 @@ def step_verify_cleanup_after_termination(context: Context) -> None:
 
     try:
         ec2_client.describe_security_groups(GroupIds=[sg_id])
-        assert False, f"Security group {sg_id} still exists after termination"
+        raise AssertionError(f"Security group {sg_id} still exists after termination")
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         assert error_code == "InvalidGroup.NotFound", f"Unexpected error: {error_code}"
@@ -1103,8 +1062,8 @@ def step_verify_no_credentials_error(context: Context) -> None:
         Behave test context containing exception, stderr, or log records
     """
     if hasattr(context, "exception") and context.exception is not None:
-        assert isinstance(context.exception, NoCredentialsError), (
-            f"Expected NoCredentialsError, got {type(context.exception).__name__}: "
+        assert isinstance(context.exception, ProviderCredentialsError), (
+            f"Expected ProviderCredentialsError, got {type(context.exception).__name__}: "
             f"{context.exception}"
         )
     elif hasattr(context, "stderr") and context.stderr and context.exit_code != 0:
@@ -1125,7 +1084,7 @@ def step_verify_no_credentials_error(context: Context) -> None:
             f"{[r.getMessage() for r in context.log_records]}"
         )
     else:
-        assert False, (
+        raise AssertionError(
             f"Expected NoCredentialsError exception, stderr output, or warning log, "
             f"but got exit_code={context.exit_code}, "
             f"stderr={getattr(context, 'stderr', None)}, "
@@ -1141,7 +1100,7 @@ def step_verify_client_error(context: Context) -> None:
 
 @then("RuntimeError is raised with timeout message")
 def step_verify_runtime_error_timeout(context: Context) -> None:
-    """Verify RuntimeError with timeout message.
+    """Verify ProviderAPIError with timeout message.
 
     Parameters
     ----------
@@ -1150,9 +1109,8 @@ def step_verify_runtime_error_timeout(context: Context) -> None:
     """
     assert hasattr(context, "exception"), "exception not found in context"
     assert context.exception is not None, "No exception was raised"
-    assert isinstance(context.exception, RuntimeError), (
-        f"Expected RuntimeError, got {type(context.exception).__name__}: "
-        f"{context.exception}"
+    assert isinstance(context.exception, ProviderAPIError), (
+        f"Expected ProviderAPIError, got {type(context.exception).__name__}: {context.exception}"
     )
 
     error_message = str(context.exception).lower()
@@ -1163,10 +1121,7 @@ def step_verify_runtime_error_timeout(context: Context) -> None:
         "terminate" in error_message
         or "timeout" in error_message
         or "max attempts exceeded" in error_message
-    ), (
-        f"Exception message doesn't indicate timeout/termination/max attempts: "
-        f"{context.exception}"
-    )
+    ), f"Exception message doesn't indicate timeout/termination/max attempts: {context.exception}"
 
 
 @then("rollback cleanup is attempted")
@@ -1182,12 +1137,9 @@ def step_verify_rollback_cleanup(context: Context) -> None:
     assert context.ec2_client is not None, "ec2_client is None"
 
     key_pairs = context.ec2_client.describe_key_pairs()
-    campers_keys = [
-        kp for kp in key_pairs["KeyPairs"] if kp["KeyName"].startswith("campers-")
-    ]
+    campers_keys = [kp for kp in key_pairs["KeyPairs"] if kp["KeyName"].startswith("campers-")]
     assert len(campers_keys) == 0, (
-        f"Rollback failed: Found orphaned key pairs: "
-        f"{[k['KeyName'] for k in campers_keys]}"
+        f"Rollback failed: Found orphaned key pairs: {[k['KeyName'] for k in campers_keys]}"
     )
 
     try:
@@ -1195,9 +1147,7 @@ def step_verify_rollback_cleanup(context: Context) -> None:
             Filters=[{"Name": "group-name", "Values": ["campers-*"]}]
         )
         campers_sgs = [
-            sg
-            for sg in sgs.get("SecurityGroups", [])
-            if sg["GroupName"].startswith("campers-")
+            sg for sg in sgs.get("SecurityGroups", []) if sg["GroupName"].startswith("campers-")
         ]
         assert len(campers_sgs) == 0, (
             f"Rollback failed: Found orphaned security groups: "
@@ -1232,9 +1182,7 @@ def step_verify_existing_key_deleted(context: Context) -> None:
     name exists (proving conflict was handled, even though we can't distinguish
     old vs new in moto).
     """
-    assert hasattr(context, "existing_key_name"), (
-        "existing_key_name not found in context"
-    )
+    assert hasattr(context, "existing_key_name"), "existing_key_name not found in context"
 
     key_pairs = context.ec2_client.describe_key_pairs()
     key_names = [kp["KeyName"] for kp in key_pairs["KeyPairs"]]
@@ -1265,9 +1213,7 @@ def step_verify_existing_sg_deleted(context: Context) -> None:
 
     try:
         context.ec2_client.describe_security_groups(GroupIds=[context.existing_sg_id])
-        assert False, (
-            f"Existing security group '{context.existing_sg_id}' was not deleted"
-        )
+        raise AssertionError(f"Existing security group '{context.existing_sg_id}' was not deleted")
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         assert error_code == "InvalidGroup.NotFound", (
@@ -1326,9 +1272,7 @@ def step_config_with_ami_query_owner(context: Context, owner: str) -> None:
 
 
 @given('ami.query.architecture set to "{architecture}"')
-def step_config_with_ami_query_architecture(
-    context: Context, architecture: str
-) -> None:
+def step_config_with_ami_query_architecture(context: Context, architecture: str) -> None:
     """Add architecture to AMI query config."""
     if not hasattr(context, "ami_config"):
         context.ami_config = {"ami": {"query": {}}}
@@ -1355,9 +1299,11 @@ def step_config_with_invalid_architecture(context: Context) -> None:
 @given("no ami.query.owner specified")
 def step_no_ami_query_owner(context: Context) -> None:
     """Ensure no owner is specified in query."""
-    if hasattr(context, "ami_config") and "ami" in context.ami_config:
-        if "query" in context.ami_config["ami"]:
-            context.ami_config["ami"]["query"].pop("owner", None)
+    has_ami_config = hasattr(context, "ami_config") and "ami" in context.ami_config
+    has_query = has_ami_config and "query" in context.ami_config["ami"]
+
+    if has_query:
+        context.ami_config["ami"]["query"].pop("owner", None)
 
 
 @given("a config with no ami section")
@@ -1372,9 +1318,7 @@ def step_config_with_both_ami_options(context: Context) -> None:
     context.ami_config = {
         "ami": {
             "image_id": "ami-0abc123def456",
-            "query": {
-                "name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
-            },
+            "query": {"name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"},
         }
     }
 
@@ -1476,8 +1420,7 @@ def step_verify_no_describe_images_call(context: Context) -> None:
     """Verify direct AMI ID doesn't trigger describe_images."""
     assert context.resolved_ami_id is not None
     not_called = (
-        not hasattr(context, "describe_images_called")
-        or not context.describe_images_called
+        not hasattr(context, "describe_images_called") or not context.describe_images_called
     )
     assert not_called
 
@@ -1593,10 +1536,8 @@ def step_launch_instance_with_ami_config(context: Context) -> None:
 
     vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     if not vpcs["Vpcs"]:
-        try:
+        with contextlib.suppress(ClientError):
             ec2_client.create_default_vpc()
-        except ClientError:
-            pass
 
     ec2_manager = EC2Manager(region="us-east-1")
     patch_ec2_manager_for_canonical_owner(ec2_manager)
@@ -1631,3 +1572,195 @@ def step_verify_amazon_ubuntu_24_ami_selected(context: Context) -> None:
     """Verify Amazon Ubuntu 24 x86_64 AMI was selected."""
     assert context.instance_details is not None
     assert context.instance_details["instance_id"].startswith("i-")
+
+
+@given('an existing instance for camp "{camp_name}" in region "{region}"')
+def step_existing_instance_in_region(context: Context, camp_name: str, region: str) -> None:
+    """Create an existing EC2 instance in specified region with camp tag.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    camp_name : str
+        Camp name to tag instance with
+    region : str
+        AWS region for instance
+    """
+    setup_moto_environment(context)
+
+    ec2_client = boto3.client("ec2", region_name=region)
+    ec2_resource = boto3.resource("ec2", region_name=region)
+
+    ami_id = ec2_client.register_image(
+        Name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20231201",
+        Description="Ubuntu 22.04 LTS",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )["ImageId"]
+
+    vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+    if not vpcs["Vpcs"]:
+        with contextlib.suppress(ClientError):
+            ec2_client.create_default_vpc()
+        vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+    vpc_id = vpcs["Vpcs"][0]["VpcId"]
+
+    unique_id = str(uuid.uuid4())[:12]
+    sg_response = ec2_client.create_security_group(
+        GroupName=f"campers-{unique_id}",
+        Description=f"Test SG {unique_id}",
+        VpcId=vpc_id,
+    )
+    security_group_id = sg_response["GroupId"]
+
+    ec2_client.create_key_pair(KeyName=f"campers-{unique_id}")
+
+    instances = ec2_resource.create_instances(
+        ImageId=ami_id,
+        InstanceType="t3.medium",
+        KeyName=f"campers-{unique_id}",
+        SecurityGroupIds=[security_group_id],
+        MinCount=1,
+        MaxCount=1,
+        TagSpecifications=[
+            {
+                "ResourceType": "instance",
+                "Tags": [
+                    {"Key": "ManagedBy", "Value": "campers"},
+                    {"Key": "MachineConfig", "Value": camp_name},
+                    {"Key": "UniqueId", "Value": unique_id},
+                ],
+            }
+        ],
+    )
+
+    if not hasattr(context, "instances_by_region"):
+        context.instances_by_region = {}
+
+    context.instances_by_region[region] = {
+        "instance_id": instances[0].id,
+        "instance": instances[0],
+        "region": region,
+        "camp_name": camp_name,
+    }
+
+
+def get_error_message(context: Context) -> str:
+    """Retrieve error message from context.
+
+    Checks for exception or stderr in the context and returns the error message.
+    Prioritizes exception over stderr.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+
+    Returns
+    -------
+    str
+        Error message string
+
+    Raises
+    ------
+    AssertionError
+        If no error message is found in context
+    """
+    if hasattr(context, "exception") and context.exception is not None:
+        return str(context.exception)
+
+    if hasattr(context, "stderr") and context.stderr:
+        return str(context.stderr)
+
+    raise AssertionError("No error message found in context")
+
+
+@then('error message mentions existing region "{region}"')
+def step_error_mentions_existing_region(context: Context, region: str) -> None:
+    """Verify error message mentions the existing region.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    region : str
+        Region name that should be mentioned
+    """
+    error_message = get_error_message(context)
+    assert region in error_message, (
+        f"Expected region '{region}' in error message but got: {error_message}"
+    )
+
+
+@then('error message mentions configured region "{region}"')
+def step_error_mentions_configured_region(context: Context, region: str) -> None:
+    """Verify error message mentions the configured region.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    region : str
+        Region name that should be mentioned
+    """
+    error_message = get_error_message(context)
+    assert region in error_message, (
+        f"Expected region '{region}' in error message but got: {error_message}"
+    )
+
+
+@when('I attempt to launch instance with camp "{camp_name}" in region "{region}"')
+def step_attempt_launch_with_region(context: Context, camp_name: str, region: str) -> None:
+    """Attempt to launch instance with specified camp and region.
+
+    Parameters
+    ----------
+    context : Context
+        Behave test context
+    camp_name : str
+        Camp name to launch
+    region : str
+        Region to configure
+    """
+    setup_moto_environment(context)
+
+    ec2_client = boto3.client("ec2", region_name=region)
+    ec2_client.register_image(
+        Name="Amazon Ubuntu 24 LTS x86_64 20240101",
+        Description="Ubuntu 24 LTS",
+        Architecture="x86_64",
+        RootDeviceName="/dev/sda1",
+        VirtualizationType="hvm",
+    )
+
+    vpcs = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+    if not vpcs["Vpcs"]:
+        with contextlib.suppress(ClientError):
+            ec2_client.create_default_vpc()
+
+    if not hasattr(context, "config_data"):
+        context.config_data = {}
+
+    if "camps" not in context.config_data:
+        context.config_data["camps"] = {}
+
+    context.config_data["camps"][camp_name] = {
+        "instance_type": "t3.medium",
+        "region": region,
+    }
+
+    if not context.temp_config_file:
+        from tests.integration.features.steps.config_steps import _write_temp_config
+
+        context.temp_config_file = _write_temp_config(context)
+
+    try:
+        from campers.__main__ import Campers
+
+        os.environ["CAMPERS_CONFIG"] = context.temp_config_file
+        campers = Campers()
+        context.instance_details = campers.run(camp_name)
+    except Exception as e:
+        context.exception = e

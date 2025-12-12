@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 from tests.harness.services.event_bus import Event, EventBus
 from tests.harness.services.resource_registry import ResourceRegistry
@@ -61,7 +62,7 @@ class MutagenSession:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-RunnerCallable = Callable[[List[str], float], MutagenCommandResult]
+RunnerCallable = Callable[[list[str], float], MutagenCommandResult]
 TerminatorCallable = Callable[[str], None]
 
 
@@ -128,14 +129,14 @@ class MutagenSessionManager:
         self._diagnostics = diagnostics_callback
         self._runner = runner
         self._terminator = terminator
-        self._sessions: Dict[str, MutagenSession] = {}
+        self._sessions: dict[str, MutagenSession] = {}
         self._lock = threading.RLock()
 
     def create_session(
         self,
         session_id: str,
         instance_id: str,
-        arguments: List[str],
+        arguments: list[str],
         timeout_sec: float,
         metadata: dict[str, Any] | None = None,
     ) -> MutagenSession:
@@ -237,9 +238,7 @@ class MutagenSessionManager:
             details={},
         )
 
-    def terminate_all(
-        self, timeout_sec: float | None = None
-    ) -> MutagenTerminationSummary:
+    def terminate_all(self, timeout_sec: float | None = None) -> MutagenTerminationSummary:
         """Terminate all tracked Mutagen sessions.
 
         Parameters

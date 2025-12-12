@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from campers.ansible import AnsibleManager
+from campers.services.ansible import AnsibleManager
 
 
 class TestAnsibleManagerInstallationCheck:
@@ -53,7 +53,7 @@ class TestAnsibleManagerInventoryGeneration:
         assert "ansible_user=ubuntu" in content
         assert "ansible_ssh_private_key_file=/path/to/key.pem" in content
         assert "ansible_port=22" in content
-        assert "StrictHostKeyChecking=no" in content
+        assert "StrictHostKeyChecking=accept-new" in content
 
     def test_generate_inventory_with_custom_port(self) -> None:
         """Test inventory generation with custom SSH port."""
@@ -340,16 +340,18 @@ class TestAnsibleManagerIntegration:
         mock_process.returncode = 0
         mock_process.wait = mock.Mock()
 
-        with mock.patch("shutil.which", return_value="/usr/bin/ansible-playbook"):
-            with mock.patch("subprocess.Popen", return_value=mock_process):
-                manager.execute_playbooks(
-                    playbook_names=["webapp"],
-                    playbooks_config=playbooks_config,
-                    instance_ip="10.0.0.1",
-                    ssh_key_file="/path/to/key.pem",
-                )
+        with (
+            mock.patch("shutil.which", return_value="/usr/bin/ansible-playbook"),
+            mock.patch("subprocess.Popen", return_value=mock_process),
+        ):
+            manager.execute_playbooks(
+                playbook_names=["webapp"],
+                playbooks_config=playbooks_config,
+                instance_ip="10.0.0.1",
+                ssh_key_file="/path/to/key.pem",
+            )
 
-                assert len(manager._temp_files) == 0
+            assert len(manager._temp_files) == 0
 
     def test_execute_multiple_playbooks_in_order(self) -> None:
         """Test that multiple playbooks execute in correct order."""
@@ -373,14 +375,18 @@ class TestAnsibleManagerIntegration:
             mock_process.wait = mock.Mock()
             return mock_process
 
-        with mock.patch("shutil.which", return_value="/usr/bin/ansible-playbook"):
-            with mock.patch("subprocess.Popen", side_effect=track_execution):
-                manager.execute_playbooks(
-                    playbook_names=["base", "webapp"],
-                    playbooks_config=playbooks_config,
-                    instance_ip="10.0.0.1",
-                    ssh_key_file="/path/to/key.pem",
-                )
+        with (
+            mock.patch("shutil.which", return_value="/usr/bin/ansible-playbook"),
+            mock.patch("subprocess.Popen", side_effect=track_execution),
+        ):
+            manager.execute_playbooks(
+                playbook_names=["base", "webapp"],
+                playbooks_config=playbooks_config,
+                instance_ip="10.0.0.1",
+                ssh_key_file="/path/to/key.pem",
+            )
+
+            assert execution_order == ["base", "webapp"]
 
     def test_execute_playbooks_cleanup_on_failure(self) -> None:
         """Test that temp files are cleaned up even on failure."""
@@ -395,17 +401,19 @@ class TestAnsibleManagerIntegration:
         mock_process.returncode = 1
         mock_process.wait = mock.Mock()
 
-        with mock.patch("shutil.which", return_value="/usr/bin/ansible-playbook"):
-            with mock.patch("subprocess.Popen", return_value=mock_process):
-                with pytest.raises(RuntimeError):
-                    manager.execute_playbooks(
-                        playbook_names=["failing"],
-                        playbooks_config=playbooks_config,
-                        instance_ip="10.0.0.1",
-                        ssh_key_file="/path/to/key.pem",
-                    )
+        with (
+            mock.patch("shutil.which", return_value="/usr/bin/ansible-playbook"),
+            mock.patch("subprocess.Popen", return_value=mock_process),
+            pytest.raises(RuntimeError),
+        ):
+            manager.execute_playbooks(
+                playbook_names=["failing"],
+                playbooks_config=playbooks_config,
+                instance_ip="10.0.0.1",
+                ssh_key_file="/path/to/key.pem",
+            )
 
-                assert len(manager._temp_files) == 0
+        assert len(manager._temp_files) == 0
 
     def test_execute_playbooks_with_custom_ssh_username(self) -> None:
         """Test playbooks executed with custom SSH username."""
@@ -431,17 +439,19 @@ class TestAnsibleManagerIntegration:
                     captured_inventory_content = f.read()
             return mock_process
 
-        with mock.patch("shutil.which", return_value="/usr/bin/ansible-playbook"):
-            with mock.patch("subprocess.Popen", side_effect=capture_popen):
-                manager.execute_playbooks(
-                    playbook_names=["setup"],
-                    playbooks_config=playbooks_config,
-                    instance_ip="10.0.0.1",
-                    ssh_key_file="/path/to/key.pem",
-                    ssh_username="ec2-user",
-                    ssh_port=2222,
-                )
+        with (
+            mock.patch("shutil.which", return_value="/usr/bin/ansible-playbook"),
+            mock.patch("subprocess.Popen", side_effect=capture_popen),
+        ):
+            manager.execute_playbooks(
+                playbook_names=["setup"],
+                playbooks_config=playbooks_config,
+                instance_ip="10.0.0.1",
+                ssh_key_file="/path/to/key.pem",
+                ssh_username="ec2-user",
+                ssh_port=2222,
+            )
 
-                assert captured_inventory_content is not None
-                assert "ansible_user=ec2-user" in captured_inventory_content
-                assert "ansible_port=2222" in captured_inventory_content
+            assert captured_inventory_content is not None
+            assert "ansible_user=ec2-user" in captured_inventory_content
+            assert "ansible_port=2222" in captured_inventory_content

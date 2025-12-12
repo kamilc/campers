@@ -30,3 +30,12 @@ Scenario: Resource name conflict handled
   And existing security group is deleted
   And new resources are created
   And instance launches successfully
+
+@error @dry_run
+Scenario: Instance region mismatch with existing instance
+  Given config file with defaults section
+  And an existing instance for camp "web-server" in region "us-west-2"
+  When I attempt to launch instance with camp "web-server" in region "us-east-1"
+  Then command fails with RuntimeError
+  And error message mentions existing region "us-west-2"
+  And error message mentions configured region "us-east-1"

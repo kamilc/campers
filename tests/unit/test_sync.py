@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from campers.sync import MutagenManager
+from campers.services.sync import MutagenManager
 
 
 @pytest.fixture
@@ -34,20 +34,45 @@ def temp_ssh_setup(tmp_path):
     dict
         Dictionary with 'key_file' and 'ssh_dir' paths
     """
+    import os
+    from pathlib import Path
 
     temp_key = tmp_path / "test.pem"
-    temp_key.write_text(
-        "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n"
-    )
+    temp_key.write_text("-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n")
     temp_key.chmod(0o600)
 
     temp_ssh_dir = tmp_path / "ssh"
     temp_ssh_dir.mkdir()
 
-    return {
+    temp_campers_dir = tmp_path / "campers"
+    temp_campers_dir.mkdir()
+
+    user_ssh_config = Path.home() / ".ssh" / "config"
+    original_ssh_content = user_ssh_config.read_text() if user_ssh_config.exists() else None
+
+    original_campers_dir = os.environ.get("CAMPERS_DIR")
+    os.environ["CAMPERS_DIR"] = str(temp_campers_dir)
+
+    yield {
         "key_file": str(temp_key),
         "ssh_dir": str(temp_ssh_dir),
     }
+
+    if original_campers_dir is not None:
+        os.environ["CAMPERS_DIR"] = original_campers_dir
+    else:
+        os.environ.pop("CAMPERS_DIR", None)
+
+    if original_ssh_content is not None:
+        user_ssh_config.write_text(original_ssh_content)
+    elif user_ssh_config.exists():
+        current_content = user_ssh_config.read_text()
+        master_include = f"Include {temp_campers_dir / 'ssh' / 'config'}"
+        if master_include in current_content:
+            cleaned = current_content.replace(f"{master_include}\n\n", "")
+            cleaned = cleaned.replace(f"{master_include}\n", "")
+            cleaned = cleaned.replace(master_include, "")
+            user_ssh_config.write_text(cleaned)
 
 
 def test_check_mutagen_installed_success(mutagen_manager) -> None:
@@ -64,12 +89,11 @@ def test_check_mutagen_installed_success(mutagen_manager) -> None:
 
 def test_check_mutagen_not_installed(mutagen_manager) -> None:
     """Test error when mutagen is not installed."""
-    with patch("campers.sync.subprocess.run", side_effect=FileNotFoundError):
-        with pytest.raises(
-            RuntimeError,
-            match="Mutagen is not installed locally",
-        ):
-            mutagen_manager.check_mutagen_installed()
+    with (
+        patch("campers.services.sync.subprocess.run", side_effect=FileNotFoundError),
+        pytest.raises(RuntimeError, match="Mutagen is not installed locally"),
+    ):
+        mutagen_manager.check_mutagen_installed()
 
 
 def test_check_mutagen_returns_error(mutagen_manager) -> None:
@@ -158,9 +182,7 @@ def test_create_sync_session_minimal(mutagen_manager, temp_ssh_setup) -> None:
         assert ".gitignore" in mutagen_cmd
 
 
-def test_create_sync_session_with_ignore_patterns(
-    mutagen_manager, temp_ssh_setup
-) -> None:
+def test_create_sync_session_with_ignore_patterns(mutagen_manager, temp_ssh_setup) -> None:
     """Test creating sync session with ignore patterns."""
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
@@ -209,9 +231,7 @@ def test_create_sync_session_with_include_vcs(mutagen_manager, temp_ssh_setup) -
 def test_create_sync_session_failure(mutagen_manager, temp_ssh_setup) -> None:
     """Test creating sync session failure."""
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(
-            returncode=1, stderr="sync session creation failed"
-        )
+        mock_run.return_value = MagicMock(returncode=1, stderr="sync session creation failed")
 
         with pytest.raises(RuntimeError, match="Failed to create Mutagen sync session"):
             mutagen_manager.create_sync_session(
@@ -228,9 +248,7 @@ def test_create_sync_session_failure(mutagen_manager, temp_ssh_setup) -> None:
 def test_wait_for_initial_sync_success(mutagen_manager) -> None:
     """Test waiting for initial sync completion."""
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout="Status: Watching for changes"
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="Status: Watching for changes")
 
         mutagen_manager.wait_for_initial_sync("campers-123", timeout=10)
 
@@ -247,17 +265,14 @@ def test_wait_for_initial_sync_timeout(mutagen_manager) -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="Status: Connecting")
 
-        with patch("time.sleep"):
-            with pytest.raises(RuntimeError, match="Mutagen sync timed out"):
-                mutagen_manager.wait_for_initial_sync("campers-123", timeout=1)
+        with patch("time.sleep"), pytest.raises(RuntimeError, match="Mutagen sync timed out"):
+            mutagen_manager.wait_for_initial_sync("campers-123", timeout=1)
 
 
 def test_wait_for_initial_sync_check_failure(mutagen_manager) -> None:
     """Test waiting for initial sync when status check fails."""
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(
-            returncode=1, stderr="session not found", text=True
-        )
+        mock_run.return_value = MagicMock(returncode=1, stderr="session not found", text=True)
 
         with pytest.raises(RuntimeError, match="Failed to check sync status"):
             mutagen_manager.wait_for_initial_sync("campers-123", timeout=10)
@@ -307,3 +322,86 @@ def test_create_sync_session_invalid_host(mutagen_manager) -> None:
             key_file="/tmp/test.pem",
             username="ubuntu",
         )
+
+
+def test_get_sync_status_watching(mutagen_manager) -> None:
+    """Test getting sync status when watching for changes."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="Name: campers-123\nStatus: Watching for changes\nAlpha:\n    Connected: Yes",
+        )
+
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Watching for changes"
+        mock_run.assert_called_once_with(
+            ["mutagen", "sync", "list", "campers-123"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+
+def test_get_sync_status_with_staged_entries(mutagen_manager) -> None:
+    """Test getting sync status with staged entries."""
+    with patch("subprocess.run") as mock_run:
+        stdout = (
+            "Name: campers-123\nStatus: Staging files on beta\n"
+            "Staged entries (alpha): 45\nStaged entries (beta): 0"
+        )
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=stdout,
+        )
+
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Staging files on beta (Staged entries (alpha): 45)"
+
+
+def test_get_sync_status_command_failure(mutagen_manager) -> None:
+    """Test getting sync status when command fails."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1)
+
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"
+
+
+def test_get_sync_status_timeout(mutagen_manager) -> None:
+    """Test getting sync status when command times out."""
+    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("mutagen", 10)):
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"
+
+
+def test_get_sync_status_subprocess_error(mutagen_manager) -> None:
+    """Test getting sync status when subprocess error occurs."""
+    with patch("subprocess.run", side_effect=subprocess.SubprocessError("error")):
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"
+
+
+def test_get_sync_status_os_error(mutagen_manager) -> None:
+    """Test getting sync status when OS error occurs."""
+    with patch("subprocess.run", side_effect=OSError("error")):
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"
+
+
+def test_get_sync_status_no_status_line(mutagen_manager) -> None:
+    """Test getting sync status when Status line is missing."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="Name: campers-123\nAlpha:\n    Connected: Yes",
+        )
+
+        status = mutagen_manager.get_sync_status("campers-123")
+
+        assert status == "Unknown"

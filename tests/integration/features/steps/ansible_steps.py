@@ -5,8 +5,8 @@ import logging
 from behave import given, then, when
 from behave.runner import Context
 
-from tests.integration.features.steps.config_steps import _write_temp_config
 from tests.integration.features.steps.common_steps import execute_command_direct
+from tests.integration.features.steps.config_steps import _write_temp_config
 
 logger = logging.getLogger(__name__)
 
@@ -87,18 +87,16 @@ def step_config_with_multiple_playbooks_defined(
     logger.info(f"Configured playbooks: {playbook1}, {playbook2}")
 
 
-@given('machine "{camp_name}" has ansible_playbook "{playbook_name}"')
-def step_machine_with_ansible_playbook(
-    context: Context, camp_name: str, playbook_name: str
-) -> None:
-    """Configure machine with single ansible_playbook reference.
+@given('camp "{camp_name}" has ansible_playbook "{playbook_name}"')
+def step_camp_with_ansible_playbook(context: Context, camp_name: str, playbook_name: str) -> None:
+    """Configure camp with single ansible_playbook reference.
 
     Parameters
     ----------
     context : Context
         Behave context object
     camp_name : str
-        Name of the machine
+        Name of the camp
     playbook_name : str
         Name of the playbook to execute
     """
@@ -120,18 +118,16 @@ def step_machine_with_ansible_playbook(
     logger.info(f"Configured {camp_name} with ansible_playbook: {playbook_name}")
 
 
-@given('machine "{camp_name}" has ansible_playbooks [{playbooks}]')
-def step_machine_with_ansible_playbooks(
-    context: Context, camp_name: str, playbooks: str
-) -> None:
-    """Configure machine with multiple ansible_playbooks references.
+@given('camp "{camp_name}" has ansible_playbooks [{playbooks}]')
+def step_camp_with_ansible_playbooks(context: Context, camp_name: str, playbooks: str) -> None:
+    """Configure camp with multiple ansible_playbooks references.
 
     Parameters
     ----------
     context : Context
         Behave context object
     camp_name : str
-        Name of the machine
+        Name of the camp
     playbooks : str
         Comma-separated playbook names (without quotes)
     """
@@ -154,7 +150,7 @@ def step_machine_with_ansible_playbooks(
     logger.info(f"Configured {camp_name} with ansible_playbooks: {playbook_list}")
 
 
-@given("Ansible is not installed on local machine")
+@given("Ansible is not installed on local camp")
 def step_ansible_not_installed(context: Context) -> None:
     """Mock ansible-playbook to be unavailable.
 
@@ -181,14 +177,14 @@ def step_ansible_not_installed(context: Context) -> None:
     if not hasattr(context, "patches"):
         context.patches = []
 
-    patch = unittest.mock.patch("campers.ansible.shutil.which", side_effect=mock_which)
+    patch = unittest.mock.patch("campers.services.ansible.shutil.which", side_effect=mock_which)
     patch.start()
     context.patches.append(patch)
 
     logger.info("Mocked Ansible as not installed")
 
 
-@given("Ansible is installed on local machine")
+@given("Ansible is installed on local camp")
 def step_ansible_installed(context: Context) -> None:
     """Mock ansible-playbook to be available.
 
@@ -208,7 +204,8 @@ def step_ansible_installed(context: Context) -> None:
         context.patches = []
 
     patch_which = unittest.mock.patch(
-        "campers.ansible.shutil.which", return_value="/usr/bin/ansible-playbook"
+        "campers.services.ansible.shutil.which",
+        return_value="/usr/bin/ansible-playbook",
     )
     patch_which.start()
     context.patches.append(patch_which)
@@ -221,7 +218,7 @@ def step_ansible_installed(context: Context) -> None:
         return mock_process
 
     patch_popen = unittest.mock.patch(
-        "campers.ansible.subprocess.Popen", side_effect=mock_popen
+        "campers.services.ansible.subprocess.Popen", side_effect=mock_popen
     )
     patch_popen.start()
     context.patches.append(patch_popen)
@@ -230,10 +227,8 @@ def step_ansible_installed(context: Context) -> None:
 
 
 @given('config has ansible_playbook "{playbook_name}" defined')
-def step_config_has_ansible_playbook_defined(
-    context: Context, playbook_name: str
-) -> None:
-    """Configure machine with ansible_playbook and create playbook definition.
+def step_config_has_ansible_playbook_defined(context: Context, playbook_name: str) -> None:
+    """Configure camp with ansible_playbook and create playbook definition.
 
     Parameters
     ----------
@@ -316,9 +311,9 @@ def step_config_has_no_playbook(context: Context, playbook_name: str) -> None:
     logger.info(f"Ensured playbook does not exist: {playbook_name}")
 
 
-@given('machine has ansible_playbook "{playbook_name}"')
-def step_machine_has_ansible_playbook(context: Context, playbook_name: str) -> None:
-    """Configure machine with ansible_playbook reference.
+@given('camp has ansible_playbook "{playbook_name}"')
+def step_camp_has_ansible_playbook(context: Context, playbook_name: str) -> None:
+    """Configure camp with ansible_playbook reference.
 
     Parameters
     ----------
@@ -511,9 +506,9 @@ def step_playbook_defined(context: Context, playbook_name: str) -> None:
     logger.info(f"Defined playbook: {playbook_name}")
 
 
-@given('machine config has ansible_playbook "test"')
+@given('camp config has ansible_playbook "test"')
 def step_camp_config_has_ansible_playbook_test(context: Context) -> None:
-    """Configure machine with ansible_playbook field.
+    """Configure camp with ansible_playbook field.
 
     Parameters
     ----------
@@ -534,12 +529,12 @@ def step_camp_config_has_ansible_playbook_test(context: Context) -> None:
         "ansible_playbook": "test",
     }
 
-    logger.info("Machine has ansible_playbook: test")
+    logger.info("Camp has ansible_playbook: test")
 
 
-@given('machine config also has ansible_playbooks ["test"]')
+@given('camp config also has ansible_playbooks ["test"]')
 def step_camp_config_also_has_ansible_playbooks(context: Context) -> None:
-    """Add ansible_playbooks field to existing machine config.
+    """Add ansible_playbooks field to existing camp config.
 
     Parameters
     ----------
@@ -560,12 +555,12 @@ def step_camp_config_also_has_ansible_playbooks(context: Context) -> None:
 
     context.config_data["camps"]["testmachine"]["ansible_playbooks"] = ["test"]
 
-    logger.info("Machine also has ansible_playbooks: [test]")
+    logger.info("Camp also has ansible_playbooks: [test]")
 
 
-@given('machine config has ansible_playbooks ["test"]')
+@given('camp config has ansible_playbooks ["test"]')
 def step_camp_config_has_ansible_playbooks_test(context: Context) -> None:
-    """Configure machine with ansible_playbooks field.
+    """Configure camp with ansible_playbooks field.
 
     Parameters
     ----------
@@ -586,7 +581,7 @@ def step_camp_config_has_ansible_playbooks_test(context: Context) -> None:
         "ansible_playbooks": ["test"],
     }
 
-    logger.info("Machine has ansible_playbooks: [test]")
+    logger.info("Camp has ansible_playbooks: [test]")
 
 
 @given("config with Amazon Linux AMI")
@@ -624,7 +619,7 @@ def step_configuration_is_loaded(context: Context) -> None:
     context : Context
         Behave context object
     """
-    from campers.config import ConfigLoader
+    from campers.core.config import ConfigLoader
 
     config_path = _write_temp_config(context)
     context.temp_config_file = config_path
@@ -745,14 +740,10 @@ def step_playbook_executed_second(context: Context, playbook_name: str) -> None:
 
     context.execution_order.append(playbook_name)
 
-    if len(context.execution_order) == 2:
-        if (
-            context.execution_order[0] != "base"
-            or context.execution_order[1] != "webapp"
-        ):
-            raise AssertionError(
-                f"Playbook execution order incorrect: {context.execution_order}"
-            )
+    if len(context.execution_order) == 2 and (
+        context.execution_order[0] != "base" or context.execution_order[1] != "webapp"
+    ):
+        raise AssertionError(f"Playbook execution order incorrect: {context.execution_order}")
 
     logger.info(f"Recorded second playbook execution: {playbook_name}")
 
@@ -807,12 +798,10 @@ def step_error_message_contains(context: Context, text: str) -> None:
 
     else:
         available_attrs = [
-            attr
-            for attr in dir(context)
-            if not attr.startswith("_") and "error" in attr.lower()
+            attr for attr in dir(context) if not attr.startswith("_") and "error" in attr.lower()
         ]
         logger.warning(
-            f"No error found in expected locations. Available error-related attrs: {available_attrs}"
+            f"No error found in expected locations. Error-related attrs: {available_attrs}"
         )
         error_msg = ""
 
@@ -918,10 +907,7 @@ def step_error_message_explains_mutual_exclusivity(context: Context) -> None:
     else:
         error_msg = ""
 
-    if (
-        "mutually exclusive" not in error_msg.lower()
-        and "both" not in error_msg.lower()
-    ):
+    if "mutually exclusive" not in error_msg.lower() and "both" not in error_msg.lower():
         raise AssertionError(
             f"Expected mutual exclusivity mentioned in error message, got: {error_msg}"
         )
@@ -969,11 +955,10 @@ def step_ansible_would_connect_as(context: Context, username: str) -> None:
     username : str
         Expected username
     """
-    if hasattr(context, "ssh_username"):
-        if context.ssh_username != username:
-            raise AssertionError(
-                f"Expected Ansible to connect as {username}, got {context.ssh_username}"
-            )
+    if hasattr(context, "ssh_username") and context.ssh_username != username:
+        raise AssertionError(
+            f"Expected Ansible to connect as {username}, got {context.ssh_username}"
+        )
 
     logger.info(f"Verified Ansible would connect as: {username}")
 
@@ -993,18 +978,18 @@ def step_localstack_is_running(context: Context) -> None:
     logger.info("LocalStack setup verified")
 
 
-@given('machine "{camp_name}" with ansible_playbook "{playbook_name}"')
-def step_machine_with_ansible_playbook_combined(
+@given('camp "{camp_name}" with ansible_playbook "{playbook_name}"')
+def step_camp_with_ansible_playbook_combined(
     context: Context, camp_name: str, playbook_name: str
 ) -> None:
-    """Define machine with ansible_playbook in combined step.
+    """Define camp with ansible_playbook in combined step.
 
     Parameters
     ----------
     context : Context
         Behave context object
     camp_name : str
-        Machine name
+        Camp name
     playbook_name : str
         Playbook name
     """
@@ -1037,7 +1022,7 @@ def step_machine_with_ansible_playbook_combined(
         "ansible_playbook": playbook_name,
     }
 
-    logger.info(f"Machine {camp_name} with playbook {playbook_name} configured")
+    logger.info(f"Camp {camp_name} with playbook {playbook_name} configured")
 
 
 @then("Mutagen sync completes")

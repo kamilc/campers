@@ -7,8 +7,9 @@ import queue
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Deque, Dict, List, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -114,9 +115,7 @@ class EventBusChannel:
         self._name = name
         self._bus = bus
 
-    def publish(
-        self, instance_id: str | None, data: dict[str, Any] | None = None
-    ) -> Event:
+    def publish(self, instance_id: str | None, data: dict[str, Any] | None = None) -> Event:
         """Publish an event on the bound channel.
 
         Parameters
@@ -172,13 +171,13 @@ class EventBus:
     """Thread-safe event bus supporting typed channels and diagnostics."""
 
     def __init__(self, history_limit: int = 50) -> None:
-        self._queues: Dict[str, queue.Queue[Event]] = {}
-        self._backlogs: Dict[str, List[Event]] = {}
-        self._metrics: Dict[str, ChannelMetrics] = {}
-        self._history: Deque[Event] = deque(maxlen=history_limit)
+        self._queues: dict[str, queue.Queue[Event]] = {}
+        self._backlogs: dict[str, list[Event]] = {}
+        self._metrics: dict[str, ChannelMetrics] = {}
+        self._history: deque[Event] = deque(maxlen=history_limit)
         self._lock = threading.RLock()
-        self._global_subscribers: Set[Callable[[Event], None]] = set()
-        self._channel_subscribers: Dict[str, Set[Callable[[Event], None]]] = {}
+        self._global_subscribers: set[Callable[[Event], None]] = set()
+        self._channel_subscribers: dict[str, set[Callable[[Event], None]]] = {}
 
     def publish(self, event: Event) -> None:
         """Publish an event to its channel.
@@ -261,8 +260,8 @@ class EventBus:
 
             try:
                 event = self._queues[event_type].get(timeout=remaining)
-            except queue.Empty:
-                raise self._timeout_error(event_type, instance_id)
+            except queue.Empty as err:
+                raise self._timeout_error(event_type, instance_id) from err
 
             if instance_id is None or event.instance_id == instance_id:
                 with self._lock:
@@ -391,14 +390,11 @@ class EventBus:
                 "event_type": event.type,
                 "instance_id": event.instance_id,
                 "latency_sec": latency,
-                "queue_depth": self._queues[event.type].qsize()
-                + len(self._backlogs[event.type]),
+                "queue_depth": self._queues[event.type].qsize() + len(self._backlogs[event.type]),
             },
         )
 
-    def _timeout_error(
-        self, event_type: str, instance_id: str | None
-    ) -> EventBusTimeoutError:
+    def _timeout_error(self, event_type: str, instance_id: str | None) -> EventBusTimeoutError:
         with self._lock:
             depth = self._queues[event_type].qsize() + len(self._backlogs[event_type])
             recent_events = list(self._history)[-5:]

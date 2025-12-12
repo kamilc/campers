@@ -4,9 +4,17 @@ import logging
 import shutil
 import subprocess
 import tempfile
-import yaml
 from pathlib import Path
 from typing import Any
+
+import yaml
+
+from campers.constants import ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS, DEFAULT_SSH_USERNAME
+from campers.services.validation import (
+    validate_ansible_host,
+    validate_ansible_user,
+    validate_port,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +22,15 @@ logger = logging.getLogger(__name__)
 class AnsibleManager:
     """Manage Ansible playbook execution in push mode."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize AnsibleManager.
+
+        Notes
+        -----
+        Initializes an empty list of temporary files that may be created
+        during playbook execution. These files should be cleaned up
+        after playbook completion.
+        """
         self._temp_files: list[Path] = []
 
     def check_ansible_installed(self) -> None:
@@ -42,7 +58,7 @@ class AnsibleManager:
         playbooks_config: dict[str, Any],
         instance_ip: str,
         ssh_key_file: str,
-        ssh_username: str = "ubuntu",
+        ssh_username: str = DEFAULT_SSH_USERNAME,
         ssh_port: int = 22,
     ) -> None:
         """Execute one or more Ansible playbooks.
@@ -75,8 +91,7 @@ class AnsibleManager:
             if name not in playbooks_config:
                 available = list(playbooks_config.keys())
                 raise ValueError(
-                    f"Playbook '{name}' not found in config. "
-                    f"Available playbooks: {available}"
+                    f"Playbook '{name}' not found in config. Available playbooks: {available}"
                 )
 
         inventory_file = self._generate_inventory(
@@ -108,6 +123,28 @@ class AnsibleManager:
         key_file: str,
         port: int,
     ) -> Path:
+        """Generate Ansible inventory file.
+
+        Parameters
+        ----------
+        host : str
+            Target host IP address
+        user : str
+            SSH username
+        key_file : str
+            Path to SSH private key
+        port : int
+            SSH port number
+
+        Returns
+        -------
+        Path
+            Path to generated temporary inventory file
+        """
+        validate_ansible_host(host)
+        validate_ansible_user(user)
+        validate_port(port)
+
         inventory_content = (
             "[all]\n"
             f"ec2instance "
@@ -115,7 +152,7 @@ class AnsibleManager:
             f"ansible_user={user} "
             f"ansible_ssh_private_key_file={key_file} "
             f"ansible_port={port} "
-            "ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n"
+            "ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'\n"
         )
 
         with tempfile.NamedTemporaryFile(
@@ -137,6 +174,20 @@ class AnsibleManager:
         name: str,
         playbook_yaml: list[dict],
     ) -> Path:
+        """Write Ansible playbook YAML to temporary file.
+
+        Parameters
+        ----------
+        name : str
+            Playbook name for file naming
+        playbook_yaml : list[dict]
+            Playbook content as YAML structure
+
+        Returns
+        -------
+        Path
+            Path to generated temporary playbook file
+        """
         with tempfile.NamedTemporaryFile(
             mode="w",
             suffix=".yml",
@@ -155,6 +206,15 @@ class AnsibleManager:
         inventory: Path,
         playbook: Path,
     ) -> None:
+        """Execute Ansible playbook against target host.
+
+        Parameters
+        ----------
+        inventory : Path
+            Path to Ansible inventory file
+        playbook : Path
+            Path to Ansible playbook file
+        """
         cmd = [
             "ansible-playbook",
             "-i",
@@ -173,21 +233,36 @@ class AnsibleManager:
             bufsize=1,
         )
 
-        for line in process.stdout:
-            logger.info(line.rstrip())
-
+        output_lines: list[str] = []
         try:
-            process.wait(timeout=3600)
-        except subprocess.TimeoutExpired:
+            for line in process.stdout:
+                stripped_line = line.rstrip()
+                logger.info(stripped_line)
+                output_lines.append(stripped_line)
+            process.wait(timeout=ANSIBLE_PLAYBOOK_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as e:
+            if process.stdout and hasattr(process.stdout, "close"):
+                process.stdout.close()
             process.kill()
-            raise RuntimeError("Ansible playbook execution timed out after 1 hour")
+            process.wait()
+            raise RuntimeError("Ansible playbook execution timed out after 1 hour") from e
+        finally:
+            if process.stdout and hasattr(process.stdout, "close"):
+                process.stdout.close()
 
         if process.returncode != 0:
+            last_lines = output_lines[-50:] if len(output_lines) > 50 else output_lines
+            error_output = "\n".join(last_lines)
             raise RuntimeError(
-                f"Ansible playbook failed with exit code {process.returncode}"
+                f"Ansible playbook failed with exit code {process.returncode}\n\n"
+                f"Ansible output:\n{error_output}"
             )
 
-    def _cleanup_temp_files(self):
+    def _cleanup_temp_files(self) -> None:
+        """Clean up temporary inventory and playbook files.
+
+        Removes all temporary files created during ansible execution.
+        """
         for temp_file in self._temp_files:
             try:
                 if temp_file.exists():

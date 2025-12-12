@@ -5,14 +5,16 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+from botocore.config import Config
+from botocore.exceptions import ClientError
 
-from campers.pricing import (
+from campers.providers.aws.pricing import (
     PricingCache,
     PricingService,
     calculate_monthly_cost,
     format_cost,
 )
-from campers.pricing_parsers import parse_ebs_pricing, parse_ec2_pricing
+from campers.providers.aws.pricing_parsers import parse_ebs_pricing, parse_ec2_pricing
 
 
 class TestPricingParsers:
@@ -23,11 +25,7 @@ class TestPricingParsers:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER123": {
-                        "priceDimensions": {
-                            "DIM456": {"pricePerUnit": {"USD": "0.0416"}}
-                        }
-                    }
+                    "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}}
                 }
             }
         }
@@ -58,9 +56,7 @@ class TestPricingParsers:
         """Test parsing EC2 response without USD price."""
         price_data = {
             "terms": {
-                "OnDemand": {
-                    "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {}}}}
-                }
+                "OnDemand": {"OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {}}}}}
             }
         }
         price_json = json.dumps(price_data)
@@ -72,11 +68,7 @@ class TestPricingParsers:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER789": {
-                        "priceDimensions": {
-                            "DIM101": {"pricePerUnit": {"USD": "0.08"}}
-                        }
-                    }
+                    "OFFER789": {"priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}}
                 }
             }
         }
@@ -141,12 +133,19 @@ class TestPricingService:
 
         assert service.pricing_available is True
         assert service.pricing_client is mock_pricing
-        mock_boto_client.assert_called_once_with("pricing", region_name="us-east-1")
+        mock_boto_client.assert_called_once()
+        call_args = mock_boto_client.call_args
+        assert call_args[0][0] == "pricing"
+        assert call_args[1]["region_name"] == "us-east-1"
+        assert isinstance(call_args[1]["config"], Config)
 
     @patch("boto3.client")
     def test_initialization_failure(self, mock_boto_client: Mock) -> None:
         """Test pricing service handles initialization failure gracefully."""
-        mock_boto_client.side_effect = Exception("API not available")
+        mock_boto_client.side_effect = ClientError(
+            {"Error": {"Code": "ServiceUnavailable", "Message": "Service unavailable"}},
+            "GetPricingData",
+        )
 
         service = PricingService()
 
@@ -156,7 +155,10 @@ class TestPricingService:
     @patch("boto3.client")
     def test_get_ec2_hourly_rate_when_unavailable(self, mock_boto_client: Mock) -> None:
         """Test EC2 pricing returns None when API unavailable."""
-        mock_boto_client.side_effect = Exception("API not available")
+        mock_boto_client.side_effect = ClientError(
+            {"Error": {"Code": "ServiceUnavailable", "Message": "Service unavailable"}},
+            "GetPricingData",
+        )
 
         service = PricingService()
         rate = service.get_ec2_hourly_rate("t3.medium", "us-east-1")
@@ -170,17 +172,11 @@ class TestPricingService:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER123": {
-                        "priceDimensions": {
-                            "DIM456": {"pricePerUnit": {"USD": "0.0416"}}
-                        }
-                    }
+                    "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}}
                 }
             }
         }
-        mock_pricing.get_products.return_value = {
-            "PriceList": [json.dumps(price_data)]
-        }
+        mock_pricing.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
         mock_boto_client.return_value = mock_pricing
 
         service = PricingService(use_cache=False)
@@ -197,9 +193,7 @@ class TestPricingService:
         assert filters["operatingSystem"] == "Linux"
 
     @patch("boto3.client")
-    def test_get_ec2_hourly_rate_unsupported_region(
-        self, mock_boto_client: Mock
-    ) -> None:
+    def test_get_ec2_hourly_rate_unsupported_region(self, mock_boto_client: Mock) -> None:
         """Test EC2 pricing returns None for unsupported region."""
         mock_pricing = Mock()
         mock_boto_client.return_value = mock_pricing
@@ -217,17 +211,11 @@ class TestPricingService:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER123": {
-                        "priceDimensions": {
-                            "DIM456": {"pricePerUnit": {"USD": "0.0416"}}
-                        }
-                    }
+                    "OFFER123": {"priceDimensions": {"DIM456": {"pricePerUnit": {"USD": "0.0416"}}}}
                 }
             }
         }
-        mock_pricing.get_products.return_value = {
-            "PriceList": [json.dumps(price_data)]
-        }
+        mock_pricing.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
         mock_boto_client.return_value = mock_pricing
 
         service = PricingService(use_cache=True)
@@ -258,17 +246,11 @@ class TestPricingService:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER789": {
-                        "priceDimensions": {
-                            "DIM101": {"pricePerUnit": {"USD": "0.08"}}
-                        }
-                    }
+                    "OFFER789": {"priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}}
                 }
             }
         }
-        mock_pricing.get_products.return_value = {
-            "PriceList": [json.dumps(price_data)]
-        }
+        mock_pricing.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
         mock_boto_client.return_value = mock_pricing
 
         service = PricingService(use_cache=False)
@@ -284,11 +266,12 @@ class TestPricingService:
         assert filters["volumeApiName"] == "gp3"
 
     @patch("boto3.client")
-    def test_get_ebs_storage_rate_when_unavailable(
-        self, mock_boto_client: Mock
-    ) -> None:
+    def test_get_ebs_storage_rate_when_unavailable(self, mock_boto_client: Mock) -> None:
         """Test EBS pricing returns None when API unavailable."""
-        mock_boto_client.side_effect = Exception("API not available")
+        mock_boto_client.side_effect = ClientError(
+            {"Error": {"Code": "ServiceUnavailable", "Message": "Service unavailable"}},
+            "GetPricingData",
+        )
 
         service = PricingService()
         rate = service.get_ebs_storage_rate("us-east-1")
@@ -302,17 +285,11 @@ class TestPricingService:
         price_data = {
             "terms": {
                 "OnDemand": {
-                    "OFFER789": {
-                        "priceDimensions": {
-                            "DIM101": {"pricePerUnit": {"USD": "0.08"}}
-                        }
-                    }
+                    "OFFER789": {"priceDimensions": {"DIM101": {"pricePerUnit": {"USD": "0.08"}}}}
                 }
             }
         }
-        mock_pricing.get_products.return_value = {
-            "PriceList": [json.dumps(price_data)]
-        }
+        mock_pricing.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
         mock_boto_client.return_value = mock_pricing
 
         service = PricingService(use_cache=True)
@@ -328,7 +305,7 @@ class TestPricingService:
 class TestCalculateMonthlyCost:
     """Tests for calculate_monthly_cost helper function."""
 
-    @patch("campers.pricing.PricingService")
+    @patch("campers.providers.aws.pricing.PricingService")
     def test_running_instance_cost(self, mock_service_class: Mock) -> None:
         """Test monthly cost calculation for running instance."""
         mock_service = Mock()
@@ -344,7 +321,7 @@ class TestCalculateMonthlyCost:
 
         assert cost == pytest.approx(0.0416 * 24 * 30)
 
-    @patch("campers.pricing.PricingService")
+    @patch("campers.providers.aws.pricing.PricingService")
     def test_stopped_instance_cost(self, mock_service_class: Mock) -> None:
         """Test monthly cost calculation for stopped instance."""
         mock_service = Mock()
@@ -360,10 +337,8 @@ class TestCalculateMonthlyCost:
 
         assert cost == pytest.approx(50 * 0.08)
 
-    @patch("campers.pricing.PricingService")
-    def test_returns_none_when_ec2_pricing_unavailable(
-        self, mock_service_class: Mock
-    ) -> None:
+    @patch("campers.providers.aws.pricing.PricingService")
+    def test_returns_none_when_ec2_pricing_unavailable(self, mock_service_class: Mock) -> None:
         """Test returns None when EC2 pricing unavailable."""
         mock_service = Mock()
         mock_service.get_ec2_hourly_rate.return_value = None
@@ -378,10 +353,8 @@ class TestCalculateMonthlyCost:
 
         assert cost is None
 
-    @patch("campers.pricing.PricingService")
-    def test_returns_none_when_ebs_pricing_unavailable(
-        self, mock_service_class: Mock
-    ) -> None:
+    @patch("campers.providers.aws.pricing.PricingService")
+    def test_returns_none_when_ebs_pricing_unavailable(self, mock_service_class: Mock) -> None:
         """Test returns None when EBS pricing unavailable."""
         mock_service = Mock()
         mock_service.get_ebs_storage_rate.return_value = None
@@ -396,7 +369,7 @@ class TestCalculateMonthlyCost:
 
         assert cost is None
 
-    @patch("campers.pricing.PricingService")
+    @patch("campers.providers.aws.pricing.PricingService")
     def test_returns_none_for_unknown_state(self, mock_service_class: Mock) -> None:
         """Test returns None for unknown instance state."""
         mock_service = Mock()

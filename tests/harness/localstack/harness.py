@@ -8,15 +8,19 @@ import os
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import boto3
 import requests
-from behave.runner import Context
 from behave.model import Scenario
+from behave.runner import Context
+from botocore.exceptions import ClientError
 
+from campers.services.sync import MutagenManager
 from tests.harness.base import ScenarioHarness
 from tests.harness.localstack.extensions import Extensions
 from tests.harness.localstack.monitor_controller import (
@@ -28,18 +32,16 @@ from tests.harness.services.configuration_env import ConfigurationEnv
 from tests.harness.services.diagnostics import DiagnosticsCollector
 from tests.harness.services.event_bus import Event, EventBus
 from tests.harness.services.mutagen_session_manager import (
-    MutagenSessionManager,
     MutagenCommandResult,
     MutagenError,
+    MutagenSessionManager,
     MutagenTimeoutError,
 )
 from tests.harness.services.resource_registry import ResourceRegistry
 from tests.harness.services.ssh_container_pool import SSHContainerPool
 from tests.harness.services.timeout_manager import TimeoutManager
 from tests.harness.utils.port_allocator import PortAllocator
-
 from tests.integration.features.steps.docker_manager import EC2ContainerManager
-from campers.sync import MutagenManager
 
 logger = logging.getLogger(__name__)
 
@@ -156,8 +158,44 @@ class LocalStackHarness(ScenarioHarness):
         self._ensure_localstack_container_running()
         self._ensure_localstack_ready(timeout=LOCALSTACK_STARTUP_TIMEOUT)
 
+    def _ensure_default_vpc_exists(self) -> None:
+        """Ensure a default VPC exists in LocalStack.
+
+        LocalStack doesn't automatically create a default VPC like AWS does.
+        This method creates one if it doesn't exist, allowing tests that depend
+        on a default VPC to function properly.
+        """
+        try:
+            vpcs = self._ec2_client.describe_vpcs(
+                Filters=[{"Name": "isDefault", "Values": ["true"]}]
+            )
+
+            if vpcs["Vpcs"]:
+                logger.debug("Default VPC already exists in LocalStack")
+                return
+
+            logger.info("Creating default VPC in LocalStack")
+            self._ec2_client.create_default_vpc()
+            logger.info("Default VPC created successfully")
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code", "")
+            if error_code == "DefaultVpcAlreadyExists":
+                logger.debug("Default VPC already exists (another test created it)")
+                return
+            if "DefaultSubnetAlreadyExistsInAvailabilityZone" in error_code or \
+               "DefaultSubnetAlreadyExistsInAvailabilityZone" in str(exc):
+                logger.debug("Default VPC and subnets already exist from previous test")
+                return
+            logger.error("Failed to ensure default VPC exists: %s", exc)
+            raise RuntimeError(f"Failed to ensure default VPC exists: {exc}") from exc
+        except Exception as exc:
+            logger.error("Failed to ensure default VPC exists: %s", exc)
+            raise RuntimeError(f"Failed to ensure default VPC exists: {exc}") from exc
+
     def setup(self) -> None:
         """Initialize LocalStack scenario services."""
+        self._ensure_default_vpc_exists()
+
         configuration_env = ConfigurationEnv()
         configuration_env.enter()
         configuration_env.set("AWS_ENDPOINT_URL", LOCALSTACK_ENDPOINT)
@@ -167,12 +205,13 @@ class LocalStackHarness(ScenarioHarness):
         configuration_env.set("CAMPERS_TEST_MODE", "0")
 
         resource_registry = ResourceRegistry()
-        scenario_timeout = getattr(
-            self.context, "scenario_timeout", DEFAULT_TIMEOUT_BUDGET
-        )
-        timeout_manager = TimeoutManager(
-            budget_seconds=min(scenario_timeout, DEFAULT_TIMEOUT_BUDGET)
-        )
+        scenario_timeout = getattr(self.context, "scenario_timeout", DEFAULT_TIMEOUT_BUDGET)
+        is_tui_scenario = self._should_initialize_pilot_extension()
+        if is_tui_scenario:
+            timeout_budget = scenario_timeout * 1.5
+        else:
+            timeout_budget = min(scenario_timeout, DEFAULT_TIMEOUT_BUDGET)
+        timeout_manager = TimeoutManager(budget_seconds=timeout_budget)
         event_bus = EventBus()
         artifacts = ArtifactManager()
         scenario_dir = artifacts.create_scenario_dir(self.scenario.name)
@@ -201,6 +240,9 @@ class LocalStackHarness(ScenarioHarness):
             terminator=self._mutagen_terminate,
         )
 
+        poll_interval = self._get_monitor_poll_interval()
+        watchdog_budget = float(scenario_timeout) if is_tui_scenario else 10.0
+
         monitor_controller = MonitorController(
             event_bus=event_bus,
             resource_registry=resource_registry,
@@ -211,6 +253,8 @@ class LocalStackHarness(ScenarioHarness):
             container_manager=container_manager,
             action_provider=self._describe_localstack_instances,
             http_ready_callback=self._start_http_services,
+            poll_interval_sec=poll_interval,
+            watchdog_budget_sec=watchdog_budget,
         )
 
         self.services = LocalStackServiceContainer(
@@ -238,12 +282,8 @@ class LocalStackHarness(ScenarioHarness):
             )
             self.extensions.pilot = pilot_ext
 
-        diagnostics.record(
-            "localstack-harness", "ready", {"scenario": self.scenario.name}
-        )
-        diagnostics.record_system_snapshot(
-            "setup-initial-state", include_thread_stacks=False
-        )
+        diagnostics.record("localstack-harness", "ready", {"scenario": self.scenario.name})
+        diagnostics.record_system_snapshot("setup-initial-state", include_thread_stacks=False)
 
         diagnostics.record("monitor", "starting", {"scenario": self.scenario.name})
 
@@ -463,17 +503,15 @@ class LocalStackHarness(ScenarioHarness):
         return {"preserved": scenario_failed}
 
     def _teardown_export_diagnostics(self, summary: CleanupSummary) -> dict[str, Any]:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         artifacts = self.services.artifacts
         scenario_slug = getattr(artifacts, "scenario_slug", None)
         if not scenario_slug:
-            scenario_slug = (
-                self.scenario.name.lower().replace(" ", "-").replace("/", "-")
-            )
+            scenario_slug = self.scenario.name.lower().replace(" ", "-").replace("/", "-")
         run_id = getattr(artifacts, "run_id", None)
         if not run_id:
-            run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+            run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
 
         diagnostics_dir = artifacts.base_dir / "_diagnostics" / scenario_slug
         diagnostics_dir.mkdir(parents=True, exist_ok=True)
@@ -528,15 +566,31 @@ class LocalStackHarness(ScenarioHarness):
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
-                response = requests.get(
-                    f"{LOCALSTACK_ENDPOINT}{LOCALSTACK_HEALTH_PATH}", timeout=2
-                )
+                response = requests.get(f"{LOCALSTACK_ENDPOINT}{LOCALSTACK_HEALTH_PATH}", timeout=2)
                 if response.status_code == 200:
                     return
             except requests.RequestException:
                 time.sleep(1)
 
         raise RuntimeError(f"LocalStack health check failed after {timeout} seconds")
+
+    def _get_monitor_poll_interval(self) -> float:
+        """Determine the monitor polling interval based on scenario type.
+
+        For TUI/pilot scenarios, uses faster polling (50ms instead of 500ms)
+        to minimize SSH tag race conditions where production code queries tags before
+        the monitor has provisioned and tagged instances, while still respecting
+        scenario timeouts and avoiding API rate limiting.
+
+        Returns
+        -------
+        float
+            Polling interval in seconds
+        """
+        if self._should_initialize_pilot_extension():
+            logger.info("TUI scenario detected; using faster monitor polling (50ms)")
+            return 0.05
+        return 0.5
 
     def _should_initialize_pilot_extension(self) -> bool:
         """Determine if PilotExtension should be initialized for this scenario.
@@ -549,12 +603,10 @@ class LocalStackHarness(ScenarioHarness):
         if not self.scenario.tags:
             return False
 
-        pilot_tags = {"@pilot", "@tui"}
+        pilot_tags = {"pilot", "tui"}
         return any(tag in pilot_tags for tag in self.scenario.tags)
 
-    def wait_for_event(
-        self, event_type: str, instance_id: str | None, timeout_sec: float
-    ) -> Event:
+    def wait_for_event(self, event_type: str, instance_id: str | None, timeout_sec: float) -> Event:
         """Wait for a typed event from the LocalStack event bus.
 
         Parameters
@@ -586,9 +638,7 @@ class LocalStackHarness(ScenarioHarness):
 
         return self._latest_instance_id
 
-    def get_ssh_details(
-        self, instance_id: str
-    ) -> tuple[str | None, int | None, Path | None]:
+    def get_ssh_details(self, instance_id: str) -> tuple[str | None, int | None, Path | None]:
         """Retrieve SSH connection details for an instance.
 
         Parameters
@@ -617,7 +667,7 @@ class LocalStackHarness(ScenarioHarness):
             if event.type == "ssh-ready":
                 self._maybe_start_mutagen_sync(event.instance_id, event.data)
         if event.type == "monitor-error":
-            setattr(self.context, "monitor_error", event.data.get("error"))
+            self.context.monitor_error = event.data.get("error")
 
     def _ensure_localstack_container_running(self) -> None:
         """Ensure LocalStack container is running for the scenario."""
@@ -712,7 +762,7 @@ class LocalStackHarness(ScenarioHarness):
                 for instance in reservation.get("Instances", []):
                     yield self._build_monitor_action(instance)
 
-    def _build_monitor_action(self, instance: dict) -> "MonitorAction":
+    def _build_monitor_action(self, instance: dict) -> MonitorAction:
         """Construct a monitor action object from instance metadata."""
         from tests.harness.localstack.monitor_controller import MonitorAction
 
@@ -723,14 +773,10 @@ class LocalStackHarness(ScenarioHarness):
         return MonitorAction(
             instance_id=instance["InstanceId"],
             state=instance["State"]["Name"],
-            metadata={
-                key: value for key, value in metadata.items() if value is not None
-            },
+            metadata={key: value for key, value in metadata.items() if value is not None},
         )
 
-    def _mutagen_runner(
-        self, arguments: list[str], timeout: float
-    ) -> MutagenCommandResult:
+    def _mutagen_runner(self, arguments: list[str], timeout: float) -> MutagenCommandResult:
         """Execute Mutagen operations via MutagenManager."""
 
         if not arguments:
@@ -794,9 +840,7 @@ class LocalStackHarness(ScenarioHarness):
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("Mutagen termination failed for %s: %s", session_id, exc)
 
-    def _maybe_start_mutagen_sync(
-        self, instance_id: str, metadata: dict[str, Any]
-    ) -> None:
+    def _maybe_start_mutagen_sync(self, instance_id: str, metadata: dict[str, Any]) -> None:
         """Start Mutagen synchronization if configured for the scenario."""
 
         if self.services is None:
@@ -804,8 +848,7 @@ class LocalStackHarness(ScenarioHarness):
 
         if os.environ.get("CAMPERS_DISABLE_MUTAGEN") == "1":
             logger.info(
-                "Mutagen disabled via CAMPERS_DISABLE_MUTAGEN=1; "
-                "skipping harness sync setup"
+                "Mutagen disabled via CAMPERS_DISABLE_MUTAGEN=1; skipping harness sync setup"
             )
             return
 
@@ -833,7 +876,7 @@ class LocalStackHarness(ScenarioHarness):
                     data={"status": "error", "error": message},
                 )
             )
-            setattr(self.context, "mutagen_error", message)
+            self.context.mutagen_error = message
             return
 
         test_mode = os.environ.get("CAMPERS_TEST_MODE") == "1"
@@ -913,7 +956,7 @@ class LocalStackHarness(ScenarioHarness):
                         data={"status": "timeout", "error": str(exc)},
                     )
                 )
-                setattr(self.context, "mutagen_error", str(exc))
+                self.context.mutagen_error = str(exc)
             except MutagenError as exc:
                 self.services.event_bus.publish(
                     Event(
@@ -922,7 +965,7 @@ class LocalStackHarness(ScenarioHarness):
                         data={"status": "error", "error": str(exc)},
                     )
                 )
-                setattr(self.context, "mutagen_error", str(exc))
+                self.context.mutagen_error = str(exc)
             except Exception as exc:  # pylint: disable=broad-except
                 self.services.event_bus.publish(
                     Event(
@@ -931,7 +974,7 @@ class LocalStackHarness(ScenarioHarness):
                         data={"status": "error", "error": str(exc)},
                     )
                 )
-                setattr(self.context, "mutagen_error", str(exc))
+                self.context.mutagen_error = str(exc)
 
     def _wait_for_initial_sync(self, session_id: str) -> None:
         """Wait for Mutagen initial sync and publish status events."""

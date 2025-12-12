@@ -2,7 +2,6 @@
 
 import time
 
-
 from tests.harness.services.diagnostics import (
     DiagnosticEvent,
     DiagnosticsCollector,

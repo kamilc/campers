@@ -10,8 +10,9 @@ import asyncio
 import logging
 import queue
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from tests.harness.services.diagnostics import DiagnosticsCollector
 from tests.harness.services.event_bus import Event, EventBus
@@ -165,7 +166,7 @@ class PilotExtension:
 
                 return self.tui_handle
 
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             self.publish_tui_event(
                 "tui-timeout",
                 {
@@ -234,9 +235,7 @@ class PilotExtension:
             return False
 
         try:
-            with self.timeout_manager.sub_budget(
-                "tui-status-poll", max_sec=timeout_sec
-            ):
+            with self.timeout_manager.sub_budget("tui-status-poll", max_sec=timeout_sec):
                 start_time = time.time()
                 while True:
                     elapsed = time.time() - start_time
@@ -245,9 +244,7 @@ class PilotExtension:
                             "tui-timeout",
                             {"timeout_sec": timeout_sec, "graceful": False},
                         )
-                        raise TimeoutError(
-                            f"TUI status poll exceeded {timeout_sec}s timeout"
-                        )
+                        raise TimeoutError(f"TUI status poll exceeded {timeout_sec}s timeout")
 
                     try:
                         status_widget = self.tui_handle.app.query_one("#status-widget")
@@ -321,9 +318,7 @@ class PilotExtension:
 
         return graceful
 
-    def register_resource(
-        self, kind: str, handle: Any, dispose_fn: Callable[..., Any]
-    ) -> None:
+    def register_resource(self, kind: str, handle: Any, dispose_fn: Callable[..., Any]) -> None:
         """Register a TUI resource for cleanup.
 
         Parameters

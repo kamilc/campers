@@ -57,7 +57,7 @@ Scenario: Invalid camp name error
   Given config file with camps ["dev-workstation", "jupyter-lab"]
   When I run campers command "run nonexistent-camp"
   Then command fails with ValueError
-  And error message contains "Machine 'nonexistent-camp' not found"
+  And error message contains "Camp 'nonexistent-camp' not found"
 
 @error
 Scenario: Invalid include_vcs value

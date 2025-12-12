@@ -23,7 +23,7 @@ Scenario: Missing credentials error is user-friendly
   Given AWS credentials are not configured
   When I run run
   Then exit code is not 0
-  And stderr contains "AWS credentials not found"
+  And stderr contains "Cloud credentials not found"
   And stderr contains "aws configure"
   And stderr contains "AWS_ACCESS_KEY_ID"
   And stderr does not contain "Traceback"

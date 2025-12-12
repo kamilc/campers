@@ -40,9 +40,7 @@ class TestMonitorControllerLifecycle:
 
         class DummyContainerManager:
             def __init__(self) -> None:
-                self.instance_map: dict[
-                    str, tuple[DummyContainer, int | None, Path]
-                ] = {}
+                self.instance_map: dict[str, tuple[DummyContainer, int | None, Path]] = {}
 
             def create_instance_container(
                 self, instance_id: str, host_port: int | None = None
@@ -88,17 +86,11 @@ class TestMonitorControllerLifecycle:
         )
 
         actions.append(
-            [
-                MonitorAction(
-                    instance_id="i-1", state="running", metadata={"ami": "ami-123"}
-                )
-            ]
+            [MonitorAction(instance_id="i-1", state="running", metadata={"ami": "ami-123"})]
         )
         controller.start()
 
-        instance_event = bus.wait_for(
-            "instance-ready", instance_id="i-1", timeout_sec=1.0
-        )
+        instance_event = bus.wait_for("instance-ready", instance_id="i-1", timeout_sec=1.0)
         assert instance_event.data["state"] == "running"
         ssh_event = bus.wait_for("ssh-ready", instance_id="i-1", timeout_sec=1.0)
         assert ssh_event.data["ami"] == "ami-123"
@@ -119,17 +111,13 @@ class TestMonitorControllerLifecycle:
         )
 
         controller.resume()
-        new_instance = bus.wait_for(
-            "instance-ready", instance_id="i-2", timeout_sec=1.0
-        )
+        new_instance = bus.wait_for("instance-ready", instance_id="i-2", timeout_sec=1.0)
         assert new_instance.instance_id == "i-2"
         ssh_second = bus.wait_for("ssh-ready", instance_id="i-2", timeout_sec=1.0)
         assert ssh_second.data["port"] == 61001
 
         result = controller.shutdown(timeout_sec=1.0)
         assert result.success
-        shutdown_event = bus.wait_for(
-            "monitor-shutdown", instance_id=None, timeout_sec=1.0
-        )
+        shutdown_event = bus.wait_for("monitor-shutdown", instance_id=None, timeout_sec=1.0)
         assert shutdown_event.type == "monitor-shutdown"
         assert len(registry.resources) >= 1

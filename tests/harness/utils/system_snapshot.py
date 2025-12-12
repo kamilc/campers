@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import threading
 import traceback
-import sys
 from typing import Any
 
 
@@ -21,8 +21,11 @@ def _gather_thread_info(include_stacks: bool) -> list[dict[str, Any]]:
             "alive": thread.is_alive(),
         }
 
-        if include_stacks and thread.ident in frames:
-            info["stack"] = traceback.format_stack(frames[thread.ident])
+        if include_stacks:
+            if thread.ident in frames:
+                info["stack"] = traceback.format_stack(frames[thread.ident])
+            else:
+                info["stack"] = ["No stack frame available"]
 
         threads.append(info)
 
@@ -60,9 +63,7 @@ def _gather_docker_info() -> dict[str, Any]:
                     "status": container.status,
                     "image": container.image.tags,
                     "labels": container.attrs.get("Config", {}).get("Labels", {}),
-                    "ports": container.attrs.get("NetworkSettings", {}).get(
-                        "Ports", {}
-                    ),
+                    "ports": container.attrs.get("NetworkSettings", {}).get("Ports", {}),
                 }
             )
         snapshot["containers"] = containers
