@@ -101,7 +101,7 @@ class CampersTUI(App):
         self.worker_exit_code = 0
         self.instance_start_time: datetime | None = None
         self.last_ctrl_c_time: float = 0.0
-        self.log_widget: Log | None = None
+        self.log_widget: RichLog | None = None
         self.fatal_error_message: str | None = None
         self._running = True
         self._thread_id = threading.get_ident()
@@ -173,9 +173,12 @@ class CampersTUI(App):
         """Append log messages emitted from worker threads to the log widget."""
 
         if self.log_widget is None:
+            logging.debug("on_tui_log_message: log_widget is None, skipping")
             return
 
+        logging.debug(f"on_tui_log_message: writing {message.text[:50]}...")
         self.log_widget.write(message.text)
+        logging.debug("on_tui_log_message: write completed")
 
     def check_for_updates(self) -> None:
         """Check queue for updates and update widgets accordingly.

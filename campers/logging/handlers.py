@@ -89,12 +89,21 @@ class TuiLogHandler(logging.Handler):
 
         try:
             if not hasattr(self.app, "_running") or not self.app._running:
+                logger.debug("TUI app not running, skipping emit")
                 return
 
-            if self.app._thread_id == threading.get_ident():
+            thread_id = threading.get_ident()
+            app_thread_id = self.app._thread_id
+            logger.debug(f"emit: msg={msg[:50]}... thread={thread_id} app_thread={app_thread_id}")
+
+            if app_thread_id == thread_id:
+                logger.debug("emit: calling write from app thread")
                 self.log_widget.write(msg)
+                logger.debug("emit: write completed")
                 return
 
+            logger.debug("emit: posting message from worker thread")
             self.app.post_message(TuiLogMessage(msg))
+            logger.debug("emit: post_message completed")
         except Exception as e:
             logger.debug("Error emitting log message to TUI: %s", e)

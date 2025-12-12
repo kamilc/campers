@@ -16,7 +16,7 @@ import yaml
 from behave import given, then, when
 from behave.runner import Context
 from textual.css.query import NoMatches
-from textual.widgets import Log
+from textual.widgets import RichLog
 
 from campers.__main__ import Campers, CampersTUI
 from campers.constants import UPDATE_QUEUE_MAX_SIZE
@@ -339,7 +339,7 @@ async def poll_tui_with_unified_timeout(
             logger.debug(f"Error querying status widget: {e}")
 
         try:
-            log_widget = app.query_one(Log)
+            log_widget = app.query_one(RichLog)
             log_lines = []
             try:
                 for line in log_widget.lines:
@@ -439,7 +439,7 @@ def extract_log_lines(app: CampersTUI) -> tuple[list[str], str]:
         Tuple containing list of log lines and concatenated log text
     """
     try:
-        log_widget = app.query_one(Log)
+        log_widget = app.query_one(RichLog)
         log_lines = []
         try:
             for line in log_widget.lines:
