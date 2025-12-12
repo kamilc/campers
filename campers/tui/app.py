@@ -171,14 +171,10 @@ class CampersTUI(App):
 
     async def on_tui_log_message(self, message: TuiLogMessage) -> None:
         """Append log messages emitted from worker threads to the log widget."""
-
         if self.log_widget is None:
-            logging.debug("on_tui_log_message: log_widget is None, skipping")
             return
 
-        logging.debug(f"on_tui_log_message: writing {message.text[:50]}...")
         self.log_widget.write(message.text)
-        logging.debug("on_tui_log_message: write completed")
 
     def check_for_updates(self) -> None:
         """Check queue for updates and update widgets accordingly.
