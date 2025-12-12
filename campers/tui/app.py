@@ -141,12 +141,12 @@ class CampersTUI(App):
         self.log_widget = log_widget
         tui_handler = TuiLogHandler(self, log_widget)
         tui_handler.setFormatter(StreamFormatter("%(message)s"))
-        tui_handler.setLevel(logging.DEBUG)
+        tui_handler.setLevel(logging.INFO)
 
         root_logger.handlers = [tui_handler]
         root_logger.setLevel(logging.DEBUG)
 
-        logging.info("TUI handler installed and root logger configured")
+        logging.debug("TUI handler installed and root logger configured")
 
         for module in ["portforward", "ssh", "sync", "ec2"]:
             module_logger = logging.getLogger(f"campers.{module}")
@@ -160,12 +160,12 @@ class CampersTUI(App):
         self.set_interval(TUI_UPDATE_INTERVAL, self.check_for_updates)
         self.set_interval(UPTIME_UPDATE_INTERVAL_SECONDS, self.update_uptime, name="uptime-timer")
 
-        logging.info(f"on_mount: _start_worker={self._start_worker}")
+        logging.debug(f"on_mount: _start_worker={self._start_worker}")
         if self._start_worker:
-            logging.info("on_mount: starting worker thread")
+            logging.debug("on_mount: starting worker thread")
             try:
                 self.run_worker(self.run_campers_logic, exit_on_error=False, thread=True)
-                logging.info("on_mount: worker thread started")
+                logging.debug("on_mount: worker thread started")
             except Exception as e:
                 logging.error(f"on_mount: failed to start worker: {e}", exc_info=True)
 

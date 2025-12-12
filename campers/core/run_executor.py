@@ -155,9 +155,9 @@ class RunExecutor:
             Instance details (dict or JSON string)
         """
         try:
-            logging.info(f"execute: starting with tui_mode={tui_mode}, camp_name={camp_name}")
-            logging.info(f"execute: env vars - CAMPERS_CONFIG={os.environ.get('CAMPERS_CONFIG')}, AWS_ENDPOINT_URL={os.environ.get('AWS_ENDPOINT_URL')}")
-            logging.info("execute: phase_config_validation starting")
+            logging.debug(f"execute: starting with tui_mode={tui_mode}, camp_name={camp_name}")
+            logging.debug(f"execute: env vars - CAMPERS_CONFIG={os.environ.get('CAMPERS_CONFIG')}, AWS_ENDPOINT_URL={os.environ.get('AWS_ENDPOINT_URL')}")
+            logging.debug("execute: phase_config_validation starting")
             merged_config = self._phase_config_validation(
                 verbose,
                 camp_name,
@@ -170,22 +170,22 @@ class RunExecutor:
                 ignore,
                 update_queue,
             )
-            logging.info("execute: phase_config_validation completed")
+            logging.debug("execute: phase_config_validation completed")
             self.merged_config = merged_config
 
-            logging.info("execute: phase_instance_provision starting")
+            logging.debug("execute: phase_instance_provision starting")
             mutagen_mgr = self.mutagen_manager_factory()
             instance_details, compute_provider = self._phase_instance_provision(
                 merged_config, mutagen_mgr, update_queue
             )
-            logging.info("execute: phase_instance_provision completed")
+            logging.debug("execute: phase_instance_provision completed")
 
             need_ssh = (
                 merged_config.get("setup_script")
                 or merged_config.get("startup_script")
                 or merged_config.get("command")
             )
-            logging.info(f"execute: need_ssh={need_ssh}")
+            logging.debug(f"execute: need_ssh={need_ssh}")
 
             if not need_ssh:
                 return self._format_output(instance_details, json_output)
@@ -203,11 +203,11 @@ class RunExecutor:
                         time.sleep(0.1)
                 return instance_details
 
-            logging.info("execute: phase_ssh_connection starting")
+            logging.debug("execute: phase_ssh_connection starting")
             ssh_manager, ssh_host, ssh_port = self._phase_ssh_connection(
                 instance_details, merged_config, update_queue
             )
-            logging.info("execute: phase_ssh_connection completed")
+            logging.debug("execute: phase_ssh_connection completed")
 
             if ssh_manager is None:
                 logging.debug("Cleanup in progress, aborting further operations")
@@ -218,7 +218,7 @@ class RunExecutor:
             logging.info(f"Forwarding {len(env_vars)} environment variables")
 
             disable_mutagen = os.environ.get("CAMPERS_DISABLE_MUTAGEN") == "1"
-            logging.info("execute: phase_file_sync starting")
+            logging.debug("execute: phase_file_sync starting")
             self._phase_file_sync(
                 merged_config,
                 instance_details,
@@ -228,19 +228,19 @@ class RunExecutor:
                 disable_mutagen,
                 update_queue,
             )
-            logging.info("execute: phase_file_sync completed")
+            logging.debug("execute: phase_file_sync completed")
 
-            logging.info("execute: phase_ansible_provisioning starting")
+            logging.debug("execute: phase_ansible_provisioning starting")
             self._phase_ansible_provisioning(merged_config, instance_details, ssh_port)
-            logging.info("execute: phase_ansible_provisioning completed")
+            logging.debug("execute: phase_ansible_provisioning completed")
 
-            logging.info("execute: phase_script_execution starting")
+            logging.debug("execute: phase_script_execution starting")
             self._phase_script_execution(merged_config, instance_details, ssh_manager, env_vars)
-            logging.info("execute: phase_script_execution completed")
+            logging.debug("execute: phase_script_execution completed")
 
-            logging.info("execute: phase_command_execution starting")
+            logging.debug("execute: phase_command_execution starting")
             self._phase_command_execution(merged_config, instance_details, ssh_manager, env_vars)
-            logging.info("execute: phase_command_execution completed")
+            logging.debug("execute: phase_command_execution completed")
 
             return self._format_output(instance_details, json_output)
 
