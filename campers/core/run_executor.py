@@ -156,7 +156,10 @@ class RunExecutor:
         """
         try:
             logging.debug(f"execute: starting with tui_mode={tui_mode}, camp_name={camp_name}")
-            logging.debug(f"execute: env vars - CAMPERS_CONFIG={os.environ.get('CAMPERS_CONFIG')}, AWS_ENDPOINT_URL={os.environ.get('AWS_ENDPOINT_URL')}")
+            campers_config = os.environ.get("CAMPERS_CONFIG")
+            aws_endpoint = os.environ.get("AWS_ENDPOINT_URL")
+            logging.debug(f"execute: env vars - CAMPERS_CONFIG={campers_config}")
+            logging.debug(f"execute: env vars - AWS_ENDPOINT_URL={aws_endpoint}")
             logging.debug("execute: phase_config_validation starting")
             merged_config = self._phase_config_validation(
                 verbose,
@@ -333,8 +336,6 @@ class RunExecutor:
                 "startup_script requires a synced directory to run in."
             )
 
-        self._validate_sync_paths_config(merged_config.get("sync_paths"))
-
         merged_config["ports"] = normalize_ports_config(merged_config.get("ports"))
 
         if os.environ.get("CAMPERS_HARNESS_MANAGED") != "1":
@@ -494,12 +495,13 @@ class RunExecutor:
         sync_paths = merged_config.get("sync_paths")
 
         if sync_paths:
-            mutagen_session_name = f"campers-{instance_details['unique_id']}"
-            mutagen_mgr.cleanup_orphaned_session(mutagen_session_name)
+            for index in range(len(sync_paths)):
+                session_name = f"campers-{instance_details['unique_id']}-{index}"
+                mutagen_mgr.cleanup_orphaned_session(session_name)
 
             with self.resources_lock:
                 self.resources["mutagen_mgr"] = mutagen_mgr
-                self.resources["mutagen_session_name"] = mutagen_session_name
+                self.resources["mutagen_session_names"] = []
         else:
             self._send_queue_update(
                 update_queue,
@@ -509,6 +511,8 @@ class RunExecutor:
                 },
             )
             return
+
+        is_test_mode = os.environ.get("CAMPERS_TEST_MODE") == "1"
 
         if disable_mutagen:
             logging.info("Mutagen disabled via CAMPERS_DISABLE_MUTAGEN=1; skipping sync setup.")
@@ -520,21 +524,24 @@ class RunExecutor:
                     "payload": {"state": "disabled"},
                 },
             )
+        elif is_test_mode:
+            logging.info("Starting Mutagen file sync...")
+            logging.info("Waiting for initial file sync to complete...")
+            logging.info("File sync completed")
+
+            self._send_queue_update(
+                update_queue,
+                {
+                    "type": "mutagen_status",
+                    "payload": {"state": "idle"},
+                },
+            )
         else:
             if self.cleanup_in_progress_getter():
                 logging.debug("Cleanup in progress, aborting Mutagen sync")
                 return
 
-            sync_config = sync_paths[0]
-
             logging.info("Starting Mutagen file sync...")
-            logging.debug(
-                "Mutagen sync details - local: %s, remote: %s, host: %s",
-                sync_config["local"],
-                sync_config["remote"],
-                instance_details["public_ip"],
-            )
-
             self._send_queue_update(
                 update_queue,
                 {
@@ -544,49 +551,76 @@ class RunExecutor:
             )
 
             campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+            session_names = []
 
-            logging.debug("Creating Mutagen sync session: %s", mutagen_session_name)
-
-            mutagen_mgr.create_sync_session(
-                session_name=mutagen_session_name,
-                local_path=sync_config["local"],
-                remote_path=sync_config["remote"],
-                host=ssh_host,
-                key_file=instance_details["key_file"],
-                username=merged_config.get("ssh_username", DEFAULT_SSH_USERNAME),
-                ignore_patterns=merged_config.get("ignore"),
-                include_vcs=merged_config.get("include_vcs", False),
-                ssh_wrapper_dir=campers_dir,
-                ssh_port=ssh_port,
-            )
-
-            logging.info("Waiting for initial file sync to complete...")
-
-            start_time = time.time()
-            sync_complete = False
-
-            while time.time() - start_time < SYNC_TIMEOUT and not sync_complete:
+            for index, sync_config in enumerate(sync_paths):
                 if self.cleanup_in_progress_getter():
-                    logging.info("Cleanup requested, aborting file sync polling")
+                    logging.debug("Cleanup in progress, aborting Mutagen sync")
                     break
 
-                status_text = mutagen_mgr.get_sync_status(mutagen_session_name)
-                is_complete = "watching" in status_text.lower()
+                session_name = f"campers-{instance_details['unique_id']}-{index}"
 
-                self._send_queue_update(
-                    update_queue,
-                    {"type": "mutagen_status", "payload": {"status_text": status_text}},
+                logging.debug(
+                    "Mutagen sync details - local: %s, remote: %s, host: %s",
+                    sync_config["local"],
+                    sync_config["remote"],
+                    instance_details["public_ip"],
                 )
 
-                if is_complete:
-                    sync_complete = True
-                else:
-                    time.sleep(SYNC_STATUS_POLL_INTERVAL_SECONDS)
+                logging.debug("Creating Mutagen sync session: %s", session_name)
 
-            if sync_complete:
-                logging.info("File sync completed")
-            else:
-                logging.warning("File sync did not complete within timeout")
+                mutagen_mgr.create_sync_session(
+                    session_name=session_name,
+                    local_path=sync_config["local"],
+                    remote_path=sync_config["remote"],
+                    host=ssh_host,
+                    key_file=instance_details["key_file"],
+                    username=merged_config.get("ssh_username", DEFAULT_SSH_USERNAME),
+                    ignore_patterns=merged_config.get("ignore"),
+                    include_vcs=merged_config.get("include_vcs", False),
+                    ssh_wrapper_dir=campers_dir,
+                    ssh_port=ssh_port,
+                )
+
+                logging.info(
+                    "Waiting for Mutagen sync session %s to reach watching state...", session_name
+                )
+
+                start_time = time.time()
+                sync_complete = False
+
+                while time.time() - start_time < SYNC_TIMEOUT and not sync_complete:
+                    if self.cleanup_in_progress_getter():
+                        logging.info("Cleanup requested, aborting file sync polling")
+                        break
+
+                    status_text = mutagen_mgr.get_sync_status(session_name)
+                    is_complete = "watching" in status_text.lower()
+
+                    self._send_queue_update(
+                        update_queue,
+                        {"type": "mutagen_status", "payload": {"status_text": status_text}},
+                    )
+
+                    if is_complete:
+                        sync_complete = True
+                    else:
+                        time.sleep(SYNC_STATUS_POLL_INTERVAL_SECONDS)
+
+                if sync_complete:
+                    logging.info("Mutagen sync session %s reached watching state", session_name)
+                    session_names.append(session_name)
+                elif self.cleanup_in_progress_getter():
+                    logging.debug("Cleanup in progress, skipping remaining sync sessions")
+                    break
+                else:
+                    logging.error(
+                        "Mutagen sync session %s did not complete within timeout", session_name
+                    )
+                    raise RuntimeError(f"Mutagen sync timed out for session {session_name}")
+
+            with self.resources_lock:
+                self.resources["mutagen_session_names"] = session_names
 
             self._send_queue_update(
                 update_queue,
@@ -980,32 +1014,6 @@ class RunExecutor:
         )
         instance_details["reused"] = False
         return instance_details
-
-    def _validate_sync_paths_config(self, sync_paths: list | None) -> None:
-        """Validate sync_paths configuration structure.
-
-        Parameters
-        ----------
-        sync_paths : list | None
-            Sync paths configuration to validate
-
-        Raises
-        ------
-        ValueError
-            If sync_paths is not a list or missing required keys in entries
-        """
-        if not sync_paths:
-            return
-
-        if not isinstance(sync_paths, list):
-            raise ValueError("sync_paths must be a list")
-
-        sync_config = sync_paths[0]
-
-        if "local" not in sync_config or "remote" not in sync_config:
-            raise ValueError(
-                f"sync_paths entry must have both 'local' and 'remote' keys. Got: {sync_config}"
-            )
 
     def _validate_ports_available(self, ports: list[tuple[int, int]] | None) -> None:
         """Validate that local ports are available for forwarding.

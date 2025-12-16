@@ -258,12 +258,12 @@ class CleanupManager:
             self._emit_cleanup_event("stop_tunnels", "failed")
 
     def cleanup_mutagen_session(self, resources: dict[str, Any], errors: list[Exception]) -> None:
-        """Terminate Mutagen sync session.
+        """Terminate Mutagen sync sessions.
 
         Parameters
         ----------
         resources : dict[str, Any]
-            Resources dictionary containing mutagen_mgr and mutagen_session_name
+            Resources dictionary containing mutagen_mgr and mutagen_session_names
         errors : list[Exception]
             List to accumulate errors during cleanup
 
@@ -271,30 +271,40 @@ class CleanupManager:
         -----
         Errors are logged and added to errors list but do not halt cleanup.
         """
-        if "mutagen_session_name" not in resources:
-            logging.debug("Skipping Mutagen cleanup - not initialized")
-            return
+        session_names = resources.get("mutagen_session_names")
 
-        logging.info("Stopping Mutagen session...")
+        if not session_names:
+            if "mutagen_session_name" not in resources:
+                logging.debug("Skipping Mutagen cleanup - not initialized")
+                return
+            session_names = [resources["mutagen_session_name"]]
+
+        logging.info("Stopping Mutagen sessions...")
 
         self._emit_cleanup_event("terminate_mutagen", "in_progress")
 
-        try:
-            campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
-            instance_details = resources.get("instance_details")
-            host = instance_details.get("public_ip") if instance_details else None
-            resources["mutagen_mgr"].terminate_session(
-                resources["mutagen_session_name"],
-                ssh_wrapper_dir=campers_dir,
-                host=host,
-            )
-            logging.info("Mutagen session stopped successfully")
+        campers_dir = os.environ.get("CAMPERS_DIR", str(Path.home() / ".campers"))
+        instance_details = resources.get("instance_details")
+        host = instance_details.get("public_ip") if instance_details else None
 
+        cleanup_errors = []
+
+        for session_name in session_names:
+            try:
+                resources["mutagen_mgr"].terminate_session(
+                    session_name,
+                    ssh_wrapper_dir=campers_dir,
+                    host=host,
+                )
+                logging.info("Mutagen session %s stopped successfully", session_name)
+            except (OSError, subprocess.SubprocessError, RuntimeError, TimeoutError) as e:
+                logging.error("Error stopping Mutagen session %s: %s", session_name, e)
+                errors.append(e)
+                cleanup_errors.append(e)
+
+        if not cleanup_errors:
             self._emit_cleanup_event("terminate_mutagen", "completed")
-        except (OSError, subprocess.SubprocessError, RuntimeError, TimeoutError) as e:
-            logging.error("Error stopping Mutagen session: %s", e)
-            errors.append(e)
-
+        else:
             self._emit_cleanup_event("terminate_mutagen", "failed")
 
     def _cleanup_instance_helper(

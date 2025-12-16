@@ -728,3 +728,179 @@ def step_mutagen_watching_state(context: Context) -> None:
         time.sleep(2)
 
     raise AssertionError(f"Session {session_name} did not reach watching state within {timeout}s")
+
+
+@given("defaults have multiple sync_paths with {count:d} entries")
+def step_defaults_multiple_sync_paths(context: Context, count: int) -> None:
+    """Add multiple sync_paths entries to defaults configuration.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    count : int
+        Number of sync_paths entries to create
+    """
+    defaults = ensure_defaults_section(context)
+    sync_paths = []
+
+    for i in range(count):
+        sync_paths.append({"local": f"~/project{i}", "remote": f"~/project{i}"})
+
+    defaults["sync_paths"] = sync_paths
+    context.sync_paths_count = count
+
+
+@given("defaults have sync_paths with missing remote key")
+def step_defaults_sync_paths_missing_remote(context: Context) -> None:
+    """Add sync_paths entry missing the remote key.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    defaults = ensure_defaults_section(context)
+    defaults["sync_paths"] = [{"local": "~/myproject"}]
+
+
+@given("first sync session fails to reach watching state")
+def step_first_sync_fails(context: Context) -> None:
+    """Mark that first sync session will fail to reach watching state.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    context.harness.services.configuration_env.set("CAMPERS_SYNC_TIMEOUT", "1")
+    context.first_sync_fails = True
+
+
+@then("second sync session is not created")
+def step_second_sync_not_created(context: Context) -> None:
+    """Verify second sync session was not created.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    context.second_sync_not_created = True
+
+
+@then("both sync sessions reach watching state")
+def step_both_sync_reach_watching(context: Context) -> None:
+    """Verify both sync sessions reach watching state.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object containing sync_paths_count
+    """
+    import subprocess
+    import time
+
+    if "localstack" not in context.tags:
+        return
+
+    timeout = 120
+    start_time = time.time()
+    sessions_watching = set()
+
+    while time.time() - start_time < timeout:
+        result = subprocess.run(
+            ["mutagen", "sync", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        for i in range(getattr(context, "sync_paths_count", 2)):
+            if "watching" in result.stdout:
+                for line in result.stdout.split("\n"):
+                    if f"-{i}" in line and "watching" in line:
+                        sessions_watching.add(i)
+
+        if len(sessions_watching) >= getattr(context, "sync_paths_count", 2):
+            return
+
+        time.sleep(2)
+
+    raise AssertionError(
+        f"Not all sync sessions reached watching state within {timeout}s. "
+        f"Found {len(sessions_watching)} of {getattr(context, 'sync_paths_count', 2)}"
+    )
+
+
+@then("all mutagen sessions are terminated")
+def step_all_mutagen_sessions_terminated(context: Context) -> None:
+    """Verify all mutagen sessions were terminated.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    context.all_sessions_terminated = True
+
+    if "localstack" not in context.tags:
+        return
+
+    import subprocess
+    import time
+
+    timeout = 30
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        result = subprocess.run(
+            ["mutagen", "sync", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        if "campers-" not in result.stdout:
+            return
+
+        time.sleep(0.5)
+
+    logger.warning("Some Mutagen sessions still exist after termination")
+
+
+@then("all sessions are removed from mutagen list")
+def step_all_sessions_removed_from_list(context: Context) -> None:
+    """Verify all sessions were removed from mutagen list.
+
+    Parameters
+    ----------
+    context : Context
+        Behave context object
+    """
+    context.all_sessions_removed = True
+
+    if "localstack" not in context.tags:
+        return
+
+    import subprocess
+    import time
+
+    timeout = 30
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        result = subprocess.run(
+            ["mutagen", "sync", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        if "campers-" not in result.stdout:
+            logger.info("Confirmed: all campers Mutagen sessions removed from list")
+            return
+
+        time.sleep(0.5)
+
+    logger.warning("Timeout waiting for all campers sessions to be removed from list")

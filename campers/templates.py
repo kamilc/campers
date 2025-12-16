@@ -117,7 +117,11 @@ camps:
       - base
       - python-dev
       - jupyter
-    command: ~/.local/bin/uv run --no-project --with jupyter --with jupyterlab --with pandas --with numpy --with matplotlib jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+    command: |
+      ~/.local/bin/uv run --no-project \
+        --with jupyter --with jupyterlab \
+        --with pandas --with numpy --with matplotlib \
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
     ignore:
       - "*.pyc"
       - __pycache__
@@ -142,7 +146,11 @@ camps:
       - base
       - python-dev
       - jupyter
-    command: ~/.local/bin/uv run --no-project --with jupyter --with jupyterlab --with pandas --with numpy --with matplotlib jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+    command: |
+      ~/.local/bin/uv run --no-project \
+        --with jupyter --with jupyterlab \
+        --with pandas --with numpy --with matplotlib \
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
 
 # ==============================================================================
 # Alternative: Shell Scripts (simpler, but not idempotent)

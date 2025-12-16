@@ -213,9 +213,7 @@ def test_public_ports_widget_shown_with_ip_and_urls(tui_app_for_public_ports):
     """
     mock_widget = Mock()
     tui_app_for_public_ports.query_one = Mock(return_value=mock_widget)
-    tui_app_for_public_ports.campers._resources = {
-        "instance_details": {"public_ip": "192.0.2.1"}
-    }
+    tui_app_for_public_ports.campers._resources = {"instance_details": {"public_ip": "192.0.2.1"}}
 
     tui_app_for_public_ports.update_from_config({"public_ports": [8080, 443]})
 
@@ -262,9 +260,7 @@ def tui_app_for_instance_details():
     from campers.tui.app import CampersTUI
 
     app = Mock(spec=CampersTUI)
-    app.update_from_instance_details = CampersTUI.update_from_instance_details.__get__(
-        app
-    )
+    app.update_from_instance_details = CampersTUI.update_from_instance_details.__get__(app)
     app.campers = Mock()
     app.campers._merged_config_prop = {}
 

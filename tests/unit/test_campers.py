@@ -1298,7 +1298,8 @@ def test_run_tracks_resources_incrementally(campers_module) -> None:
         assert "ssh_manager" in captured_resources
         assert "portforward_mgr" in captured_resources
         assert "mutagen_mgr" in captured_resources
-        assert "mutagen_session_name" in captured_resources
+        assert "mutagen_session_names" in captured_resources
+        assert isinstance(captured_resources["mutagen_session_names"], list)
 
 
 def test_finally_block_calls_cleanup_if_not_already_done(campers_module) -> None:

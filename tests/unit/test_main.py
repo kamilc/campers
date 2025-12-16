@@ -541,6 +541,171 @@ class TestResourceLocking:
         assert campers._cleanup_in_progress is False
 
 
+class TestMultipleSessionCleanup:
+    """Test cleanup with multiple Mutagen sessions."""
+
+    def test_cleanup_multiple_sessions(self, campers):
+        """Verify all Mutagen sessions are terminated when multiple exist.
+
+        Parameters
+        ----------
+        campers : Campers
+            Campers instance
+        """
+        cleanup_sequence = []
+
+        mock_mutagen = MagicMock()
+        mock_mutagen.terminate_session.side_effect = (
+            lambda name, ssh_wrapper_dir=None, host=None: cleanup_sequence.append(name)
+        )
+
+        mock_ec2 = MagicMock()
+        mock_ec2.stop_instance.side_effect = lambda id: cleanup_sequence.append("ec2")
+        mock_ec2.get_volume_size.return_value = 50
+
+        campers._resources = {
+            "mutagen_mgr": mock_mutagen,
+            "mutagen_session_names": ["session-0", "session-1", "session-2"],
+            "instance_details": {"instance_id": "i-test"},
+            "compute_provider": mock_ec2,
+        }
+
+        campers._stop_instance_cleanup()
+
+        assert "session-0" in cleanup_sequence
+        assert "session-1" in cleanup_sequence
+        assert "session-2" in cleanup_sequence
+        assert mock_mutagen.terminate_session.call_count == 3
+
+    def test_cleanup_continues_when_one_session_fails(self, campers):
+        """Verify cleanup continues when one session termination fails.
+
+        Parameters
+        ----------
+        campers : Campers
+            Campers instance
+        """
+        terminated_sessions = []
+
+        def terminate_with_error(name, ssh_wrapper_dir=None, host=None):
+            if name == "session-1":
+                raise RuntimeError(f"Failed to terminate {name}")
+            terminated_sessions.append(name)
+
+        mock_mutagen = MagicMock()
+        mock_mutagen.terminate_session.side_effect = terminate_with_error
+
+        mock_ec2 = MagicMock()
+        mock_ec2.stop_instance.side_effect = lambda id: None
+        mock_ec2.get_volume_size.return_value = 50
+
+        campers._resources = {
+            "mutagen_mgr": mock_mutagen,
+            "mutagen_session_names": ["session-0", "session-1", "session-2"],
+            "instance_details": {"instance_id": "i-test"},
+            "compute_provider": mock_ec2,
+        }
+
+        campers._stop_instance_cleanup()
+
+        assert "session-0" in terminated_sessions
+        assert "session-2" in terminated_sessions
+        assert mock_ec2.stop_instance.called
+
+    def test_cleanup_with_multiple_sessions_and_all_fail(self, campers, caplog):
+        """Verify resilience when all session terminations fail.
+
+        Parameters
+        ----------
+        campers : Campers
+            Campers instance
+        caplog : LogCaptureFixture
+            Pytest log capture fixture
+        """
+        mock_mutagen = MagicMock()
+        mock_mutagen.terminate_session.side_effect = RuntimeError("Session termination failed")
+
+        mock_ec2 = MagicMock()
+        mock_ec2.stop_instance.side_effect = lambda id: None
+        mock_ec2.get_volume_size.return_value = 50
+
+        campers._resources = {
+            "mutagen_mgr": mock_mutagen,
+            "mutagen_session_names": ["session-0", "session-1"],
+            "instance_details": {"instance_id": "i-test"},
+            "compute_provider": mock_ec2,
+        }
+
+        with caplog.at_level(logging.INFO):
+            campers._stop_instance_cleanup()
+
+        assert any("Cleanup completed with 2 errors" in record.message for record in caplog.records)
+        assert mock_ec2.stop_instance.called
+
+    def test_cleanup_uses_plural_session_names_when_available(self, campers):
+        """Verify cleanup uses mutagen_session_names (plural) when available.
+
+        Parameters
+        ----------
+        campers : Campers
+            Campers instance
+        """
+        terminated_sessions = []
+
+        mock_mutagen = MagicMock()
+        mock_mutagen.terminate_session.side_effect = (
+            lambda name, ssh_wrapper_dir=None, host=None: terminated_sessions.append(name)
+        )
+
+        mock_ec2 = MagicMock()
+        mock_ec2.stop_instance.side_effect = lambda id: None
+        mock_ec2.get_volume_size.return_value = 50
+
+        campers._resources = {
+            "mutagen_mgr": mock_mutagen,
+            "mutagen_session_names": ["new-session-1", "new-session-2"],
+            "mutagen_session_name": "old-session",
+            "instance_details": {"instance_id": "i-test"},
+            "compute_provider": mock_ec2,
+        }
+
+        campers._stop_instance_cleanup()
+
+        assert "new-session-1" in terminated_sessions
+        assert "new-session-2" in terminated_sessions
+        assert "old-session" not in terminated_sessions
+
+    def test_cleanup_falls_back_to_singular_session_name(self, campers):
+        """Verify cleanup falls back to mutagen_session_name when plural not available.
+
+        Parameters
+        ----------
+        campers : Campers
+            Campers instance
+        """
+        terminated_sessions = []
+
+        mock_mutagen = MagicMock()
+        mock_mutagen.terminate_session.side_effect = (
+            lambda name, ssh_wrapper_dir=None, host=None: terminated_sessions.append(name)
+        )
+
+        mock_ec2 = MagicMock()
+        mock_ec2.stop_instance.side_effect = lambda id: None
+        mock_ec2.get_volume_size.return_value = 50
+
+        campers._resources = {
+            "mutagen_mgr": mock_mutagen,
+            "mutagen_session_name": "fallback-session",
+            "instance_details": {"instance_id": "i-test"},
+            "compute_provider": mock_ec2,
+        }
+
+        campers._stop_instance_cleanup()
+
+        assert "fallback-session" in terminated_sessions
+
+
 class TestUptimeCalculation:
     """Test uptime calculation in CampersTUI."""
 
