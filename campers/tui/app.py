@@ -408,18 +408,14 @@ class CampersTUI(App):
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update SSH widget: %s", e)
 
-            public_ports = getattr(self.campers, "_merged_config_prop", {}).get(
-                "public_ports", []
-            )
+            public_ports = getattr(self.campers, "_merged_config_prop", {}).get("public_ports", [])
             if public_ports:
                 try:
                     urls = []
                     for port in public_ports:
                         protocol = "https" if port == 443 else "http"
                         urls.append(f"{protocol}://{public_ip}:{port}")
-                    public_ports_text = f"Public IP: {public_ip} | URLs: " + ", ".join(
-                        urls
-                    )
+                    public_ports_text = f"Public IP: {public_ip} | URLs: " + ", ".join(urls)
                     public_ports_widget = self.query_one(f"#{WidgetID.PUBLIC_PORTS}")
                     public_ports_widget.update(public_ports_text)
                     public_ports_widget.remove_class("hidden")
@@ -612,6 +608,7 @@ class CampersTUI(App):
             sys.stdout.write("\x1b[0m\x1b[?25h\n")
             sys.stdout.flush()
             import subprocess
+
             subprocess.run(["stty", "sane"], stderr=subprocess.DEVNULL)
             os._exit(0)
 

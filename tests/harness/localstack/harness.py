@@ -182,8 +182,10 @@ class LocalStackHarness(ScenarioHarness):
             if error_code == "DefaultVpcAlreadyExists":
                 logger.debug("Default VPC already exists (another test created it)")
                 return
-            if "DefaultSubnetAlreadyExistsInAvailabilityZone" in error_code or \
-               "DefaultSubnetAlreadyExistsInAvailabilityZone" in str(exc):
+            if (
+                "DefaultSubnetAlreadyExistsInAvailabilityZone" in error_code
+                or "DefaultSubnetAlreadyExistsInAvailabilityZone" in str(exc)
+            ):
                 logger.debug("Default VPC and subnets already exist from previous test")
                 return
             logger.error("Failed to ensure default VPC exists: %s", exc)

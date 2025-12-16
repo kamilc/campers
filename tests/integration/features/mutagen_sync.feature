@@ -152,3 +152,66 @@ Scenario: Orphaned session cleanup before new session
   When I run campers command "run -c 'echo test'"
   Then orphaned session "campers-123" is terminated
   And new mutagen session is created
+
+@smoke @dry_run
+Scenario: Single sync path creates indexed session name
+  Given config file with defaults section
+  And defaults have sync_paths with local "~/myproject" and remote "~/myproject"
+  When I run campers command "run -c 'echo test'"
+  Then mutagen session is created with name pattern "campers-*-0"
+
+@smoke @localstack @pilot
+Scenario: Multiple sync paths create all indexed sessions
+  Given LocalStack is healthy and responding
+  And config file with defaults section
+  And defaults have multiple sync_paths with 2 entries
+  When I run campers command "run -c 'echo test'"
+  Then mutagen session is created with name pattern "campers-*-0"
+  And mutagen session is created with name pattern "campers-*-1"
+  And both sync sessions reach watching state
+
+@error @dry_run
+Scenario: Invalid sync path entry missing remote key fails validation
+  Given config file with defaults section
+  And defaults have sync_paths with missing remote key
+  When I run campers command "run -c 'echo test'"
+  Then command fails with ValueError
+  And error message contains "sync_paths entry"
+  And error message contains "must have both 'local' and 'remote' keys"
+
+@error @localstack @pilot
+Scenario: First sync session failure aborts entire sync phase
+  Given LocalStack is healthy and responding
+  And config file with defaults section
+  And defaults have multiple sync_paths with 2 entries
+  And first sync session fails to reach watching state
+  When I run campers command "run -c 'echo test'"
+  Then command fails with RuntimeError
+  And error message contains "Mutagen sync timed out"
+  And second sync session is not created
+
+@integration @localstack @pilot
+Scenario: Multiple sync sessions cleanup on normal exit
+  Given LocalStack is healthy and responding
+  And config file with defaults section
+  And defaults have multiple sync_paths with 2 entries
+  When I run campers command "run -c 'echo test'"
+  Then mutagen session is created with name pattern "campers-*-0"
+  And mutagen session is created with name pattern "campers-*-1"
+  And command exit code is 0
+  When command completes normally
+  Then all mutagen sessions are terminated
+  And all sessions are removed from mutagen list
+
+@smoke @localstack @pilot
+Scenario: Orphaned indexed sessions cleanup before multiple new sessions
+  Given LocalStack is healthy and responding
+  And orphaned mutagen session exists with name "campers-123-0"
+  And orphaned mutagen session exists with name "campers-123-1"
+  And config file with defaults section
+  And defaults have multiple sync_paths with 2 entries
+  When I run campers command "run -c 'echo test'"
+  Then orphaned session "campers-123-0" is terminated
+  And orphaned session "campers-123-1" is terminated
+  And mutagen session is created with name pattern "campers-*-0"
+  And mutagen session is created with name pattern "campers-*-1"

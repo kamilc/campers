@@ -303,7 +303,9 @@ async def poll_tui_with_unified_timeout(
                 )
             else:
                 logger.error("Monitor reported error during TUI polling: %s", error_message)
-                raise AssertionError(f"Monitor error detected while waiting for TUI: {error_message}")
+                raise AssertionError(
+                    f"Monitor error detected while waiting for TUI: {error_message}"
+                )
 
         try:
             status_widget = app.query_one("#status-widget")
@@ -321,7 +323,8 @@ async def poll_tui_with_unified_timeout(
                     f"cleanup: {cleanup_completed_found}, "
                     f"error: {error_found})"
                 )
-                logger.info(f"Log widget status: {hasattr(app, 'log_widget') and app.log_widget is not None}")
+                has_log_widget = hasattr(app, "log_widget") and app.log_widget is not None
+                logger.info(f"Log widget status: {has_log_widget}")
                 last_log_time = time.time()
 
             if "terminating" in status_text.lower() or "stopping" in status_text.lower():
@@ -358,11 +361,10 @@ async def poll_tui_with_unified_timeout(
                     log_lines = []
             log_text = "\n".join(log_lines)
 
-            if log_lines:
-                if not command_completed_found and not cleanup_completed_found:
-                    logger.debug(f"Log widget has {len(log_lines)} lines")
-                    logger.debug(f"First few log lines: {log_lines[:5]}")
-                    logger.debug(f"Last few log lines: {log_lines[-5:]}")
+            if log_lines and not command_completed_found and not cleanup_completed_found:
+                logger.debug(f"Log widget has {len(log_lines)} lines")
+                logger.debug(f"First few log lines: {log_lines[:5]}")
+                logger.debug(f"Last few log lines: {log_lines[-5:]}")
 
             if "Command completed" in log_text:
                 if not command_completed_found:
@@ -519,8 +521,9 @@ async def ensure_monitor_provisioning_complete(behave_context: Context | None = 
 
     for event in diagnostics.events:
         if event.description == "ssh-ready":
+            instance_id = event.details.get("instance_id")
             logger.info(
-                f"Detected existing ssh-ready event for instance {event.details.get('instance_id')} "
+                f"Detected existing ssh-ready event for instance {instance_id} "
                 f"from diagnostics; marking as provisioned"
             )
             seen_any_ssh_ready = True
@@ -574,9 +577,8 @@ async def ensure_monitor_provisioning_complete(behave_context: Context | None = 
                         instance_id=None,
                         timeout_sec=0.5,
                     )
-                    raise RuntimeError(
-                        f"Monitor provisioning failed: {error_event.data.get('error', 'unknown error')}"
-                    )
+                    error_msg = error_event.data.get("error", "unknown error")
+                    raise RuntimeError(f"Monitor provisioning failed: {error_msg}")
                 except Exception as check_error:
                     if isinstance(check_error, RuntimeError):
                         raise

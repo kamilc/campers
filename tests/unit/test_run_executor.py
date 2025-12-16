@@ -201,7 +201,8 @@ def test_phase_file_sync_terminates_when_watching_detected(run_executor):
             update_queue=update_queue,
         )
 
-        assert mock_logging.info.call_args_list[-1][0][0] == "File sync completed"
+        info_messages = [call[0][0] for call in mock_logging.info.call_args_list]
+        assert any("reached watching state" in msg for msg in info_messages)
 
 
 def test_phase_file_sync_aborts_on_cleanup_requested(run_executor, cleanup_in_progress_getter):
@@ -278,27 +279,27 @@ def test_phase_file_sync_timeout_warning(run_executor, cleanup_in_progress_gette
     with (
         patch("campers.core.run_executor.SYNC_TIMEOUT", 0.1),
         patch("campers.core.run_executor.time.time") as mock_time,
-        patch("campers.core.run_executor.logging") as mock_logging,
     ):
         start_time = 1000.0
-        mock_time.side_effect = [
-            start_time,
-            start_time,
-            start_time,
-            start_time + 0.15,
-        ]
+        call_count = [0]
 
-        run_executor._phase_file_sync(
-            merged_config=merged_config,
-            instance_details=instance_details,
-            mutagen_mgr=mutagen_mgr,
-            ssh_host="example.com",
-            ssh_port=22,
-            disable_mutagen=False,
-            update_queue=update_queue,
-        )
+        def mock_time_func():
+            call_count[0] += 1
+            if call_count[0] <= 5:
+                return start_time
+            else:
+                return start_time + 0.15
 
-        assert any(
-            "did not complete within timeout" in str(call)
-            for call in mock_logging.warning.call_args_list
-        ), "Should log timeout warning"
+        mock_time.side_effect = mock_time_func
+
+        with pytest.raises(RuntimeError) as exc_info:
+            run_executor._phase_file_sync(
+                merged_config=merged_config,
+                instance_details=instance_details,
+                mutagen_mgr=mutagen_mgr,
+                ssh_host="example.com",
+                ssh_port=22,
+                disable_mutagen=False,
+                update_queue=update_queue,
+            )
+        assert "Mutagen sync timed out" in str(exc_info.value)
