@@ -211,6 +211,32 @@ campers init
 campers run
 ```
 
+## Setup & Troubleshooting
+
+### First-Time Setup
+
+If you're using a new AWS account or region, run the setup command to ensure prerequisites are in place:
+
+```bash
+campers setup --region us-east-1
+```
+
+This creates a default VPC (required for launching instances) and verifies IAM permissions.
+
+### Diagnosing Issues
+
+If something isn't working, run the doctor command:
+
+```bash
+campers doctor
+```
+
+It checks:
+- AWS credentials and connectivity
+- IAM permissions
+- Default VPC availability
+- Mutagen installation
+
 ## Documentation
 
 Full documentation is available at **[kamilc.github.io/campers](https://kamilc.github.io/campers)**
