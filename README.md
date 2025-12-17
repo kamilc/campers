@@ -178,6 +178,23 @@ defaults:
     - ^WANDB_API_KEY
 ```
 
+### `.env` File Support
+Campers automatically loads a `.env` file from your project directory. Use it to store secrets outside of version control:
+
+```bash
+# .env (add to .gitignore!)
+DB_PASSWORD=secret
+API_KEY=sk-123
+```
+
+Reference them in `campers.yaml` with `${oc.env:VAR_NAME}`:
+
+```yaml
+vars:
+  api_key: ${oc.env:API_KEY}
+  db_pass: ${oc.env:DB_PASSWORD,default_value}
+```
+
 ## Quick Start
 
 ```bash

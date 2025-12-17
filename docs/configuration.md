@@ -83,6 +83,38 @@ vars:
 
 The value after the comma is used when the environment variable is not set.
 
+### Using `.env` Files
+
+Campers automatically loads a `.env` file from the same directory as your `campers.yaml` if one exists. This is useful for storing secrets and environment-specific values outside of version control.
+
+**Example `.env` file:**
+```bash
+# .env (add to .gitignore!)
+DB_PASSWORD=mysecretpassword
+API_KEY=sk-1234567890
+AWS_REGION=us-west-2
+```
+
+**Reference in `campers.yaml`:**
+```yaml
+vars:
+  db_password: ${oc.env:DB_PASSWORD}
+  api_key: ${oc.env:API_KEY}
+  region: ${oc.env:AWS_REGION,us-east-1}
+
+defaults:
+  region: ${region}
+  env_filter:
+    - ^DB_PASSWORD$
+    - ^API_KEY$
+```
+
+**Important notes:**
+
+- `.env` is loaded before config parsing, so all variables are available via `${oc.env:VAR}`
+- Existing environment variables are NOT overwritten (shell takes precedence)
+- Add `.env` to your `.gitignore` to avoid committing secrets
+
 ### Common Patterns
 
 **Project-relative paths:**
