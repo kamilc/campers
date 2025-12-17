@@ -62,6 +62,7 @@ Share running applications with clients by exposing ports publicly. Use `public_
 - **Automatic Port Forwarding**: Tunnels remote ports to your local machine based on your configuration.
 - **Public Port Exposure**: Open ports directly for external access - perfect for client demos.
 - **Ansible Integration**: Supports running Ansible playbooks to configure the instance on startup.
+- **Multi-User Support**: Teams sharing an AWS account get automatic instance isolation. Each instance is tagged with the owner's identity, and `campers list` shows only your instances by default.
 - **Cost Control:** Encourages an ephemeral workflow where instances are destroyed when not in use.
 - **TUI Dashboard**: A terminal interface to monitor logs, sync status, and instance health.
 
@@ -204,8 +205,17 @@ pip install campers
 # Or run instantly with uv (recommended)
 uvx campers run
 
+# Check prerequisites (AWS credentials, Mutagen, etc.)
+campers doctor
+
+# First-time setup (creates default VPC if needed)
+campers setup
+
 # Initialize a configuration in your current directory
 campers init
+
+# Validate your configuration
+campers validate
 
 # Spin up your camp
 campers run
@@ -236,6 +246,12 @@ It checks:
 - IAM permissions
 - Default VPC availability
 - Mutagen installation
+
+For verbose output with stack traces, enable debug mode:
+
+```bash
+CAMPERS_DEBUG=1 campers run dev
+```
 
 ## Documentation
 
