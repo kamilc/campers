@@ -25,6 +25,7 @@ from campers.services.ansible import AnsibleManager
 from campers.services.portforward import PortForwardManager, PortInUseError, is_port_in_use
 from campers.services.ssh import SSHManager, get_ssh_connection_info
 from campers.services.sync import MutagenManager
+from campers.session import SessionInfo, SessionManager
 from campers.utils import generate_instance_name, status_spinner
 
 logger = logging.getLogger(__name__)
@@ -458,8 +459,24 @@ class RunExecutor:
             update_queue, {"type": "status_update", "payload": {"status": "running"}}
         )
 
+        session_manager = SessionManager()
+        session_info = SessionInfo(
+            camp_name=merged_config["camp_name"],
+            pid=os.getpid(),
+            instance_id=instance_details["instance_id"],
+            region=merged_config["region"],
+            ssh_host=ssh_info.host,
+            ssh_port=ssh_info.port,
+            ssh_user=ssh_username,
+            key_file=ssh_info.key_file,
+        )
+        session_manager.create_session(session_info)
+        logging.debug("Session file created for %s", merged_config["camp_name"])
+
         with self.resources_lock:
             self.resources["ssh_manager"] = ssh_manager
+            self.resources["session_manager"] = session_manager
+            self.resources["session_camp_name"] = merged_config["camp_name"]
 
         return ssh_manager, ssh_info.host, ssh_info.port
 

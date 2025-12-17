@@ -223,6 +223,24 @@ def cleanup_env_var(var_name: str, logger: logging.Logger) -> None:
         logger.error(f"Unexpected error removing {var_name}: {e}", exc_info=True)
 
 
+def cleanup_session_files(context: Context) -> None:
+    """Clean up temporary session directories and restore CAMPERS_DIR."""
+    if hasattr(context, "temp_session_dir") and context.temp_session_dir:
+        with contextlib.suppress(Exception):
+            context.temp_session_dir.cleanup()
+
+    if hasattr(context, "temp_campers_dir") and context.temp_campers_dir:
+        with contextlib.suppress(Exception):
+            context.temp_campers_dir.cleanup()
+
+    if hasattr(context, "original_campers_dir"):
+        if context.original_campers_dir is not None:
+            os.environ["CAMPERS_DIR"] = context.original_campers_dir
+        else:
+            if "CAMPERS_DIR" in os.environ:
+                del os.environ["CAMPERS_DIR"]
+
+
 def run_mutagen_command_with_retry(
     args: list[str],
     timeout: int = 10,
@@ -1083,6 +1101,8 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 def after_scenario(context: Context, scenario: Scenario) -> None:
     """Cleanup executed after each scenario."""
     _stop_scenario_watchdog(context)
+
+    cleanup_session_files(context)
 
     is_localstack_or_pilot = "localstack" in scenario.tags or "pilot" in scenario.tags
     if is_localstack_or_pilot:
