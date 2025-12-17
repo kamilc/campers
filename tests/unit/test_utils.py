@@ -17,6 +17,7 @@ from campers.utils import (
     generate_instance_name,
     get_git_branch,
     get_git_project_name,
+    get_user_identity,
 )
 
 
@@ -114,6 +115,93 @@ class TestGetGitBranch:
             mock_run.return_value = MagicMock(returncode=1, stdout="")
             result = get_git_branch()
             assert result is None
+
+
+class TestGetUserIdentity:
+    """Tests for user identity detection."""
+
+    def test_returns_git_email(self) -> None:
+        """Test returns git email when available."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="alice@example.com\n")
+            result = get_user_identity()
+            assert result == "alice@example.com"
+
+    def test_strips_whitespace_from_git_email(self) -> None:
+        """Test strips whitespace from git email."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="  alice@example.com  \n")
+            result = get_user_identity()
+            assert result == "alice@example.com"
+
+    def test_fallback_to_user_env_var(self) -> None:
+        """Test fallback to USER environment variable."""
+        with (
+            patch("subprocess.run") as mock_run,
+            patch.dict("os.environ", {"USER": "testuser"}),
+        ):
+            mock_run.return_value = MagicMock(returncode=1, stdout="")
+            result = get_user_identity()
+            assert result == "testuser"
+
+    def test_fallback_to_unknown_when_no_user_env_var(self) -> None:
+        """Test fallback to 'unknown' when USER env var not set."""
+        with (
+            patch("subprocess.run") as mock_run,
+            patch.dict("os.environ", {}, clear=True),
+        ):
+            mock_run.return_value = MagicMock(returncode=1, stdout="")
+            result = get_user_identity()
+            assert result == "unknown"
+
+    def test_fallback_to_user_env_var_when_git_not_found(self) -> None:
+        """Test fallback to USER env var when git command not found."""
+        with (
+            patch("subprocess.run") as mock_run,
+            patch.dict("os.environ", {"USER": "alice"}),
+        ):
+            mock_run.side_effect = FileNotFoundError()
+            result = get_user_identity()
+            assert result == "alice"
+
+    def test_fallback_to_user_env_var_when_git_timeout(self) -> None:
+        """Test fallback to USER env var when git command times out."""
+        with (
+            patch("subprocess.run") as mock_run,
+            patch.dict("os.environ", {"USER": "alice"}),
+        ):
+            mock_run.side_effect = subprocess.TimeoutExpired("git", 5)
+            result = get_user_identity()
+            assert result == "alice"
+
+    def test_sanitizes_to_max_256_chars(self) -> None:
+        """Test sanitizes result to max 256 characters."""
+        long_email = "a" * 300 + "@example.com"
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=long_email + "\n")
+            result = get_user_identity()
+            assert len(result) == 256
+            assert result == ("a" * 256)
+
+    def test_empty_git_output_falls_back_to_user(self) -> None:
+        """Test empty git output falls back to USER env var."""
+        with (
+            patch("subprocess.run") as mock_run,
+            patch.dict("os.environ", {"USER": "bob"}),
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="")
+            result = get_user_identity()
+            assert result == "bob"
+
+    def test_whitespace_only_git_output_falls_back_to_user(self) -> None:
+        """Test whitespace-only git output falls back to USER env var."""
+        with (
+            patch("subprocess.run") as mock_run,
+            patch.dict("os.environ", {"USER": "bob"}),
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="   \n")
+            result = get_user_identity()
+            assert result == "bob"
 
 
 class TestSanitizeInstanceName:

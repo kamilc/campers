@@ -1422,6 +1422,7 @@ def test_list_command_all_regions(campers_module, aws_credentials, caplog) -> No
             "region": "us-east-1",
             "instance_type": "t3.medium",
             "launch_time": datetime.now(UTC),
+            "owner": "test-user",
         },
         {
             "instance_id": "i-test2",
@@ -1430,6 +1431,7 @@ def test_list_command_all_regions(campers_module, aws_credentials, caplog) -> No
             "region": "us-west-2",
             "instance_type": "t3.large",
             "launch_time": datetime.now(UTC),
+            "owner": "test-user",
         },
     ]
 
@@ -1439,6 +1441,7 @@ def test_list_command_all_regions(campers_module, aws_credentials, caplog) -> No
         caplog.at_level(logging.INFO),
         patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
         patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
+        patch("campers.lifecycle.get_user_identity", return_value="test-user"),
     ):
         campers_instance.list()
 
@@ -1473,6 +1476,7 @@ def test_list_command_filtered_region(campers_module, aws_credentials, caplog) -
             "region": "us-east-1",
             "instance_type": "t3.medium",
             "launch_time": datetime.now(UTC),
+            "owner": "test-user",
         }
     ]
 
@@ -1491,11 +1495,12 @@ def test_list_command_filtered_region(campers_module, aws_credentials, caplog) -
         patch("campers.providers.aws.compute.EC2Manager", mock_ec2_class),
         patch("campers_cli.get_provider", return_value={"compute": mock_ec2_class}),
         patch("boto3.client", return_value=mock_ec2_client),
+        patch("campers.lifecycle.get_user_identity", return_value="test-user"),
     ):
         campers_instance.list(region="us-east-1")
 
     output = caplog.text
-    assert "Instances in us-east-1:" in output
+    assert "Instances for test-user:" in output
     assert "NAME" in output
     assert "INSTANCE-ID" in output
     assert "STATUS" in output
