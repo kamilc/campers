@@ -42,10 +42,84 @@ vars:
   python_version: "3.12"
 ```
 
-Variables support:
+### Variable Interpolation
 
-- **Nested references**: `${remote_dir}/data` expands to `/home/ubuntu/my-ml-project/data`
-- **Environment variables**: `${oc.env:HOME}` or `${oc.env:MY_VAR,default_value}`
+Reference other variables using `${var_name}` syntax. Variables are resolved recursively, so you can build complex paths from simple components:
+
+```yaml
+vars:
+  user: ubuntu
+  project: my-app
+  base_dir: /home/${user}
+  remote_dir: ${base_dir}/${project}
+  data_dir: ${remote_dir}/data
+  logs_dir: ${remote_dir}/logs
+```
+
+With this configuration:
+
+- `${remote_dir}` resolves to `/home/ubuntu/my-app`
+- `${data_dir}` resolves to `/home/ubuntu/my-app/data`
+
+### Environment Variables
+
+Access your local environment variables using `${oc.env:VAR_NAME}`:
+
+```yaml
+vars:
+  home: ${oc.env:HOME}
+  user: ${oc.env:USER}
+  project_root: ${oc.env:HOME}/projects/${project}
+```
+
+**With default values:** If an environment variable might not be set, provide a fallback:
+
+```yaml
+vars:
+  api_endpoint: ${oc.env:API_URL,https://api.example.com}
+  log_level: ${oc.env:LOG_LEVEL,INFO}
+  cache_dir: ${oc.env:XDG_CACHE_HOME,~/.cache}/campers
+```
+
+The value after the comma is used when the environment variable is not set.
+
+### Common Patterns
+
+**Project-relative paths:**
+```yaml
+vars:
+  project: my-ml-project
+  remote_dir: /home/ubuntu/${project}
+
+camps:
+  dev:
+    command: cd ${remote_dir} && bash
+    startup_script: |
+      cd ${remote_dir}
+      source .venv/bin/activate
+```
+
+**Environment-aware configuration:**
+```yaml
+vars:
+  env: ${oc.env:CAMPERS_ENV,development}
+  region: ${oc.env:AWS_REGION,us-east-1}
+
+defaults:
+  region: ${region}
+```
+
+**Combining variables and environment:**
+```yaml
+vars:
+  workspace: ${oc.env:HOME}/projects/${project}
+  data_bucket: ${oc.env:DATA_BUCKET,my-default-bucket}
+
+camps:
+  training:
+    startup_script: |
+      aws s3 sync s3://${data_bucket}/data ${workspace}/data
+```
 
 ## Playbooks (`playbooks`)
 

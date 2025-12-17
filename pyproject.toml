@@ -22,6 +22,7 @@ classifiers = [
     "Topic :: System :: Systems Administration",
 ]
 dependencies = [
+    "ansible>=8.0.0",
     "boto3>=1.40.42",
     "fire>=0.7.1",
     "omegaconf>=2.3.0",
