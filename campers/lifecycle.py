@@ -11,7 +11,7 @@ from campers.core.interfaces import ComputeProvider
 from campers.core.utils import get_volume_size_or_default
 from campers.providers import get_provider
 from campers.providers.exceptions import ProviderAPIError, ProviderCredentialsError
-from campers.utils import format_time_ago, status_spinner
+from campers.utils import format_time_ago, get_user_identity, status_spinner
 
 
 class LifecycleManager:
@@ -60,6 +60,101 @@ class LifecycleManager:
             provider["calculate_monthly_cost"],
             provider["format_cost"],
         )
+
+    def _build_list_header(self, show_all: bool, region: str | None) -> tuple[str, int]:
+        """Build table header for list output.
+
+        Parameters
+        ----------
+        show_all : bool
+            Whether to show all instances or filter by current user
+        region : str | None
+            Whether region filter is applied
+
+        Returns
+        -------
+        tuple[str, int]
+            Header string and separator width
+        """
+        if region:
+            if show_all:
+                header = (
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'OWNER':<25} "
+                    f"{'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
+                )
+                separator_width = 125
+            else:
+                header = (
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} "
+                    f"{'LAUNCHED':<12} {'COST/MONTH':<21}"
+                )
+                separator_width = 100
+        else:
+            if show_all:
+                header = (
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'OWNER':<25} "
+                    f"{'REGION':<15} {'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
+                )
+                separator_width = 140
+            else:
+                header = (
+                    f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} "
+                    f"{'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
+                )
+                separator_width = 115
+
+        return header, separator_width
+
+    def _build_list_row(self, inst: dict[str, Any], show_all: bool, region: str | None) -> str:
+        """Build table row for list output.
+
+        Parameters
+        ----------
+        inst : dict[str, Any]
+            Instance data from list_instances
+        show_all : bool
+            Whether to show all instances or filter by current user
+        region : str | None
+            Whether region filter is applied
+
+        Returns
+        -------
+        str
+            Formatted row string
+        """
+        name = self.truncate_name(inst["camp_config"])
+        launched = format_time_ago(inst["launch_time"])
+        cost_str = inst.get("cost_str", "")
+
+        if region:
+            if show_all:
+                owner = inst.get("owner", "unknown")
+                row = (
+                    f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
+                    f"{owner:<25} {inst['instance_type']:<15} {launched:<12} "
+                    f"{cost_str:<21}"
+                )
+            else:
+                row = (
+                    f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
+                    f"{inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
+                )
+        else:
+            if show_all:
+                owner = inst.get("owner", "unknown")
+                row = (
+                    f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
+                    f"{owner:<25} {inst['region']:<15} {inst['instance_type']:<15} "
+                    f"{launched:<12} {cost_str:<21}"
+                )
+            else:
+                row = (
+                    f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
+                    f"{inst['region']:<15} {inst['instance_type']:<15} {launched:<12} "
+                    f"{cost_str:<21}"
+                )
+
+        return row
 
     def _validate_region(self, region: str) -> None:
         """Validate that a region is valid using the compute provider.
@@ -131,13 +226,16 @@ class LifecycleManager:
 
         return matches[0]
 
-    def list(self, region: str | None = None) -> None:
+    def list(self, region: str | None = None, show_all: bool = False) -> None:
         """List all campers-managed cloud instances.
 
         Parameters
         ----------
         region : str | None
             Optional cloud region to filter results
+        show_all : bool
+            If False, filter to show only current user's instances.
+            If True, show all instances from all users.
 
         Raises
         ------
@@ -158,6 +256,11 @@ class LifecycleManager:
 
             with status_spinner("Fetching instances"):
                 instances = compute_provider.list_instances(region_filter=region)
+
+            current_user = get_user_identity()
+
+            if not show_all:
+                instances = [i for i in instances if i.get("owner") == current_user]
 
             if not instances:
                 logging.info("No campers-managed instances found", extra={"stream": "stdout"})
@@ -199,43 +302,21 @@ class LifecycleManager:
 
                         inst["monthly_cost"] = monthly_cost
                         inst["volume_size"] = volume_size
+                        inst["cost_str"] = format_cost(monthly_cost)
 
-                if region:
-                    logging.info(f"Instances in {region}:", extra={"stream": "stdout"})
-                    header = (
-                        f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'TYPE':<15} "
-                        f"{'LAUNCHED':<12} {'COST/MONTH':<21}"
+                if not show_all:
+                    logging.info(
+                        f"Instances for {current_user}:",
+                        extra={"stream": "stdout"},
                     )
-                    logging.info(header, extra={"stream": "stdout"})
-                    logging.info("-" * 100, extra={"stream": "stdout"})
 
-                    for inst in instances:
-                        name = self.truncate_name(inst["camp_config"])
-                        launched = format_time_ago(inst["launch_time"])
-                        cost_str = format_cost(inst["monthly_cost"])
-                        row = (
-                            f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
-                            f"{inst['instance_type']:<15} {launched:<12} {cost_str:<21}"
-                        )
-                        logging.info(row, extra={"stream": "stdout"})
-                else:
-                    header = (
-                        f"{'NAME':<20} {'INSTANCE-ID':<20} {'STATUS':<12} {'REGION':<15} "
-                        f"{'TYPE':<15} {'LAUNCHED':<12} {'COST/MONTH':<21}"
-                    )
-                    logging.info(header, extra={"stream": "stdout"})
-                    logging.info("-" * 115, extra={"stream": "stdout"})
+                header, separator_width = self._build_list_header(show_all, region)
+                logging.info(header, extra={"stream": "stdout"})
+                logging.info("-" * separator_width, extra={"stream": "stdout"})
 
-                    for inst in instances:
-                        name = self.truncate_name(inst["camp_config"])
-                        launched = format_time_ago(inst["launch_time"])
-                        cost_str = format_cost(inst["monthly_cost"])
-                        row = (
-                            f"{name:<20} {inst['instance_id']:<20} {inst['state']:<12} "
-                            f"{inst['region']:<15} {inst['instance_type']:<15} {launched:<12} "
-                            f"{cost_str:<21}"
-                        )
-                        logging.info(row, extra={"stream": "stdout"})
+                for inst in instances:
+                    row = self._build_list_row(inst, show_all, region)
+                    logging.info(row, extra={"stream": "stdout"})
 
                 if costs_available:
                     logging.info(

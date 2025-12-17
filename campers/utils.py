@@ -94,6 +94,39 @@ def get_git_branch() -> str | None:
     return None
 
 
+def get_user_identity() -> str:
+    """Get user identity for ownership tagging.
+
+    Returns git email if available, falls back to $USER, then "unknown".
+    Result is sanitized for AWS tag compliance (max 256 chars).
+
+    Returns
+    -------
+    str
+        User identity string suitable for AWS tags.
+    """
+    identity = None
+
+    try:
+        result = subprocess.run(
+            ["git", "config", "user.email"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            identity = result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    if not identity:
+        identity = os.environ.get("USER", "unknown")
+
+    return identity[:256]
+
+
 def generate_instance_name(camp_name: str | None = None) -> str:
     """Generate deterministic instance name based on git context.
 

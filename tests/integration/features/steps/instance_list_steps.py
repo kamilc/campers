@@ -197,18 +197,51 @@ def step_run_list_command_direct(context: Context, region: str | None = None) ->
 
     try:
         if context.mock_time_instances is not None and context.mock_time_instances:
-            with (
-                patch("campers.providers.aws.compute.EC2Manager.list_instances") as mock_list,
-                patch("campers.providers.aws.compute.EC2Manager.get_volume_size") as mock_volume,
-            ):
+
+            def mock_get_user_identity():
+                if hasattr(context, "current_user_identity"):
+                    return context.current_user_identity
+                return "unknown"
+
+            patches = [
+                patch("campers.providers.aws.compute.EC2Manager.list_instances"),
+                patch("campers.providers.aws.compute.EC2Manager.get_volume_size"),
+            ]
+
+            if hasattr(context, "current_user_identity"):
+                patches.append(
+                    patch(
+                        "campers.lifecycle.get_user_identity",
+                        side_effect=mock_get_user_identity,
+                    )
+                )
+
+            with patches[0] as mock_list, patches[1] as mock_volume:
                 mock_list.return_value = context.instances
                 mock_volume.return_value = 0
-                campers.list(region=region)
+
+                if hasattr(context, "current_user_identity"):
+                    with patches[2]:
+                        campers.list(region=region)
+                else:
+                    campers.list(region=region)
         else:
             import logging as py_logging
 
             py_logging.debug(f"DEBUG: context.instances = {context.instances}")
-            campers.list(region=region)
+
+            if hasattr(context, "current_user_identity"):
+
+                def mock_get_user_identity():
+                    return context.current_user_identity
+
+                with patch(
+                    "campers.lifecycle.get_user_identity",
+                    side_effect=mock_get_user_identity,
+                ):
+                    campers.list(region=region)
+            else:
+                campers.list(region=region)
 
         output_lines = []
         for record in log_handler.records:

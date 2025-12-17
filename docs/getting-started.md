@@ -14,6 +14,12 @@ This guide will help you spin up your first Campers environment in under 5 minut
     *   **Linux**: [Download binary](https://mutagen.io/download)
     *   **Windows**: `scoop install mutagen`
 
+3.  **AWS Infrastructure** (first-time only): Run the setup command to ensure your AWS account has the required infrastructure:
+    ```bash
+    campers setup
+    ```
+    This creates a default VPC if one doesn't exist and verifies IAM permissions.
+
 ## Installation
 
 We recommend using **[uv](https://docs.astral.sh/uv/)** for a zero-install experience, but standard pip works too.
@@ -119,6 +125,16 @@ However, if you prefer to use **VS Code Remote - SSH** (e.g., for the integrated
 3.  In VS Code, open the **Remote Explorer**.
 4.  Add a new SSH Host using that exact command.
 5.  Connect! You can now use the remote terminal and debugger directly.
+
+## Troubleshooting
+
+If you encounter issues, run the doctor command to diagnose common problems:
+
+```bash
+campers doctor
+```
+
+This checks AWS credentials, IAM permissions, VPC availability, and Mutagen installation. See [Commands](commands.md#doctor) for details.
 
 ## Next Steps
 

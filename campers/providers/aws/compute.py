@@ -385,9 +385,9 @@ class EC2Manager:
         -------
         dict[str, Any]
             Dictionary containing prepared resources: key_name, key_file, sg_id,
-            ami_id, unique_id, instance_tag_name, instance_type
+            ami_id, unique_id, instance_tag_name, instance_type, owner
         """
-        from campers.utils import get_git_branch, get_git_project_name
+        from campers.utils import get_git_branch, get_git_project_name, get_user_identity
 
         ami_id = self.resolve_ami(config)
         unique_id = str(uuid.uuid4())[:UUID_SLICE_LENGTH]
@@ -424,6 +424,7 @@ class EC2Manager:
             "disk_size": config["disk_size"],
             "camp_name": config.get("camp_name", "ad-hoc"),
             "instance": None,
+            "owner": get_user_identity(),
         }
 
     def _launch_ec2_instance(
@@ -468,6 +469,7 @@ class EC2Manager:
                         {"Key": "Name", "Value": resources["instance_tag_name"]},
                         {"Key": "MachineConfig", "Value": resources["camp_name"]},
                         {"Key": "UniqueId", "Value": resources["unique_id"]},
+                        {"Key": "Owner", "Value": resources["owner"]},
                     ],
                 }
             ],
@@ -652,6 +654,7 @@ class EC2Manager:
                                         "instance_type": instance["InstanceType"],
                                         "launch_time": instance["LaunchTime"],
                                         "camp_config": tags.get("MachineConfig", "ad-hoc"),
+                                        "owner": tags.get("Owner", "unknown"),
                                     }
                                 )
             except ProviderCredentialsError:

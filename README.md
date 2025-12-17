@@ -62,6 +62,7 @@ Share running applications with clients by exposing ports publicly. Use `public_
 - **Automatic Port Forwarding**: Tunnels remote ports to your local machine based on your configuration.
 - **Public Port Exposure**: Open ports directly for external access - perfect for client demos.
 - **Ansible Integration**: Supports running Ansible playbooks to configure the instance on startup.
+- **Multi-User Support**: Teams sharing an AWS account get automatic instance isolation. Each instance is tagged with the owner's identity, and `campers list` shows only your instances by default.
 - **Cost Control:** Encourages an ephemeral workflow where instances are destroyed when not in use.
 - **TUI Dashboard**: A terminal interface to monitor logs, sync status, and instance health.
 
@@ -178,6 +179,23 @@ defaults:
     - ^WANDB_API_KEY
 ```
 
+### `.env` File Support
+Campers automatically loads a `.env` file from your project directory. Use it to store secrets outside of version control:
+
+```bash
+# .env (add to .gitignore!)
+DB_PASSWORD=secret
+API_KEY=sk-123
+```
+
+Reference them in `campers.yaml` with `${oc.env:VAR_NAME}`:
+
+```yaml
+vars:
+  api_key: ${oc.env:API_KEY}
+  db_pass: ${oc.env:DB_PASSWORD,default_value}
+```
+
 ## Quick Start
 
 ```bash
@@ -187,11 +205,52 @@ pip install campers
 # Or run instantly with uv (recommended)
 uvx campers run
 
+# Check prerequisites (AWS credentials, Mutagen, etc.)
+campers doctor
+
+# First-time setup (creates default VPC if needed)
+campers setup
+
 # Initialize a configuration in your current directory
 campers init
 
+# Validate your configuration
+campers validate
+
 # Spin up your camp
 campers run
+```
+
+## Setup & Troubleshooting
+
+### First-Time Setup
+
+If you're using a new AWS account or region, run the setup command to ensure prerequisites are in place:
+
+```bash
+campers setup --region us-east-1
+```
+
+This creates a default VPC (required for launching instances) and verifies IAM permissions.
+
+### Diagnosing Issues
+
+If something isn't working, run the doctor command:
+
+```bash
+campers doctor
+```
+
+It checks:
+- AWS credentials and connectivity
+- IAM permissions
+- Default VPC availability
+- Mutagen installation
+
+For verbose output with stack traces, enable debug mode:
+
+```bash
+CAMPERS_DEBUG=1 campers run dev
 ```
 
 ## Documentation

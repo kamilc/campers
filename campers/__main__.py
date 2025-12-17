@@ -440,9 +440,9 @@ class Campers:
         compute_provider = self._compute_provider_factory(region)
         compute_provider.validate_region(region)
 
-    def list(self, region: str | None = None) -> None:
+    def list(self, region: str | None = None, show_all: bool = False) -> None:
         """List all managed instances."""
-        return self._lifecycle_manager_prop.list(region=region)
+        return self._lifecycle_manager_prop.list(region=region, show_all=show_all)
 
     def stop(self, name_or_id: str, region: str | None = None) -> None:
         """Stop a managed instance."""

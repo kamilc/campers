@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 from omegaconf import OmegaConf
 from omegaconf.errors import InterpolationResolutionError
 
@@ -58,11 +59,19 @@ class ConfigLoader:
         ------
         omegaconf.errors.InterpolationResolutionError
             If undefined variables are referenced or circular references exist
+
+        Notes
+        -----
+        Automatically loads .env file from the config file's directory if present.
+        Environment variables from .env are available via ${oc.env:VAR_NAME} syntax.
         """
         if config_path is None:
             config_path = os.environ.get("CAMPERS_CONFIG", "campers.yaml")
 
         config_file = Path(config_path)
+        config_dir = config_file.parent if config_file.parent != Path() else Path.cwd()
+        dotenv_path = config_dir / ".env"
+        load_dotenv(dotenv_path, override=False)
 
         if not config_file.exists():
             return {"defaults": {}}
