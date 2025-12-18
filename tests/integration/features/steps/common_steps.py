@@ -211,6 +211,20 @@ def execute_command_direct(
             campers.init(force=force)
             context.exit_code = 0
 
+        elif command == "exec":
+            if not args or "camp_or_instance" not in args:
+                raise ValueError("exec command requires camp_or_instance argument")
+            if not args or "command" not in args:
+                raise ValueError("exec command requires command argument")
+            camp_or_instance = args["camp_or_instance"]
+            exec_command = args["command"]
+            exec_region = args.get("region")
+            context.exit_code = campers.exec(
+                camp_or_instance=camp_or_instance,
+                command=exec_command,
+                region=exec_region,
+            )
+
         else:
             raise ValueError(f"Unknown command: {command}")
 
