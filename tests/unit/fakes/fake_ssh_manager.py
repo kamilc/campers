@@ -70,7 +70,7 @@ class FakeSSHManager:
         self.connected = True
 
     def execute_command(self, command: str) -> int:
-        """Execute a fake command (always returns 0).
+        """Execute a fake command.
 
         Parameters
         ----------
@@ -80,16 +80,20 @@ class FakeSSHManager:
         Returns
         -------
         int
-            Fake exit code (always 0 for success)
+            Fake exit code parsed from command if it contains 'exit N', otherwise 0
         """
         if not self.connected:
             raise RuntimeError("SSH connection not established")
 
         logger.info("Fake SSH: executing command: %s", command)
+
+        exit_match = re.search(r'\bexit\s+(\d+)', command)
+        if exit_match:
+            return int(exit_match.group(1))
         return 0
 
     def execute_command_raw(self, command: str) -> int:
-        """Execute raw fake command (always returns 0).
+        """Execute raw fake command.
 
         Parameters
         ----------
@@ -99,12 +103,16 @@ class FakeSSHManager:
         Returns
         -------
         int
-            Fake exit code (always 0 for success)
+            Fake exit code parsed from command if it contains 'exit N', otherwise 0
         """
         if not self.connected:
             raise RuntimeError("SSH connection not established")
 
         logger.info("Fake SSH: executing raw command: %s", command)
+
+        exit_match = re.search(r'\bexit\s+(\d+)', command)
+        if exit_match:
+            return int(exit_match.group(1))
         return 0
 
     def close(self) -> None:
@@ -199,7 +207,7 @@ class FakeSSHManager:
         command: str,
         env_vars: dict[str, str] | None = None,
     ) -> int:
-        """Execute command with environment variables (always returns 0 for fake).
+        """Execute command with environment variables.
 
         Parameters
         ----------
@@ -211,10 +219,37 @@ class FakeSSHManager:
         Returns
         -------
         int
-            Fake exit code (always 0 for success)
+            Fake exit code parsed from command if it contains 'exit N', otherwise 0
         """
         full_command = self.build_command_with_env(command, env_vars)
         return self.execute_command(full_command)
+
+    def execute_interactive(self, command: str | None = None) -> int:
+        """Execute fake interactive session with PTY allocation.
+
+        Parameters
+        ----------
+        command : str | None
+            Command to execute. If None, simulates opening a shell.
+
+        Returns
+        -------
+        int
+            Fake exit code parsed from command if it contains 'exit N', otherwise 0
+        """
+        if not self.connected:
+            raise RuntimeError("SSH connection not established")
+
+        logger.info("Fake SSH: executing interactive session: %s", command)
+
+        if command:
+            if command.strip() == "tty":
+                logger.info("/dev/pts/1")
+
+            exit_match = re.search(r'\bexit\s+(\d+)', command)
+            if exit_match:
+                return int(exit_match.group(1))
+        return 0
 
     def abort_active_command(self) -> None:
         """Simulate aborting an active command (no-op for fake)."""

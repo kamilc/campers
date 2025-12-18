@@ -23,11 +23,16 @@ from campers.core.signals import SignalManager
 from campers.lifecycle import LifecycleManager
 from campers.providers import get_provider  # noqa: E402
 from campers.services.portforward import PortForwardManager  # noqa: E402
-from campers.services.ssh import SSHManager  # noqa: E402
+from campers.services.ssh import (  # noqa: E402
+    SSHConnectionInfo,
+    SSHManager,
+    get_ssh_connection_info,
+)
 from campers.services.sync import MutagenManager  # noqa: E402
+from campers.session import SessionManager  # noqa: E402
 from campers.templates import CONFIG_TEMPLATE  # noqa: E402
 from campers.tui import CampersTUI  # noqa: E402
-from campers.utils import truncate_name  # noqa: E402
+from campers.utils import get_user_identity, truncate_name  # noqa: E402
 
 
 class Campers:
@@ -459,6 +464,194 @@ class Campers:
     def destroy(self, name_or_id: str, region: str | None = None) -> None:
         """Destroy a managed instance."""
         return self._lifecycle_manager_prop.destroy(name_or_id=name_or_id, region=region)
+
+    def exec(
+        self,
+        camp_or_instance: str,
+        command: str,
+        region: str | None = None,
+        i: bool = False,
+        t: bool = False,
+        it: bool = False,
+        interactive: bool = False,
+        tty: bool = False,
+    ) -> int:
+        """Execute a command on a running instance.
+
+        Parameters
+        ----------
+        camp_or_instance : str
+            Camp name or instance ID to execute on
+        command : str
+            Command to execute on the remote instance
+        region : str | None
+            Optional region to narrow AWS discovery scope
+        i : bool
+            Short flag for interactive mode (keep stdin open)
+        t : bool
+            Short flag for TTY allocation
+        it : bool
+            Combined short flag for interactive mode with TTY (like docker exec -it)
+        interactive : bool
+            Long flag for interactive mode (keep stdin open)
+        tty : bool
+            Long flag for TTY allocation
+
+        Returns
+        -------
+        int
+            Exit code from the remote command
+
+        Raises
+        ------
+        SystemExit
+            Exits with code 1 if instance not found, multiple instances found,
+            instance is not in running state, or TTY requirements not met
+        """
+        use_interactive = i or it or interactive
+        use_tty = t or it or tty
+
+        if use_interactive and not sys.stdin.isatty():
+            logging.error(
+                "Cannot use interactive mode: stdin is not a terminal",
+                extra={"stream": "stderr"},
+            )
+            sys.exit(1)
+
+        if use_tty and not sys.stdout.isatty():
+            logging.error(
+                "Cannot allocate TTY: stdout is not a terminal",
+                extra={"stream": "stderr"},
+            )
+            sys.exit(1)
+
+        if use_interactive and not use_tty:
+            logging.warning(
+                "Using -i without -t has no effect; use -it for interactive mode",
+                extra={"stream": "stderr"},
+            )
+
+        default_region = self._config_loader.BUILT_IN_DEFAULTS["region"]
+
+        if region is not None:
+            self._validate_region(region)
+
+        session_manager = SessionManager()
+
+        session = session_manager.get_alive_session(camp_or_instance)
+
+        if session:
+            ssh_info = SSHConnectionInfo(
+                host=session.ssh_host,
+                port=session.ssh_port,
+                key_file=session.key_file,
+                username=session.ssh_user,
+            )
+        else:
+            instance = self._discover_running_instance(camp_or_instance, region, default_region)
+            ssh_info = get_ssh_connection_info(
+                instance["instance_id"],
+                instance["public_ip"],
+                instance["key_file"],
+            )
+
+        ssh_manager = self._ssh_manager_factory(
+            host=ssh_info.host,
+            key_file=ssh_info.key_file,
+            port=ssh_info.port,
+            username=ssh_info.username,
+        )
+        ssh_manager.connect()
+
+        try:
+            if use_tty:
+                return ssh_manager.execute_interactive(command)
+            else:
+                return ssh_manager.execute_command(command)
+        finally:
+            ssh_manager.close()
+
+    def _discover_running_instance(
+        self, camp_or_instance: str, region: str | None, default_region: str
+    ) -> dict[str, Any]:
+        """Discover a running instance by name or ID.
+
+        Parameters
+        ----------
+        camp_or_instance : str
+            Camp name or instance ID
+        region : str | None
+            Optional region to narrow search
+        default_region : str
+            Default region to use if not specified
+
+        Returns
+        -------
+        dict[str, Any]
+            Instance details if found and unique
+
+        Raises
+        ------
+        SystemExit
+            Exits with code 1 if no instance found, multiple found, or not running
+        """
+        compute_provider = self._compute_provider_factory(region=region or default_region)
+        matches = compute_provider.find_instances_by_name_or_id(
+            name_or_id=camp_or_instance, region_filter=region
+        )
+
+        if not matches:
+            logging.error(
+                "No running instance found for '%s'. Use 'campers run' to start one.",
+                camp_or_instance,
+                extra={"stream": "stderr"},
+            )
+            sys.exit(1)
+
+        if len(matches) > 1:
+            logging.error(
+                "Multiple instances found for '%s':",
+                camp_or_instance,
+                extra={"stream": "stderr"},
+            )
+            for match in matches:
+                logging.error(
+                    f"  {match['instance_id']} ({match['region']}) "
+                    f"- {match.get('state', 'unknown')}",
+                    extra={"stream": "stderr"},
+                )
+            logging.error(
+                "Specify instance ID: campers exec %s <command>",
+                matches[0]["instance_id"],
+                extra={"stream": "stderr"},
+            )
+            sys.exit(1)
+
+        instance = matches[0]
+
+        if not camp_or_instance.startswith("i-"):
+            current_user = get_user_identity()
+            if instance.get("owner") != current_user:
+                logging.error(
+                    "Instance '%s' is owned by '%s', not by you ('%s'). "
+                    "Use instance ID to access instances from other users.",
+                    camp_or_instance,
+                    instance.get("owner"),
+                    current_user,
+                    extra={"stream": "stderr"},
+                )
+                sys.exit(1)
+
+        if instance.get("state") != "running":
+            logging.error(
+                "Instance '%s' is %s. Use 'campers start' first.",
+                camp_or_instance,
+                instance.get("state", "unknown"),
+                extra={"stream": "stderr"},
+            )
+            sys.exit(1)
+
+        return instance
 
     def setup(self, region: str | None = None) -> None:
         """Set up cloud environment and validate configuration."""

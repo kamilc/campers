@@ -218,6 +218,33 @@ class CleanupManager:
 
             self._emit_cleanup_event("close_ssh", "failed")
 
+    def cleanup_session_file(self, resources: dict[str, Any], errors: list[Exception]) -> None:
+        """Delete session file when campers run exits.
+
+        Parameters
+        ----------
+        resources : dict[str, Any]
+            Resources dictionary containing session_manager and session_camp_name
+        errors : list[Exception]
+            List to accumulate errors during cleanup
+
+        Notes
+        -----
+        Errors are logged and added to errors list but do not halt cleanup.
+        """
+        if "session_manager" not in resources or "session_camp_name" not in resources:
+            logging.debug("Skipping session file cleanup - not initialized")
+            return
+
+        logging.debug("Deleting session file...")
+
+        try:
+            resources["session_manager"].delete_session(resources["session_camp_name"])
+            logging.debug("Session file deleted successfully")
+        except (OSError, ValueError) as e:
+            logging.error("Error deleting session file: %s", e)
+            errors.append(e)
+
     def cleanup_port_forwarding(self, resources: dict[str, Any], errors: list[Exception]) -> None:
         """Stop SSH port forwarding tunnels.
 
@@ -446,6 +473,7 @@ class CleanupManager:
             self.cleanup_port_forwarding(resources_to_clean, errors)
             self.cleanup_mutagen_session(resources_to_clean, errors)
             self.cleanup_ssh_connections(resources_to_clean, errors)
+            self.cleanup_session_file(resources_to_clean, errors)
 
             success, error_msg = self._cleanup_instance_helper(resources_to_clean, errors, "stop")
             if not success and error_msg:
@@ -499,6 +527,7 @@ class CleanupManager:
             self.cleanup_port_forwarding(resources_to_clean, errors)
             self.cleanup_mutagen_session(resources_to_clean, errors)
             self.cleanup_ssh_connections(resources_to_clean, errors)
+            self.cleanup_session_file(resources_to_clean, errors)
 
             success, error_msg = self._cleanup_instance_helper(
                 resources_to_clean, errors, "terminate"
@@ -556,6 +585,7 @@ class CleanupManager:
             self.cleanup_port_forwarding(resources_to_clean, errors)
             self.cleanup_mutagen_session(resources_to_clean, errors)
             self.cleanup_ssh_connections(resources_to_clean, errors)
+            self.cleanup_session_file(resources_to_clean, errors)
 
             instance_details = resources_to_clean.get("instance_details", {})
             instance_id = get_instance_id(instance_details)

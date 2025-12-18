@@ -39,6 +39,21 @@ class FakeEC2Manager:
         self.security_groups: dict[str, dict[str, Any]] = {}
         self.all_managers = all_managers
 
+    def validate_region(self, region: str) -> bool:
+        """Validate if a region is available for this provider.
+
+        Parameters
+        ----------
+        region : str
+            AWS region name to validate
+
+        Returns
+        -------
+        bool
+            Always returns True for testing purposes
+        """
+        return True
+
     def create_key_pair(self, unique_id: str) -> KeyPairInfo:
         """Create a fake SSH key pair.
 
@@ -161,6 +176,9 @@ class FakeEC2Manager:
                             "camp_config": instance.get("camp_config", "test"),
                             "volume_size": instance.get("volume_size", 30),
                             "unique_id": instance.get("unique_id"),
+                            "owner": instance.get("owner"),
+                            "public_ip": instance.get("public_ip"),
+                            "key_file": instance.get("key_file"),
                         }
                     )
         else:
@@ -176,6 +194,9 @@ class FakeEC2Manager:
                         "camp_config": instance.get("camp_config", "test"),
                         "volume_size": instance.get("volume_size", 30),
                         "unique_id": instance.get("unique_id"),
+                        "owner": instance.get("owner"),
+                        "public_ip": instance.get("public_ip"),
+                        "key_file": instance.get("key_file"),
                     }
                 )
         return instances_list
