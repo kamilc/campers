@@ -224,6 +224,33 @@ class FakeSSHManager:
         full_command = self.build_command_with_env(command, env_vars)
         return self.execute_command(full_command)
 
+    def execute_interactive(self, command: str | None = None) -> int:
+        """Execute fake interactive session with PTY allocation.
+
+        Parameters
+        ----------
+        command : str | None
+            Command to execute. If None, simulates opening a shell.
+
+        Returns
+        -------
+        int
+            Fake exit code parsed from command if it contains 'exit N', otherwise 0
+        """
+        if not self.connected:
+            raise RuntimeError("SSH connection not established")
+
+        logger.info("Fake SSH: executing interactive session: %s", command)
+
+        if command:
+            if command.strip() == "tty":
+                logger.info("/dev/pts/1")
+
+            exit_match = re.search(r'\bexit\s+(\d+)', command)
+            if exit_match:
+                return int(exit_match.group(1))
+        return 0
+
     def abort_active_command(self) -> None:
         """Simulate aborting an active command (no-op for fake)."""
         logger.info("Fake SSH: abort_active_command (no-op)")

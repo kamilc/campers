@@ -1,11 +1,12 @@
 """Unit tests for SSH connection and command execution."""
 
+import signal
 from unittest.mock import MagicMock, call, patch
 
 import paramiko
 import pytest
 
-from campers.services.ssh import MAX_COMMAND_LENGTH, SSHManager
+from campers.services.ssh import MAX_COMMAND_LENGTH, InteractiveSession, SSHManager
 
 
 @pytest.fixture
@@ -705,3 +706,328 @@ def test_stream_output_realtime_timeout(ssh_manager: SSHManager) -> None:
 
     with pytest.raises(TimeoutError, match="timed out after"):
         ssh_manager.stream_output_realtime(mock_stdout, mock_stderr, timeout=0.1)
+
+
+class TestInteractiveSession:
+    """Tests for InteractiveSession class."""
+
+    def test_interactive_session_initialization(self) -> None:
+        """Test InteractiveSession initializes with channel."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+
+        assert session._channel == mock_channel
+        assert session._old_tty_attrs is None
+        assert session._original_sigwinch is None
+
+    @patch("campers.services.ssh.sys.stdin")
+    @patch("campers.services.ssh.termios.tcgetattr")
+    @patch("campers.services.ssh.tty.setraw")
+    @patch("campers.services.ssh.tty.setcbreak")
+    def test_setup_terminal_saves_attributes(
+        self,
+        mock_setcbreak: MagicMock,
+        mock_setraw: MagicMock,
+        mock_tcgetattr: MagicMock,
+        mock_stdin: MagicMock,
+    ) -> None:
+        """Test _setup_terminal saves original terminal attributes."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+        mock_attrs = ["attr1", "attr2", "attr3"]
+        mock_tcgetattr.return_value = mock_attrs
+        mock_stdin.fileno.return_value = 0
+
+        session._setup_terminal()
+
+        assert session._old_tty_attrs == mock_attrs
+        mock_tcgetattr.assert_called_once()
+        mock_setraw.assert_called_once()
+        mock_setcbreak.assert_called_once()
+
+    @patch("campers.services.ssh.termios.tcsetattr")
+    def test_restore_terminal_restores_attributes(
+        self, mock_tcsetattr: MagicMock
+    ) -> None:
+        """Test _restore_terminal restores original attributes."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+        saved_attrs = ["attr1", "attr2", "attr3"]
+        session._old_tty_attrs = saved_attrs
+
+        session._restore_terminal()
+
+        mock_tcsetattr.assert_called_once()
+        call_args = mock_tcsetattr.call_args
+        assert call_args[0][2] == saved_attrs
+
+    def test_restore_terminal_no_attrs(self) -> None:
+        """Test _restore_terminal does nothing when no attributes saved."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+
+        with patch("campers.services.ssh.termios.tcsetattr") as mock_tcsetattr:
+            session._restore_terminal()
+            mock_tcsetattr.assert_not_called()
+
+    @patch("campers.services.ssh.signal.signal")
+    @patch("campers.services.ssh.get_terminal_size")
+    def test_setup_sigwinch_installs_handler(
+        self, mock_get_terminal_size: MagicMock, mock_signal: MagicMock
+    ) -> None:
+        """Test _setup_sigwinch installs SIGWINCH handler."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+        mock_get_terminal_size.return_value = (80, 24)
+        original_handler = MagicMock()
+        mock_signal.return_value = original_handler
+
+        session._setup_sigwinch()
+
+        assert session._original_sigwinch == original_handler
+        mock_signal.assert_called_once()
+        call_args = mock_signal.call_args
+        assert call_args[0][0] == signal.SIGWINCH
+        mock_channel.resize_pty.assert_called_once_with(width=80, height=24)
+
+    @patch("campers.services.ssh.signal.signal")
+    def test_restore_sigwinch_restores_handler(
+        self, mock_signal: MagicMock
+    ) -> None:
+        """Test _restore_sigwinch restores original SIGWINCH handler."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+        original_handler = MagicMock()
+        session._original_sigwinch = original_handler
+
+        session._restore_sigwinch()
+
+        mock_signal.assert_called_once_with(signal.SIGWINCH, original_handler)
+
+    def test_restore_sigwinch_no_handler(self) -> None:
+        """Test _restore_sigwinch does nothing when no handler saved."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+
+        with patch("campers.services.ssh.signal.signal") as mock_signal:
+            session._restore_sigwinch()
+            mock_signal.assert_not_called()
+
+    @patch("campers.services.ssh.get_terminal_size")
+    def test_resize_pty_sends_size_to_channel(
+        self, mock_get_terminal_size: MagicMock
+    ) -> None:
+        """Test _resize_pty sends terminal size to channel."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+        mock_get_terminal_size.return_value = (100, 30)
+
+        session._resize_pty()
+
+        mock_channel.resize_pty.assert_called_once_with(width=100, height=30)
+
+    @patch("campers.services.ssh.get_terminal_size")
+    def test_resize_pty_handles_exception(
+        self, mock_get_terminal_size: MagicMock
+    ) -> None:
+        """Test _resize_pty handles exceptions silently."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+        mock_get_terminal_size.return_value = (80, 24)
+        mock_channel.resize_pty.side_effect = Exception("PTY resize failed")
+
+        session._resize_pty()
+
+        mock_channel.resize_pty.assert_called_once()
+
+    @patch("campers.services.ssh.select.select")
+    @patch("campers.services.ssh.os.read")
+    @patch("campers.services.ssh.sys.stdin")
+    def test_run_session_channel_receives_data(
+        self, mock_stdin: MagicMock, mock_read: MagicMock, mock_select: MagicMock
+    ) -> None:
+        """Test run() receives data from channel and writes to stdout."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+
+        mock_channel.recv.side_effect = [b"hello", b""]
+        mock_select.return_value = ([mock_channel], [], [])
+
+        with (
+            patch("campers.services.ssh.sys.stdout") as mock_stdout,
+            patch.object(session, "_setup_terminal"),
+            patch.object(session, "_setup_sigwinch"),
+            patch.object(session, "_restore_sigwinch"),
+            patch.object(session, "_restore_terminal"),
+        ):
+            mock_stdout.buffer = MagicMock()
+            mock_channel.recv_exit_status.return_value = 0
+            exit_code = session.run()
+
+        assert exit_code == 0
+        mock_stdout.buffer.write.assert_called_once_with(b"hello")
+        mock_stdout.flush.assert_called_once()
+
+    @patch("campers.services.ssh.select.select")
+    @patch("campers.services.ssh.os.read")
+    @patch("campers.services.ssh.sys.stdin")
+    def test_run_session_sends_stdin_data(
+        self, mock_stdin: MagicMock, mock_read: MagicMock, mock_select: MagicMock
+    ) -> None:
+        """Test run() reads from stdin and sends to channel."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+
+        mock_read.side_effect = [b"x", b""]
+        mock_select.side_effect = [([mock_stdin], [], []), ([mock_stdin], [], [])]
+
+        with (
+            patch("campers.services.ssh.sys.stdout") as mock_stdout,
+            patch.object(session, "_setup_terminal"),
+            patch.object(session, "_setup_sigwinch"),
+            patch.object(session, "_restore_sigwinch"),
+            patch.object(session, "_restore_terminal"),
+        ):
+            mock_stdout.buffer = MagicMock()
+            mock_channel.recv_exit_status.return_value = 0
+            exit_code = session.run()
+
+        mock_channel.send.assert_called_once_with(b"x")
+        assert exit_code == 0
+
+    @patch("campers.services.ssh.select.select")
+    @patch("campers.services.ssh.os.read")
+    @patch("campers.services.ssh.sys.stdin")
+    def test_run_session_propagates_exit_code(
+        self, mock_stdin: MagicMock, mock_read: MagicMock, mock_select: MagicMock
+    ) -> None:
+        """Test run() propagates remote exit code."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+
+        mock_channel.recv.return_value = b""
+        mock_select.return_value = ([mock_channel], [], [])
+
+        with (
+            patch("campers.services.ssh.sys.stdout") as mock_stdout,
+            patch.object(session, "_setup_terminal"),
+            patch.object(session, "_setup_sigwinch"),
+            patch.object(session, "_restore_sigwinch"),
+            patch.object(session, "_restore_terminal"),
+        ):
+            mock_stdout.buffer = MagicMock()
+            mock_channel.recv_exit_status.return_value = 42
+            exit_code = session.run()
+
+        assert exit_code == 42
+
+    @patch("campers.services.ssh.select.select")
+    @patch("campers.services.ssh.os.read")
+    @patch("campers.services.ssh.sys.stdin")
+    def test_run_session_calls_shutdown(
+        self, mock_stdin: MagicMock, mock_read: MagicMock, mock_select: MagicMock
+    ) -> None:
+        """Test run() calls channel.shutdown() before closing."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+
+        mock_channel.recv.return_value = b""
+        mock_select.return_value = ([mock_channel], [], [])
+
+        with (
+            patch("campers.services.ssh.sys.stdout") as mock_stdout,
+            patch.object(session, "_setup_terminal"),
+            patch.object(session, "_setup_sigwinch"),
+            patch.object(session, "_restore_sigwinch"),
+            patch.object(session, "_restore_terminal"),
+        ):
+            mock_stdout.buffer = MagicMock()
+            mock_channel.recv_exit_status.return_value = 0
+            session.run()
+
+        mock_channel.shutdown.assert_called_once_with(2)
+
+    @patch("campers.services.ssh.select.select")
+    @patch("campers.services.ssh.os.read")
+    @patch("campers.services.ssh.sys.stdin")
+    def test_run_session_restores_terminal_on_exception(
+        self, mock_stdin: MagicMock, mock_read: MagicMock, mock_select: MagicMock
+    ) -> None:
+        """Test run() restores terminal even when exception occurs."""
+        mock_channel = MagicMock()
+        session = InteractiveSession(mock_channel)
+
+        mock_select.side_effect = RuntimeError("Test exception")
+
+        mock_restore_sigwinch = MagicMock()
+        mock_restore_terminal = MagicMock()
+        session._restore_sigwinch = mock_restore_sigwinch
+        session._restore_terminal = mock_restore_terminal
+
+        with (
+            patch("campers.services.ssh.sys.stdout") as mock_stdout,
+            patch.object(session, "_setup_terminal"),
+            patch.object(session, "_setup_sigwinch"),
+            pytest.raises(RuntimeError),
+        ):
+            mock_stdout.buffer = MagicMock()
+            session.run()
+
+        mock_restore_sigwinch.assert_called_once()
+        mock_restore_terminal.assert_called_once()
+
+    @patch("campers.services.ssh.paramiko.SSHClient")
+    @patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
+    def test_execute_interactive_with_command_creates_channel_and_allocates_pty(
+        self, mock_pkey: MagicMock, mock_ssh_client: MagicMock
+    ) -> None:
+        """Test execute_interactive() with command allocates PTY."""
+        mock_client = MagicMock()
+        mock_ssh_client.return_value = mock_client
+        ssh_manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem")
+        ssh_manager.client = mock_client
+
+        mock_transport = MagicMock()
+        mock_client.get_transport.return_value = mock_transport
+        mock_channel = MagicMock()
+        mock_transport.open_session.return_value = mock_channel
+        mock_channel.recv_exit_status.return_value = 0
+        mock_channel.recv.return_value = b""
+
+        with (
+            patch("campers.services.ssh.get_terminal_size", return_value=(80, 24)),
+            patch.object(InteractiveSession, "run", return_value=0),
+        ):
+            exit_code = ssh_manager.execute_interactive("bash")
+
+        mock_transport.open_session.assert_called_once()
+        mock_channel.get_pty.assert_called_once_with(width=80, height=24)
+        mock_channel.exec_command.assert_called_once_with("bash")
+        assert exit_code == 0
+
+    @patch("campers.services.ssh.paramiko.SSHClient")
+    @patch("campers.services.ssh.paramiko.PKey.from_private_key_file")
+    def test_execute_interactive_without_command_invokes_shell(
+        self, mock_pkey: MagicMock, mock_ssh_client: MagicMock
+    ) -> None:
+        """Test execute_interactive() without command invokes shell."""
+        mock_client = MagicMock()
+        mock_ssh_client.return_value = mock_client
+        ssh_manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem")
+        ssh_manager.client = mock_client
+
+        mock_channel = MagicMock()
+        mock_client.invoke_shell.return_value = mock_channel
+
+        with patch.object(InteractiveSession, "run", return_value=0):
+            exit_code = ssh_manager.execute_interactive(None)
+
+        mock_client.invoke_shell.assert_called_once()
+        assert exit_code == 0
+
+    def test_execute_interactive_raises_error_without_connection(self) -> None:
+        """Test execute_interactive() raises RuntimeError if not connected."""
+        ssh_manager = SSHManager(host="203.0.113.1", key_file="/tmp/test.pem")
+
+        with pytest.raises(RuntimeError, match="SSH connection not established"):
+            ssh_manager.execute_interactive("bash")

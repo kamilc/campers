@@ -1,11 +1,17 @@
 """SSH connection and command execution management."""
 
+import contextlib
 import inspect
 import logging
 import os
 import re
+import select
 import shlex
+import signal
+import sys
+import termios
 import time
+import tty
 from dataclasses import dataclass
 
 import paramiko
@@ -23,6 +29,130 @@ from campers.constants import (
 from campers.providers import get_provider
 
 logger = logging.getLogger(__name__)
+
+
+def get_terminal_size() -> tuple[int, int]:
+    """Get current terminal dimensions (width, height).
+
+    Returns
+    -------
+    tuple[int, int]
+        Terminal width and height in characters
+    """
+    size = os.get_terminal_size()
+    return size.columns, size.lines
+
+
+class InteractiveSession:
+    """Manages an interactive SSH session with PTY.
+
+    Parameters
+    ----------
+    channel : Channel
+        SSH channel for the session
+
+    Attributes
+    ----------
+    _channel : Channel
+        SSH channel instance
+    _old_tty_attrs : list | None
+        Saved terminal attributes
+    _original_sigwinch : signal.Handlers | None
+        Original SIGWINCH handler
+    """
+
+    def __init__(self, channel: "Channel") -> None:
+        """Initialize interactive session with SSH channel.
+
+        Parameters
+        ----------
+        channel : Channel
+            SSH channel for interactive communication
+        """
+        self._channel = channel
+        self._old_tty_attrs: list | None = None
+        self._original_sigwinch = None
+
+    def _setup_terminal(self) -> None:
+        """Switch terminal to raw mode and save original attributes."""
+        self._old_tty_attrs = termios.tcgetattr(sys.stdin)
+        tty.setraw(sys.stdin.fileno())
+        tty.setcbreak(sys.stdin.fileno())
+
+    def _restore_terminal(self) -> None:
+        """Restore original terminal attributes."""
+        if self._old_tty_attrs is not None:
+            termios.tcsetattr(sys.stdin, termios.TCSAFLUSH, self._old_tty_attrs)
+
+    def _setup_sigwinch(self) -> None:
+        """Install SIGWINCH handler to forward terminal resize events."""
+        self._original_sigwinch = signal.signal(signal.SIGWINCH, self._handle_sigwinch)
+        self._resize_pty()
+
+    def _restore_sigwinch(self) -> None:
+        """Restore original SIGWINCH handler."""
+        if self._original_sigwinch is not None:
+            signal.signal(signal.SIGWINCH, self._original_sigwinch)
+
+    def _handle_sigwinch(self, signum: int, frame) -> None:
+        """Handle terminal resize signal.
+
+        Parameters
+        ----------
+        signum : int
+            Signal number (always SIGWINCH)
+        frame : types.FrameType
+            Stack frame
+        """
+        self._resize_pty()
+
+    def _resize_pty(self) -> None:
+        """Send current terminal size to remote PTY."""
+        width, height = get_terminal_size()
+        with contextlib.suppress(Exception):
+            self._channel.resize_pty(width=width, height=height)
+
+    def run(self) -> int:
+        """Run the interactive session, return exit code.
+
+        Returns
+        -------
+        int
+            Exit code from remote session
+
+        Raises
+        ------
+        KeyboardInterrupt
+            If user presses Ctrl+C
+        """
+        self._channel.settimeout(0.0)
+
+        try:
+            self._setup_terminal()
+            self._setup_sigwinch()
+
+            while True:
+                read_ready, _, _ = select.select([self._channel, sys.stdin], [], [])
+
+                if self._channel in read_ready:
+                    data = self._channel.recv(1024)
+                    if len(data) == 0:
+                        break
+                    sys.stdout.buffer.write(data)
+                    sys.stdout.flush()
+
+                if sys.stdin in read_ready:
+                    data = os.read(sys.stdin.fileno(), 1)
+                    if len(data) == 0:
+                        break
+                    self._channel.send(data)
+
+            self._channel.shutdown(2)
+            return self._channel.recv_exit_status()
+
+        finally:
+            self._restore_sigwinch()
+            self._restore_terminal()
 
 
 @dataclass
@@ -558,3 +688,37 @@ class SSHManager:
             logger.warning("Failed to close active SSH channel: %s", exc)
         finally:
             self._active_channel = None
+
+    def execute_interactive(self, command: str | None = None) -> int:
+        """Execute interactive session with PTY allocation.
+
+        Parameters
+        ----------
+        command : str | None
+            Command to execute. If None, opens a shell.
+
+        Returns
+        -------
+        int
+            Exit code from the remote session
+
+        Raises
+        ------
+        RuntimeError
+            If SSH connection is not established
+        """
+        if not self.client:
+            raise RuntimeError("SSH connection not established")
+
+        transport = self.client.get_transport()
+
+        if command:
+            channel = transport.open_session()
+            width, height = get_terminal_size()
+            channel.get_pty(width=width, height=height)
+            channel.exec_command(command)
+        else:
+            channel = self.client.invoke_shell()
+
+        session = InteractiveSession(channel)
+        return session.run()

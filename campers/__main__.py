@@ -470,6 +470,10 @@ class Campers:
         camp_or_instance: str,
         command: str,
         region: str | None = None,
+        i: bool = False,
+        t: bool = False,
+        interactive: bool = False,
+        tty: bool = False,
     ) -> int:
         """Execute a command on a running instance.
 
@@ -481,6 +485,14 @@ class Campers:
             Command to execute on the remote instance
         region : str | None
             Optional region to narrow AWS discovery scope
+        i : bool
+            Short flag for interactive mode (keep stdin open)
+        t : bool
+            Short flag for TTY allocation
+        interactive : bool
+            Long flag for interactive mode (keep stdin open)
+        tty : bool
+            Long flag for TTY allocation
 
         Returns
         -------
@@ -491,8 +503,31 @@ class Campers:
         ------
         SystemExit
             Exits with code 1 if instance not found, multiple instances found,
-            or instance is not in running state
+            instance is not in running state, or TTY requirements not met
         """
+        use_interactive = i or interactive
+        use_tty = t or tty
+
+        if use_interactive and not sys.stdin.isatty():
+            logging.error(
+                "Cannot use interactive mode: stdin is not a terminal",
+                extra={"stream": "stderr"},
+            )
+            sys.exit(1)
+
+        if use_tty and not sys.stdout.isatty():
+            logging.error(
+                "Cannot allocate TTY: stdout is not a terminal",
+                extra={"stream": "stderr"},
+            )
+            sys.exit(1)
+
+        if use_interactive and not use_tty:
+            logging.warning(
+                "Using -i without -t has no effect; use -it for interactive mode",
+                extra={"stream": "stderr"},
+            )
+
         default_region = self._config_loader.BUILT_IN_DEFAULTS["region"]
 
         if region is not None:
@@ -526,7 +561,10 @@ class Campers:
         ssh_manager.connect()
 
         try:
-            return ssh_manager.execute_command(command)
+            if use_tty:
+                return ssh_manager.execute_interactive(command)
+            else:
+                return ssh_manager.execute_command(command)
         finally:
             ssh_manager.close()
 

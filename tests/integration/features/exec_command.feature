@@ -55,3 +55,42 @@ Scenario: Region flag narrows discovery scope
   Given running instances exist for camp "dev" in multiple regions
   When I run campers exec "dev" with command "echo hello" and region "us-east-1"
   Then the command should execute successfully on the us-east-1 instance
+
+@error @localstack
+Scenario: Error when -t flag used without TTY stdout
+  Given a running instance exists for camp "dev"
+  And stdout is redirected to a file
+  When I run campers exec "dev" -t with command "echo hello"
+  Then the command should fail
+  And exec error message includes "stdout is not a terminal"
+
+@error @localstack
+Scenario: Error when -i flag used without TTY stdin
+  Given a running instance exists for camp "dev"
+  And stdin is redirected from a file
+  When I run campers exec "dev" -i with command "echo hello"
+  Then the command should fail
+  And exec error message includes "stdin is not a terminal"
+
+@smoke @localstack
+Scenario: Execute with -t flag allocates PTY
+  Given a running instance exists for camp "dev"
+  When I run campers exec "dev" -t with command "tty"
+  Then the command should execute successfully
+  And the exit code should be 0
+  And exec output contains "/dev/pts"
+
+@info @localstack
+Scenario: Warning when -i flag used without -t
+  Given a running instance exists for camp "dev"
+  When I run campers exec "dev" -i with command "echo hello"
+  Then the command should execute successfully
+  And the exit code should be 0
+  And exec output contains "hello"
+  And a warning was logged containing "Using -i without -t has no effect"
+
+@smoke @localstack
+Scenario: Interactive session respects exit code
+  Given a running instance exists for camp "dev"
+  When I run campers exec "dev" -it with command "exit 42"
+  Then the exit code should be 42

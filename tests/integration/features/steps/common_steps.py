@@ -219,11 +219,32 @@ def execute_command_direct(
             camp_or_instance = args["camp_or_instance"]
             exec_command = args["command"]
             exec_region = args.get("region")
-            context.exit_code = campers.exec(
-                camp_or_instance=camp_or_instance,
-                command=exec_command,
-                region=exec_region,
-            )
+            interactive = args.get("i", False)
+            tty = args.get("t", False)
+
+            def mock_isatty_with_redirects(fd: int) -> bool:
+                if fd == 0 and getattr(context, "redirect_stdin", False):
+                    return False
+                if fd == 1 and getattr(context, "redirect_stdout", False):
+                    return False
+                return os._original_isatty(fd)
+
+            old_isatty = os.isatty
+            os._original_isatty = old_isatty
+
+            try:
+                sys.stdin.isatty = lambda: not getattr(context, "redirect_stdin", False)
+                sys.stdout.isatty = lambda: not getattr(context, "redirect_stdout", False)
+
+                context.exit_code = campers.exec(
+                    camp_or_instance=camp_or_instance,
+                    command=exec_command,
+                    region=exec_region,
+                    i=interactive,
+                    t=tty,
+                )
+            finally:
+                pass
 
         else:
             raise ValueError(f"Unknown command: {command}")

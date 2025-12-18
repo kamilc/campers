@@ -251,10 +251,11 @@ def step_run_exec_command_with_region(
 
 
 @when('I run campers exec {camp_or_id_quoted} with command {command_quoted}')
+@when('I run campers exec {camp_or_id_quoted} {flags} with command {command_quoted}')
 def step_run_exec_command(
-    context: Context, camp_or_id_quoted: str, command_quoted: str
+    context: Context, camp_or_id_quoted: str, command_quoted: str, flags: str = None
 ) -> None:
-    """Run campers exec command with camp name or instance ID."""
+    """Run campers exec command with camp name or instance ID and optional flags."""
     camp_or_id = camp_or_id_quoted.strip('"')
     command = command_quoted.strip('"')
 
@@ -262,8 +263,16 @@ def step_run_exec_command(
     context.exec_camp_or_id = camp_or_id
     context.exec_command = command
 
+    if flags:
+        context.exec_flags = flags
+
     try:
         args = {"camp_or_instance": camp_or_id, "command": command}
+
+        if flags and "-t" in flags:
+            args["t"] = True
+        if flags and "-i" in flags:
+            args["i"] = True
 
         execute_command_direct(
             context,
@@ -336,3 +345,38 @@ def step_command_executes_on_region(context: Context, region: str) -> None:
     assert context.exit_code == 0, f"Expected exit code 0, got {context.exit_code}"
     assert hasattr(context, "exec_region")
     assert context.exec_region == region
+
+
+@given("stdout is redirected to a file")
+def step_stdout_redirected(context: Context) -> None:
+    """Mark context to simulate stdout redirection."""
+    if not hasattr(context, "temp_campers_dir"):
+        context.temp_campers_dir = TemporaryDirectory()
+
+    context.redirect_stdout = True
+    logger.info("Marked stdout as redirected")
+
+
+@given("stdin is redirected from a file")
+def step_stdin_redirected(context: Context) -> None:
+    """Mark context to simulate stdin redirection."""
+    if not hasattr(context, "temp_campers_dir"):
+        context.temp_campers_dir = TemporaryDirectory()
+
+    context.redirect_stdin = True
+    logger.info("Marked stdin as redirected")
+
+
+@then("a warning was logged containing {expected_msg_quoted}")
+def step_warning_was_logged(context: Context, expected_msg_quoted: str) -> None:
+    """Verify a warning message was logged."""
+    expected_msg = expected_msg_quoted.strip('"')
+
+    if not hasattr(context, "log_capture_handler"):
+        context.log_capture_handler = None
+
+    output = context.stdout + context.stderr
+
+    assert (
+        expected_msg in output
+    ), f"Expected warning '{expected_msg}' in output, got: {output}"
