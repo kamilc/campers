@@ -132,6 +132,68 @@ campers destroy <NAME_OR_ID> [--region REGION]
 *   **Use Case:** "Task complete. I don't need this environment or its data anymore."
 *   **Safety:** It asks for confirmation unless you pass `--force`.
 
+## exec
+
+Execute a command on a running instance without going through the full `campers run` lifecycle.
+
+```bash
+campers exec <CAMP_OR_INSTANCE> <COMMAND> [OPTIONS]
+```
+
+**Behavior:**
+
+Think of it like `docker exec`. When you have a camp running (via `campers run` in another terminal), you can open additional shells or run one-off commands without syncing files or re-provisioning.
+
+*   **Fast Path:** If `campers run` is active for this camp, exec uses cached connection info (~instant).
+*   **Slow Path:** If no active session, exec discovers the instance via AWS API (~2-5 seconds).
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-it` | Interactive mode with TTY allocation (like `docker exec -it`). |
+| `-i`, `--interactive` | Keep stdin open for interactive input. |
+| `-t`, `--tty` | Allocate a pseudo-terminal. |
+| `--region` | Narrow AWS discovery to a specific region. |
+
+### Examples
+
+**Run a one-off command:**
+
+```bash
+campers exec dev "ls -la"
+campers exec dev "python --version"
+```
+
+**Open an interactive shell:**
+
+```bash
+campers exec dev "/bin/bash" -it
+```
+
+**Debug a running process:**
+
+```bash
+campers exec dev "htop" -it
+campers exec dev "tail -f /var/log/app.log"
+```
+
+**Use instance ID directly:**
+
+```bash
+campers exec i-0abc123def456 "whoami"
+```
+
+### Use Cases
+
+*   **Quick debugging:** Check logs, inspect files, or run diagnostics without interrupting your main session.
+*   **Multiple terminals:** Open several shells to the same instance (one for logs, one for editing, one for running commands).
+*   **One-off commands:** Run a quick script or check status without the overhead of full provisioning.
+
+### Exit Codes
+
+The exit code from the remote command is propagated. If you run `campers exec dev "exit 42"`, campers exits with code 42.
+
 ## init
 
 Creates a `campers.yaml` starter file in the current directory.

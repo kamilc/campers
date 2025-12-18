@@ -63,6 +63,7 @@ Share running applications with clients by exposing ports publicly. Use `public_
 - **Public Port Exposure**: Open ports directly for external access - perfect for client demos.
 - **Ansible Integration**: Supports running Ansible playbooks to configure the instance on startup.
 - **Multi-User Support**: Teams sharing an AWS account get automatic instance isolation. Each instance is tagged with the owner's identity, and `campers list` shows only your instances by default.
+- **Docker-like Exec**: Run commands on running instances with `campers exec dev "command" -it` - no re-sync or re-provision needed.
 - **Cost Control:** Encourages an ephemeral workflow where instances are destroyed when not in use.
 - **TUI Dashboard**: A terminal interface to monitor logs, sync status, and instance health.
 
@@ -154,6 +155,12 @@ campers run training
 
 # Start a client demo (share the public IP with clients)
 campers run demo
+
+# Open another shell to a running camp (like docker exec)
+campers exec dev "/bin/bash" -it
+
+# Run a one-off command without interrupting your session
+campers exec dev "tail -f /var/log/app.log"
 
 # Check status of all your camps (showing estimated monthly costs)
 campers list
