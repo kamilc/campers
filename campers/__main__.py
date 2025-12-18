@@ -472,6 +472,7 @@ class Campers:
         region: str | None = None,
         i: bool = False,
         t: bool = False,
+        it: bool = False,
         interactive: bool = False,
         tty: bool = False,
     ) -> int:
@@ -489,6 +490,8 @@ class Campers:
             Short flag for interactive mode (keep stdin open)
         t : bool
             Short flag for TTY allocation
+        it : bool
+            Combined short flag for interactive mode with TTY (like docker exec -it)
         interactive : bool
             Long flag for interactive mode (keep stdin open)
         tty : bool
@@ -505,8 +508,8 @@ class Campers:
             Exits with code 1 if instance not found, multiple instances found,
             instance is not in running state, or TTY requirements not met
         """
-        use_interactive = i or interactive
-        use_tty = t or tty
+        use_interactive = i or it or interactive
+        use_tty = t or it or tty
 
         if use_interactive and not sys.stdin.isatty():
             logging.error(
