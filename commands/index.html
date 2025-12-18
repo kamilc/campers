@@ -1,0 +1,1625 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Remote development environments on the cloud">
+      
+      
+      
+      
+        <link rel="prev" href="../configuration/">
+      
+      
+        <link rel="next" href="../examples/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/campers.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Commands - Campers</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="teal">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#commands" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Campers" class="md-header__button md-logo" aria-label="Campers" data-md-component="logo">
+      
+  <img src="../assets/campers.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Campers
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Commands
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="teal"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="teal"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/kamilc/campers" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    kamilc/campers
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Campers" class="md-nav__button md-logo" aria-label="Campers" data-md-component="logo">
+      
+  <img src="../assets/campers.png" alt="logo">
+
+    </a>
+    Campers
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/kamilc/campers" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    kamilc/campers
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="run">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tui-terminal-user-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TUI (Terminal User Interface)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="list">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#options_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi-user-filtering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-User Filtering
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#json-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON Output
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        stop
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#destroy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        destroy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        exec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="exec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#options_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use Cases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit Codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#init" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#doctor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        doctor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#info" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        info
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#global-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Global Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exit-codes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit Codes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#no-default-vpc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No Default VPC
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#invalid-instance-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Invalid Instance Type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#insufficient-iam-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Insufficient IAM Permissions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#instance-quota-exceeded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instance Quota Exceeded
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#expired-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expired Credentials
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ssh-connectivity-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SSH Connectivity Issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="run">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tui-terminal-user-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TUI (Terminal User Interface)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="list">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#options_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi-user-filtering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-User Filtering
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#json-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON Output
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        stop
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#destroy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        destroy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        exec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="exec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#options_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use Cases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit Codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#init" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#doctor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        doctor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#info" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        info
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#global-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Global Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exit-codes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit Codes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#no-default-vpc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No Default VPC
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#invalid-instance-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Invalid Instance Type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#insufficient-iam-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Insufficient IAM Permissions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#instance-quota-exceeded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instance Quota Exceeded
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#expired-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expired Credentials
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ssh-connectivity-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SSH Connectivity Issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h1>
+<p>Complete reference for all Campers CLI commands.</p>
+<h2 id="run">run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
+<p>The primary command. It provisions, syncs, and connects you to the camp.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>campers<span class="w"> </span>run<span class="w"> </span><span class="o">[</span>CAMP_NAME<span class="o">]</span><span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</span></code></pre></div>
+<p><strong>Behavior:</strong>
+1.  <strong>Provision:</strong> If the instance doesn't exist, it creates it using the configuration (AMI, instance type).
+2.  <strong>Start:</strong> If the instance exists but is stopped, it starts it.
+3.  <strong>Sync:</strong> It establishes the <strong>Mutagen</strong> file sync session. This runs in the background.
+4.  <strong>Tunnel:</strong> It sets up SSH port forwarding for all ports defined in <code>campers.yml</code>.
+5.  <strong>Connect:</strong> It opens an interactive SSH shell (or runs the specified <code>--command</code>).</p>
+<h3 id="tui-terminal-user-interface">TUI (Terminal User Interface)<a class="headerlink" href="#tui-terminal-user-interface" title="Permanent link">&para;</a></h3>
+<p>By default, <code>run</code> opens a dashboard showing:
+- <strong>Sync Status:</strong> Real-time count of files synced.
+- <strong>Logs:</strong> Output from startup scripts and provisioning.
+- <strong>Instance Stats:</strong> IP address, region, uptime, and cost estimates.</p>
+<h3 id="options">Options<a class="headerlink" href="#options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CAMP_NAME</code></td>
+<td>Name of the camp in <code>campers.yml</code>. Defaults to <code>default</code> if omitted.</td>
+<td>Allows managing multiple environments (e.g., <code>dev</code>, <code>gpu</code>, <code>test</code>) from one config.</td>
+</tr>
+<tr>
+<td><code>-c</code>, <code>--command</code></td>
+<td>Command to execute instead of opening a shell.</td>
+<td>Useful for "fire and forget" tasks like <code>campers run training -c "python train.py"</code>.</td>
+</tr>
+<tr>
+<td><code>--instance-type</code></td>
+<td>Override EC2 instance type (e.g., <code>c6a.xlarge</code>).</td>
+<td>Quickly scale up without editing the config file.</td>
+</tr>
+<tr>
+<td><code>--disk-size</code></td>
+<td>Override root volume size (GB).</td>
+<td>Need more space for a specific dataset? Override it here.</td>
+</tr>
+<tr>
+<td><code>--region</code></td>
+<td>Override AWS region.</td>
+<td>Deploy closer to your data or where spot prices are lower.</td>
+</tr>
+<tr>
+<td><code>--port</code></td>
+<td>Additional port(s) to forward.</td>
+<td>Expose a new service (e.g., debug port) ad-hoc.</td>
+</tr>
+<tr>
+<td><code>--ignore</code></td>
+<td>Comma-separated patterns to exclude from sync (e.g., <code>"*.log,node_modules"</code>).</td>
+<td>Override config ignore patterns for this run.</td>
+</tr>
+<tr>
+<td><code>--plain</code></td>
+<td>Disable the TUI and use simple text output.</td>
+<td><strong>Critical for CI/CD.</strong> Use this when running in GitHub Actions or scripts.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="list">list<a class="headerlink" href="#list" title="Permanent link">&para;</a></h2>
+<p>Show instances managed by Campers across all regions.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>campers<span class="w"> </span>list<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</span></code></pre></div>
+<p><strong>Default behavior:</strong> Shows only your instances (filtered by your git email or username).</p>
+<p><strong>What it shows:</strong>
+- <strong>Name:</strong> Instance name derived from project/branch/camp.
+- <strong>Status:</strong> Running, Stopped, or Terminated.
+- <strong>Cost:</strong> Estimated monthly cost (Compute + Storage).
+- <strong>Region:</strong> Where the instance lives.</p>
+<h3 id="options_1">Options<a class="headerlink" href="#options_1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--all</code></td>
+<td>Show all Campers instances (all users). Adds an <strong>Owner</strong> column.</td>
+</tr>
+<tr>
+<td><code>--region</code></td>
+<td>Filter to a specific AWS region.</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>Output in JSON format for programmatic use.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="multi-user-filtering">Multi-User Filtering<a class="headerlink" href="#multi-user-filtering" title="Permanent link">&para;</a></h3>
+<p>By default, <code>campers list</code> shows only instances you own:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>$<span class="w"> </span>campers<span class="w"> </span>list
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Instances<span class="w"> </span><span class="k">for</span><span class="w"> </span>alice@example.com:
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>NAME<span class="w">          </span>INSTANCE-ID<span class="w">      </span>STATUS<span class="w">    </span>REGION<span class="w">       </span>COST/MONTH
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>mycamp<span class="w">        </span>i-0abc123def<span class="w">     </span>running<span class="w">   </span>us-east-1<span class="w">    </span><span class="nv">$30</span>.37/month
+</span></code></pre></div>
+<p>Use <code>--all</code> to see everyone's instances:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>$<span class="w"> </span>campers<span class="w"> </span>list<span class="w"> </span>--all
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>NAME<span class="w">          </span>INSTANCE-ID<span class="w">      </span>STATUS<span class="w">    </span>OWNER<span class="w">                </span>REGION<span class="w">       </span>COST/MONTH
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>mycamp<span class="w">        </span>i-0abc123def<span class="w">     </span>running<span class="w">   </span>alice@example.com<span class="w">    </span>us-east-1<span class="w">    </span><span class="nv">$30</span>.37/month
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>othercamp<span class="w">     </span>i-0def456abc<span class="w">     </span>stopped<span class="w">   </span>bob@example.com<span class="w">      </span>us-west-2<span class="w">    </span><span class="nv">$0</span>.00/month
+</span></code></pre></div>
+<h3 id="json-output">JSON Output<a class="headerlink" href="#json-output" title="Permanent link">&para;</a></h3>
+<p>The <code>--json</code> flag outputs structured data for scripting:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>campers<span class="w"> </span>list<span class="w"> </span>--json<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.[] | select(.state == &quot;running&quot;)&#39;</span>
+</span></code></pre></div>
+<h2 id="stop">stop<a class="headerlink" href="#stop" title="Permanent link">&para;</a></h2>
+<p>Stops the instance but <strong>preserves the disk</strong>.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>campers<span class="w"> </span>stop<span class="w"> </span>&lt;NAME_OR_ID&gt;<span class="w"> </span><span class="o">[</span>--region<span class="w"> </span>REGION<span class="o">]</span>
+</span></code></pre></div>
+<ul>
+<li><strong>Accepts:</strong> Instance name (e.g., <code>dev</code>) or instance ID (e.g., <code>i-0abc123def456</code>).</li>
+<li><strong>Cost:</strong> You stop paying for EC2 compute (hourly rate). You <strong>continue paying</strong> for EBS storage (~$0.08/GB/month).</li>
+<li><strong>Use Case:</strong> "I'm done for the day, but I want to resume exactly where I left off tomorrow."</li>
+<li><strong>Behind the Scenes:</strong> Calls AWS <code>StopInstances</code>. The IP address will change upon restart.</li>
+</ul>
+<p><strong>Cost Savings:</strong> After stopping, Campers shows your savings:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Savings: $29.95/month (~95% reduction)
+</span></code></pre></div>
+<h2 id="start">start<a class="headerlink" href="#start" title="Permanent link">&para;</a></h2>
+<p>Starts a previously stopped instance.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>campers<span class="w"> </span>start<span class="w"> </span>&lt;NAME_OR_ID&gt;<span class="w"> </span><span class="o">[</span>--region<span class="w"> </span>REGION<span class="o">]</span>
+</span></code></pre></div>
+<ul>
+<li><strong>Accepts:</strong> Instance name (e.g., <code>dev</code>) or instance ID (e.g., <code>i-0abc123def456</code>).</li>
+<li><strong>Use Case:</strong> Resuming work on a stopped camp.</li>
+<li><strong>Note:</strong> You usually don't need to run this manually. <code>campers run</code> automatically starts stopped instances.</li>
+</ul>
+<h2 id="destroy">destroy<a class="headerlink" href="#destroy" title="Permanent link">&para;</a></h2>
+<p>Terminates the instance and <strong>deletes the disk</strong>.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>campers<span class="w"> </span>destroy<span class="w"> </span>&lt;NAME_OR_ID&gt;<span class="w"> </span><span class="o">[</span>--region<span class="w"> </span>REGION<span class="o">]</span>
+</span></code></pre></div>
+<ul>
+<li><strong>Accepts:</strong> Instance name (e.g., <code>dev</code>) or instance ID (e.g., <code>i-0abc123def456</code>).</li>
+<li><strong>Cost:</strong> All billing stops immediately.</li>
+<li><strong>Use Case:</strong> "Task complete. I don't need this environment or its data anymore."</li>
+<li><strong>Safety:</strong> It asks for confirmation unless you pass <code>--force</code>.</li>
+</ul>
+<h2 id="exec">exec<a class="headerlink" href="#exec" title="Permanent link">&para;</a></h2>
+<p>Execute a command on a running instance without going through the full <code>campers run</code> lifecycle.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>campers<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>&lt;CAMP_OR_INSTANCE&gt;<span class="w"> </span>&lt;COMMAND&gt;<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</span></code></pre></div>
+<p><strong>Behavior:</strong></p>
+<p>Think of it like <code>docker exec</code>. When you have a camp running (via <code>campers run</code> in another terminal), you can open additional shells or run one-off commands without syncing files or re-provisioning.</p>
+<ul>
+<li><strong>Fast Path:</strong> If <code>campers run</code> is active for this camp, exec uses cached connection info (~instant).</li>
+<li><strong>Slow Path:</strong> If no active session, exec discovers the instance via AWS API (~2-5 seconds).</li>
+</ul>
+<h3 id="options_2">Options<a class="headerlink" href="#options_2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-it</code></td>
+<td>Interactive mode with TTY allocation (like <code>docker exec -it</code>).</td>
+</tr>
+<tr>
+<td><code>-i</code>, <code>--interactive</code></td>
+<td>Keep stdin open for interactive input.</td>
+</tr>
+<tr>
+<td><code>-t</code>, <code>--tty</code></td>
+<td>Allocate a pseudo-terminal.</td>
+</tr>
+<tr>
+<td><code>--region</code></td>
+<td>Narrow AWS discovery to a specific region.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h3>
+<p><strong>Run a one-off command:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>campers<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>dev<span class="w"> </span><span class="s2">&quot;ls -la&quot;</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>campers<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>dev<span class="w"> </span><span class="s2">&quot;python --version&quot;</span>
+</span></code></pre></div>
+<p><strong>Open an interactive shell:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>campers<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>dev<span class="w"> </span><span class="s2">&quot;/bin/bash&quot;</span><span class="w"> </span>-it
+</span></code></pre></div>
+<p><strong>Debug a running process:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>campers<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>dev<span class="w"> </span><span class="s2">&quot;htop&quot;</span><span class="w"> </span>-it
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>campers<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>dev<span class="w"> </span><span class="s2">&quot;tail -f /var/log/app.log&quot;</span>
+</span></code></pre></div>
+<p><strong>Use instance ID directly:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>campers<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>i-0abc123def456<span class="w"> </span><span class="s2">&quot;whoami&quot;</span>
+</span></code></pre></div>
+<h3 id="use-cases">Use Cases<a class="headerlink" href="#use-cases" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Quick debugging:</strong> Check logs, inspect files, or run diagnostics without interrupting your main session.</li>
+<li><strong>Multiple terminals:</strong> Open several shells to the same instance (one for logs, one for editing, one for running commands).</li>
+<li><strong>One-off commands:</strong> Run a quick script or check status without the overhead of full provisioning.</li>
+</ul>
+<h3 id="exit-codes">Exit Codes<a class="headerlink" href="#exit-codes" title="Permanent link">&para;</a></h3>
+<p>The exit code from the remote command is propagated. If you run <code>campers exec dev "exit 42"</code>, campers exits with code 42.</p>
+<h2 id="init">init<a class="headerlink" href="#init" title="Permanent link">&para;</a></h2>
+<p>Creates a <code>campers.yaml</code> starter file in the current directory.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>campers<span class="w"> </span>init
+</span></code></pre></div>
+<ul>
+<li><strong>Rationale:</strong> Gets you started with best-practice defaults (git ignore patterns, sensible instance types).</li>
+</ul>
+<h2 id="doctor">doctor<a class="headerlink" href="#doctor" title="Permanent link">&para;</a></h2>
+<p>Diagnose common issues.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>campers<span class="w"> </span>doctor
+</span></code></pre></div>
+<p><strong>Checks:</strong>
+1.  <strong>AWS Credentials:</strong> Can we talk to the AWS API?
+2.  <strong>IAM Permissions:</strong> Do we have rights to create instances/VPCs?
+3.  <strong>Mutagen:</strong> Is the sync tool installed and reachable?
+4.  <strong>Network:</strong> Can we reach the AWS endpoints?</p>
+<ul>
+<li><strong>Use Case:</strong> Run this first if <code>campers run</code> is failing mysteriously.</li>
+</ul>
+<h2 id="setup">setup<a class="headerlink" href="#setup" title="Permanent link">&para;</a></h2>
+<p>One-time setup helper for AWS account prerequisites.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>campers<span class="w"> </span>setup<span class="w"> </span>--region<span class="w"> </span>us-east-1
+</span></code></pre></div>
+<p><strong>What it does:</strong>
+1.  Creates a <strong>Default VPC</strong> if one is missing (Campers requires a VPC).
+2.  Creates/Verifies the <strong>Security Group</strong> allowing SSH access.</p>
+<ul>
+<li><strong>Rationale:</strong> Campers tries to be "zero-config," but AWS accounts (especially new ones) might lack basic networking. This command fixes that.</li>
+</ul>
+<h2 id="validate">validate<a class="headerlink" href="#validate" title="Permanent link">&para;</a></h2>
+<p>Validate your configuration file without running anything.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>campers<span class="w"> </span>validate<span class="w"> </span><span class="o">[</span>CAMP_NAME<span class="o">]</span>
+</span></code></pre></div>
+<p><strong>Behavior:</strong></p>
+<ul>
+<li>Without <code>CAMP_NAME</code>: Validates all camps in the config file.</li>
+<li>With <code>CAMP_NAME</code>: Validates only the specified camp.</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li><strong>CI/CD:</strong> Check config validity before deployment.</li>
+<li><strong>Debugging:</strong> Verify configuration changes before running.</li>
+</ul>
+<p><strong>Example:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>$<span class="w"> </span>campers<span class="w"> </span>validate
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>✓<span class="w"> </span>Configuration<span class="w"> </span>valid
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">  </span>Camps:<span class="w"> </span>dev,<span class="w"> </span>gpu,<span class="w"> </span>training
+</span></code></pre></div>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>$<span class="w"> </span>campers<span class="w"> </span>validate<span class="w"> </span>dev
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>✓<span class="w"> </span>Camp<span class="w"> </span><span class="s1">&#39;dev&#39;</span><span class="w"> </span>configuration<span class="w"> </span>valid
+</span></code></pre></div>
+<ul>
+<li><strong>Exit Codes:</strong> Returns <code>0</code> on success, <code>2</code> on configuration error.</li>
+</ul>
+<h2 id="info">info<a class="headerlink" href="#info" title="Permanent link">&para;</a></h2>
+<p>Display detailed information about a specific instance.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>campers<span class="w"> </span>info<span class="w"> </span>&lt;NAME_OR_ID&gt;<span class="w"> </span><span class="o">[</span>--region<span class="w"> </span>REGION<span class="o">]</span>
+</span></code></pre></div>
+<p><strong>Accepts:</strong> Instance name (e.g., <code>dev</code>) or instance ID (e.g., <code>i-0abc123def456</code>).</p>
+<p><strong>What it shows:</strong></p>
+<ul>
+<li>Instance ID, state, type, and region</li>
+<li>Launch time and uptime</li>
+<li>Key file path for SSH access</li>
+<li>Public ports with access URLs</li>
+</ul>
+<p><strong>Example:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>$<span class="w"> </span>campers<span class="w"> </span>info<span class="w"> </span>dev
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>Instance:<span class="w">    </span>i-0abc123def456
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>State:<span class="w">       </span>running
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>Type:<span class="w">        </span>t3.medium
+</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>Region:<span class="w">      </span>us-east-1
+</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>Launched:<span class="w">    </span><span class="m">2024</span>-01-15<span class="w"> </span><span class="m">10</span>:30:00
+</span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>Uptime:<span class="w">      </span>2h<span class="w"> </span>15m
+</span><span id="__span-21-8"><a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>Key<span class="w"> </span>File:<span class="w">    </span>~/.campers/keys/abc123.pem
+</span><span id="__span-21-9"><a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>
+</span><span id="__span-21-10"><a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a>Public<span class="w"> </span>Ports:
+</span><span id="__span-21-11"><a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a><span class="w">  </span>http://1.2.3.4:8888
+</span><span id="__span-21-12"><a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a><span class="w">  </span>https://1.2.3.4:443
+</span></code></pre></div>
+<ul>
+<li><strong>Use Case:</strong> Quick reference for SSH access or sharing URLs with teammates.</li>
+</ul>
+<h2 id="global-options">Global Options<a class="headerlink" href="#global-options" title="Permanent link">&para;</a></h2>
+<p>These options apply to most commands (especially <code>run</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-v</code>, <code>--verbose</code></td>
+<td>Enable verbose logging. <strong>Crucial for debugging</strong> provisioning scripts or connection issues.</td>
+</tr>
+<tr>
+<td><code>--plain</code></td>
+<td>Disable the TUI and use simple text output (ideal for CI/CD pipelines).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="exit-codes_1">Exit Codes<a class="headerlink" href="#exit-codes_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td>Success.</td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td>General error (AWS API failure, Network issue).</td>
+</tr>
+<tr>
+<td><code>2</code></td>
+<td>Configuration error (<code>campers.yml</code> is invalid).</td>
+</tr>
+<tr>
+<td><code>130</code></td>
+<td>User interrupted (Ctrl+C).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="no-default-vpc">No Default VPC<a class="headerlink" href="#no-default-vpc" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>No default VPC in us-east-1
+</span></code></pre></div>
+<p><strong>Fix:</strong> Run <code>campers setup</code> to create a default VPC, or manually:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>aws<span class="w"> </span>ec2<span class="w"> </span>create-default-vpc<span class="w"> </span>--region<span class="w"> </span>us-east-1
+</span></code></pre></div>
+<h3 id="invalid-instance-type">Invalid Instance Type<a class="headerlink" href="#invalid-instance-type" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>Invalid instance type
+</span></code></pre></div>
+<p><strong>Causes:</strong></p>
+<ul>
+<li>Instance type not available in this region</li>
+<li>Typo in instance type name</li>
+</ul>
+<p><strong>Fix:</strong> Check available instance types for your region or try a different region:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>campers<span class="w"> </span>run<span class="w"> </span>dev<span class="w"> </span>--instance-type<span class="w"> </span>t3.medium
+</span><span id="__span-25-2"><a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>campers<span class="w"> </span>run<span class="w"> </span>dev<span class="w"> </span>--region<span class="w"> </span>us-west-2
+</span></code></pre></div>
+<h3 id="insufficient-iam-permissions">Insufficient IAM Permissions<a class="headerlink" href="#insufficient-iam-permissions" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>Insufficient IAM permissions
+</span></code></pre></div>
+<p><strong>Required permissions:</strong></p>
+<ul>
+<li>Compute: <code>DescribeInstances</code>, <code>RunInstances</code>, <code>TerminateInstances</code>, <code>StartInstances</code>, <code>StopInstances</code></li>
+<li>VPC: <code>DescribeVpcs</code>, <code>CreateDefaultVpc</code></li>
+<li>Key Pairs: <code>CreateKeyPair</code>, <code>DeleteKeyPair</code>, <code>DescribeKeyPairs</code></li>
+<li>Security Groups: <code>CreateSecurityGroup</code>, <code>AuthorizeSecurityGroupIngress</code>, <code>DescribeSecurityGroups</code></li>
+</ul>
+<h3 id="instance-quota-exceeded">Instance Quota Exceeded<a class="headerlink" href="#instance-quota-exceeded" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>Instance quota exceeded
+</span></code></pre></div>
+<p><strong>Fix:</strong> Request a quota increase in the AWS console:</p>
+<p><a href="https://console.aws.amazon.com/servicequotas/">AWS Service Quotas Console</a></p>
+<p>Or terminate unused instances:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>campers<span class="w"> </span>list<span class="w"> </span>--all
+</span><span id="__span-28-2"><a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>campers<span class="w"> </span>destroy<span class="w"> </span>&lt;unused-instance&gt;
+</span></code></pre></div>
+<h3 id="expired-credentials">Expired Credentials<a class="headerlink" href="#expired-credentials" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>Cloud credentials have expired
+</span></code></pre></div>
+<p><strong>Fix:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>aws<span class="w"> </span>sso<span class="w"> </span>login<span class="w">           </span><span class="c1"># If using AWS SSO</span>
+</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>aws<span class="w"> </span>configure<span class="w">           </span><span class="c1"># Re-configure credentials</span>
+</span></code></pre></div>
+<h3 id="ssh-connectivity-issues">SSH Connectivity Issues<a class="headerlink" href="#ssh-connectivity-issues" title="Permanent link">&para;</a></h3>
+<p>If you can't connect to your instance:</p>
+<ol>
+<li><strong>Check instance state:</strong> Is it running? Use <code>campers info &lt;name&gt;</code>.</li>
+<li><strong>Check security group:</strong> SSH port 22 must be open.</li>
+<li><strong>Wait for startup:</strong> New instances take 1-2 minutes to initialize.</li>
+<li><strong>Network issues:</strong> Try a different region or check your firewall.</li>
+</ol>
+<p><strong>Debug with verbose mode:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>campers<span class="w"> </span>run<span class="w"> </span>dev<span class="w"> </span>-v
+</span></code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "content.code.copy", "content.code.select"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
