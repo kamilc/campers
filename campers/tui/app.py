@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container
-from textual.widgets import RichLog, Static
+from textual.widgets import Static
 
 from campers.constants import (
     CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS,
@@ -26,11 +26,12 @@ from campers.constants import (
 )
 from campers.logging import StreamFormatter, TuiLogHandler, TuiLogMessage
 from campers.providers.exceptions import ProviderCredentialsError
+from campers.tui import widgets
 from campers.tui.exit_modal import ExitModal
 from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.tui.styling import TUI_CSS
 from campers.tui.terminal import detect_terminal_background
-from campers.tui.widgets import WidgetID
+from campers.tui.widgets.selectable_log import SelectableLog
 
 if TYPE_CHECKING:
     from campers import Campers
@@ -101,7 +102,7 @@ class CampersTUI(App):
         self.worker_exit_code = 0
         self.instance_start_time: datetime | None = None
         self.last_ctrl_c_time: float = 0.0
-        self.log_widget: RichLog | None = None
+        self.log_widget: SelectableLog | None = None
         self.fatal_error_message: str | None = None
         self._running = True
         self._thread_id = threading.get_ident()
@@ -119,25 +120,25 @@ class CampersTUI(App):
         """
         with Container(id="status-panel"):
             yield InstanceOverviewWidget(self.campers)
-            yield Static("SSH: loading...", id=WidgetID.SSH)
-            yield Static("Status: launching...", id=WidgetID.STATUS)
-            yield Static("Uptime: 0s", id=WidgetID.UPTIME)
-            yield Static("Instance Type: loading...", id=WidgetID.INSTANCE_TYPE)
-            yield Static("Region: loading...", id=WidgetID.REGION)
-            yield Static("Camp Name: loading...", id=WidgetID.CAMP_NAME)
-            yield Static("Command: loading...", id=WidgetID.COMMAND)
-            yield Static("File sync: Not syncing", id=WidgetID.MUTAGEN)
-            yield Static("Port forwarding: none", id=WidgetID.PORTFORWARD)
-            yield Static("", id=WidgetID.PUBLIC_PORTS, classes="hidden")
+            yield Static("SSH: loading...", id=widgets.WidgetID.SSH)
+            yield Static("Status: launching...", id=widgets.WidgetID.STATUS)
+            yield Static("Uptime: 0s", id=widgets.WidgetID.UPTIME)
+            yield Static("Instance Type: loading...", id=widgets.WidgetID.INSTANCE_TYPE)
+            yield Static("Region: loading...", id=widgets.WidgetID.REGION)
+            yield Static("Camp Name: loading...", id=widgets.WidgetID.CAMP_NAME)
+            yield Static("Command: loading...", id=widgets.WidgetID.COMMAND)
+            yield Static("File sync: Not syncing", id=widgets.WidgetID.MUTAGEN)
+            yield Static("Port forwarding: none", id=widgets.WidgetID.PORTFORWARD)
+            yield Static("", id=widgets.WidgetID.PUBLIC_PORTS, classes="hidden")
         with Container(id="log-panel"):
-            yield RichLog(markup=True)
+            yield SelectableLog()
 
     def on_mount(self) -> None:
         """Handle mount event - setup logging, start worker, and timer."""
         root_logger = logging.getLogger()
         self.original_handlers = root_logger.handlers[:]
 
-        log_widget = self.query_one(RichLog)
+        log_widget = self.query_one(SelectableLog)
         self.log_widget = log_widget
         tui_handler = TuiLogHandler(self, log_widget)
         tui_handler.setFormatter(StreamFormatter("%(message)s"))
@@ -232,7 +233,7 @@ class CampersTUI(App):
             uptime_str = f"{seconds}s"
 
         try:
-            self.query_one(f"#{WidgetID.UPTIME}").update(f"Uptime: {uptime_str}")
+            self.query_one(f"#{widgets.WidgetID.UPTIME}").update(f"Uptime: {uptime_str}")
         except (ValueError, AttributeError) as e:
             logging.error("Failed to update uptime widget: %s", e)
 
@@ -248,7 +249,7 @@ class CampersTUI(App):
             status = payload["status"]
 
             try:
-                self.query_one(f"#{WidgetID.STATUS}").update(f"Status: {status}")
+                self.query_one(f"#{widgets.WidgetID.STATUS}").update(f"Status: {status}")
             except (ValueError, AttributeError) as e:
                 logging.error("Failed to update status widget: %s", e)
 
@@ -279,7 +280,7 @@ class CampersTUI(App):
                 display_text = f"File sync: {state}"
 
         try:
-            self.query_one(f"#{WidgetID.MUTAGEN}").update(display_text)
+            self.query_one(f"#{widgets.WidgetID.MUTAGEN}").update(display_text)
         except (ValueError, AttributeError) as e:
             logging.error("Failed to update mutagen widget: %s", e)
 
@@ -306,7 +307,7 @@ class CampersTUI(App):
             text = "Port forwarding: none"
 
         try:
-            self.query_one(f"#{WidgetID.PORTFORWARD}").update(text)
+            self.query_one(f"#{widgets.WidgetID.PORTFORWARD}").update(text)
         except (ValueError, AttributeError) as e:
             logging.error("Failed to update portforward widget: %s", e)
 
@@ -334,7 +335,7 @@ class CampersTUI(App):
 
         if "instance_type" in config:
             try:
-                self.query_one(f"#{WidgetID.INSTANCE_TYPE}").update(
+                self.query_one(f"#{widgets.WidgetID.INSTANCE_TYPE}").update(
                     f"Instance Type: {config['instance_type']}"
                 )
             except (ValueError, AttributeError, RuntimeError) as e:
@@ -342,26 +343,27 @@ class CampersTUI(App):
 
         if "region" in config:
             try:
-                self.query_one(f"#{WidgetID.REGION}").update(f"Region: {config['region']}")
+                self.query_one(f"#{widgets.WidgetID.REGION}").update(f"Region: {config['region']}")
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update region widget: %s", e)
 
         camp_name = config.get("camp_name", "ad-hoc")
 
         try:
-            self.query_one(f"#{WidgetID.CAMP_NAME}").update(f"Camp Name: {camp_name}")
+            self.query_one(f"#{widgets.WidgetID.CAMP_NAME}").update(f"Camp Name: {camp_name}")
         except (ValueError, AttributeError, RuntimeError) as e:
             logging.error("Failed to update camp name widget: %s", e)
 
         if "command" in config:
             try:
-                self.query_one(f"#{WidgetID.COMMAND}").update(f"Command: {config['command']}")
+                cmd = config["command"]
+                self.query_one(f"#{widgets.WidgetID.COMMAND}").update(f"Command: {cmd}")
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update command widget: %s", e)
 
         public_ports = config.get("public_ports", [])
         try:
-            public_ports_widget = self.query_one(f"#{WidgetID.PUBLIC_PORTS}")
+            public_ports_widget = self.query_one(f"#{widgets.WidgetID.PUBLIC_PORTS}")
             if public_ports:
                 instance_details = self.campers._resources.get("instance_details", {})
                 public_ip = instance_details.get("public_ip")
@@ -388,7 +390,7 @@ class CampersTUI(App):
         """
         if "state" in details:
             try:
-                self.query_one(f"#{WidgetID.STATUS}").update(f"Status: {details['state']}")
+                self.query_one(f"#{widgets.WidgetID.STATUS}").update(f"Status: {details['state']}")
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update status widget: %s", e)
 
@@ -404,7 +406,7 @@ class CampersTUI(App):
                 ssh_username = details.get("ssh_username", DEFAULT_SSH_USERNAME)
                 key_file = details.get("key_file", "key.pem")
                 ssh_string = f"ssh -o IdentitiesOnly=yes -i {key_file} {ssh_username}@{public_ip}"
-                self.query_one(f"#{WidgetID.SSH}").update(f"SSH: {ssh_string}")
+                self.query_one(f"#{widgets.WidgetID.SSH}").update(f"SSH: {ssh_string}")
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update SSH widget: %s", e)
 
@@ -416,7 +418,7 @@ class CampersTUI(App):
                         protocol = "https" if port == 443 else "http"
                         urls.append(f"{protocol}://{public_ip}:{port}")
                     public_ports_text = f"Public IP: {public_ip} | URLs: " + ", ".join(urls)
-                    public_ports_widget = self.query_one(f"#{WidgetID.PUBLIC_PORTS}")
+                    public_ports_widget = self.query_one(f"#{widgets.WidgetID.PUBLIC_PORTS}")
                     public_ports_widget.update(public_ports_text)
                     public_ports_widget.remove_class("hidden")
                 except (ValueError, AttributeError, RuntimeError) as e:
@@ -579,7 +581,7 @@ class CampersTUI(App):
                 and (current_time - self.last_ctrl_c_time) < CTRL_C_DOUBLE_PRESS_THRESHOLD_SECONDS
             ):
                 try:
-                    log_widget = self.query_one(RichLog)
+                    log_widget = self.query_one(SelectableLog)
                     log_widget.write("[red]Force exit - skipping cleanup![/red]")
                 except (ValueError, AttributeError, RuntimeError) as e:
                     logger.debug("Failed to write to log widget during force exit: %s", e)
@@ -647,12 +649,12 @@ class CampersTUI(App):
             self._selected_exit_action = action
 
             try:
-                self.query_one(f"#{WidgetID.STATUS}").update("Status: shutting down")
+                self.query_one(f"#{widgets.WidgetID.STATUS}").update("Status: shutting down")
             except (ValueError, AttributeError, RuntimeError) as e:
                 logger.debug("Failed to update status widget during quit: %s", e)
 
             try:
-                log_widget = self.query_one(RichLog)
+                log_widget = self.query_one(SelectableLog)
                 msg = "Graceful shutdown initiated (press Ctrl+C again to force exit)"
                 log_widget.write(msg)
             except (ValueError, AttributeError, RuntimeError) as e:
