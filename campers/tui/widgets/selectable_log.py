@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import re
+from dataclasses import dataclass
 from typing import ClassVar
 
 from rich.style import Style
 from rich.text import Text
-from textual.geometry import Offset, Size
+from textual.geometry import Offset, Region, Size, Spacing
 from textual.scroll_view import ScrollView
 from textual.strip import Strip
 
@@ -16,12 +18,32 @@ from campers.tui.widgets.selection import Selection
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class SearchMatch:
+    """Represents a single search match in the log.
+
+    Parameters
+    ----------
+    line : int
+        Line index of the match
+    start : int
+        Starting column of the match
+    end : int
+        Ending column of the match
+    """
+
+    line: int
+    start: int
+    end: int
+
+
 class SelectableLog(ScrollView, can_focus=True):
-    """A scrollable log widget with text selection and clipboard support.
+    """A scrollable log widget with text selection, clipboard, and search support.
 
     This widget displays log content and allows users to select text with
     the mouse and copy it to the clipboard. It sanitizes ANSI escape codes
-    while preserving color information.
+    while preserving color information. It also supports vim-like search
+    with match highlighting and navigation.
 
     Parameters
     ----------
@@ -38,14 +60,28 @@ class SelectableLog(ScrollView, can_focus=True):
         Maximum number of lines to store in buffer
     selection : Selection | None
         Current text selection, or None if no selection
+    search_query : str | None
+        Current search query, or None if no search active
+    search_matches : list[SearchMatch]
+        List of all search matches found
+    current_match_index : int
+        Index of current match in matches list
     """
 
     BINDINGS: ClassVar = [
         ("ctrl+c", "copy", "Copy"),
         ("ctrl+a", "select_all", "Select All"),
+        ("slash", "open_search", "Search"),
+        ("ctrl+f", "open_search", "Search"),
+        ("n", "next_match", "Next Match"),
+        ("N", "previous_match", "Previous Match"),
+        ("f3", "next_match", "Next Match"),
+        ("shift+f3", "previous_match", "Previous Match"),
     ]
 
     SELECTION_STYLE: ClassVar = Style(bgcolor="blue", color="white")
+    MATCH_STYLE: ClassVar = Style(bgcolor="yellow", color="black")
+    CURRENT_MATCH_STYLE: ClassVar = Style(bgcolor="#ff8c00", color="black", bold=True)
 
     def __init__(self, max_lines: int = 5000, **kwargs) -> None:
         """Initialize SelectableLog widget.
@@ -62,6 +98,9 @@ class SelectableLog(ScrollView, can_focus=True):
         self.max_lines = max_lines
         self.selection: Selection | None = None
         self._selecting = False
+        self.search_query: str | None = None
+        self.search_matches: list[SearchMatch] = []
+        self.current_match_index: int = 0
 
     def write(self, content: str | Text) -> None:
         """Write content to the log widget.
@@ -92,8 +131,9 @@ class SelectableLog(ScrollView, can_focus=True):
     def render_line(self, y: int) -> Strip:
         """Render a single line of the log.
 
-        Accounts for scroll offset and applies selection styling if the line
-        contains selected content.
+        Accounts for scroll offset and applies match and selection styling.
+        Match highlighting is applied first, then selection highlighting takes
+        precedence where they overlap.
 
         Parameters
         ----------
@@ -112,6 +152,16 @@ class SelectableLog(ScrollView, can_focus=True):
             return Strip([])
 
         line = self.lines[line_index].copy()
+
+        if self.search_matches:
+            for i, match in enumerate(self.search_matches):
+                if match.line == line_index:
+                    style = (
+                        self.CURRENT_MATCH_STYLE
+                        if i == self.current_match_index
+                        else self.MATCH_STYLE
+                    )
+                    line.stylize(style, match.start, match.end)
 
         if self.selection:
             start, end = self.selection.normalized
@@ -280,6 +330,126 @@ class SelectableLog(ScrollView, can_focus=True):
         last_line = len(self.lines) - 1
         last_col = len(self.lines[last_line].plain)
         self.selection = Selection(start=(0, 0), end=(last_line, last_col))
+        self.refresh()
+
+    def action_open_search(self) -> None:
+        """Open the search input widget.
+
+        Shows the SearchInput widget and focuses it for user input.
+        """
+        from campers.tui.widgets.search_input import SearchInput
+
+        search_input = self.app.query_one(SearchInput)
+        search_input.show()
+
+    def find_matches(self, query: str) -> list[SearchMatch]:
+        """Find all matches of query in the log content.
+
+        Performs case-insensitive search treating the query as literal text.
+        Matches are returned with their line and column positions.
+
+        Parameters
+        ----------
+        query : str
+            Search query (treated as literal text, not regex)
+
+        Returns
+        -------
+        list[SearchMatch]
+            List of SearchMatch objects with positions
+        """
+        if not query:
+            return []
+
+        matches = []
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+
+        for line_idx, line in enumerate(self.lines):
+            for match in pattern.finditer(line.plain):
+                matches.append(SearchMatch(line=line_idx, start=match.start(), end=match.end()))
+
+        return matches
+
+    def start_search(self, query: str) -> None:
+        """Start a new search with the given query.
+
+        Updates search state, finds matches, resets current match index to 0,
+        and scrolls to the first match if any are found.
+
+        Parameters
+        ----------
+        query : str
+            Search query text
+        """
+        self.search_query = query
+        self.search_matches = self.find_matches(query)
+        self.current_match_index = 0 if self.search_matches else -1
+
+        if self.search_matches:
+            self._scroll_to_current_match()
+
+        self.refresh()
+
+    def action_next_match(self) -> None:
+        """Navigate to the next search match.
+
+        Advances current_match_index and wraps around when reaching the end.
+        Does nothing if no matches are found.
+        """
+        if not self.search_matches:
+            return
+        self.current_match_index = (self.current_match_index + 1) % len(self.search_matches)
+        self._scroll_to_current_match()
+        self._notify_match_count_update()
+        self.refresh()
+
+    def action_previous_match(self) -> None:
+        """Navigate to the previous search match.
+
+        Decrements current_match_index and wraps around when reaching the start.
+        Does nothing if no matches are found.
+        """
+        if not self.search_matches:
+            return
+        self.current_match_index = (self.current_match_index - 1) % len(self.search_matches)
+        self._scroll_to_current_match()
+        self._notify_match_count_update()
+        self.refresh()
+
+    def _notify_match_count_update(self) -> None:
+        """Update the match count display in SearchInput widget.
+
+        Safely queries for SearchInput and updates match count if available.
+        """
+        try:
+            from campers.tui.widgets.search_input import SearchInput
+
+            search_input = self.app.query_one(SearchInput)
+            search_input.update_match_count(self.current_match_index, len(self.search_matches))
+        except Exception:
+            logger.debug("SearchInput not available for match count update")
+
+    def _scroll_to_current_match(self) -> None:
+        """Scroll the view to show the current match.
+
+        Uses scroll_to_region with padding to center the match in the viewport.
+        Does nothing if there are no matches or current_match_index is invalid.
+        """
+        if not self.search_matches or self.current_match_index < 0:
+            return
+        match = self.search_matches[self.current_match_index]
+        region = Region(x=match.start, y=match.line, width=match.end - match.start, height=1)
+        self.scroll_to_region(region, spacing=Spacing(top=3, bottom=3))
+
+    def clear_search(self) -> None:
+        """Clear all search state.
+
+        Resets search_query, search_matches, and current_match_index.
+        Triggers a refresh to remove highlighting.
+        """
+        self.search_query = None
+        self.search_matches = []
+        self.current_match_index = 0
         self.refresh()
 
     def clear(self) -> None:

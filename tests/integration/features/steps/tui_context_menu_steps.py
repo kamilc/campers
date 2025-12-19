@@ -298,6 +298,11 @@ def step_user_activates_menu_item(context: Context, item: str) -> None:
 
     if item == "Search":
         context.context_menu_search_posted = True
+        from tests.integration.features.steps.tui_vim_search_steps import MockSearchInput
+        if not hasattr(context, "search_input"):
+            context.search_input = MockSearchInput()
+        context.search_input.visible = True
+        context.search_input.has_focus = True
 
     context.context_menu.activate_item(index)
 

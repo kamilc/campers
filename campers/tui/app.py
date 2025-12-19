@@ -32,6 +32,7 @@ from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.tui.styling import TUI_CSS
 from campers.tui.terminal import detect_terminal_background
 from campers.tui.widgets.context_menu import ContextMenu
+from campers.tui.widgets.search_input import SearchClosed, SearchInput, SearchQueryChanged
 from campers.tui.widgets.selectable_log import SelectableLog
 
 if TYPE_CHECKING:
@@ -117,7 +118,7 @@ class CampersTUI(App):
         Container
             Status panel container with static widgets
         Container
-            Log panel container with log widget
+            Log panel container with log widget and search input
         ContextMenu
             Context menu for SelectableLog actions
         """
@@ -135,6 +136,7 @@ class CampersTUI(App):
             yield Static("", id=widgets.WidgetID.PUBLIC_PORTS, classes="hidden")
         with Container(id="log-panel"):
             yield SelectableLog()
+            yield SearchInput()
         yield ContextMenu()
 
     def on_mount(self) -> None:
@@ -195,9 +197,47 @@ class CampersTUI(App):
         if message.action == "copy" and hasattr(target, "action_copy"):
             target.action_copy()
         elif message.action == "search":
-            pass
+            search_input = self.query_one(SearchInput)
+            search_input.show()
         elif message.action == "clear" and hasattr(target, "clear"):
             target.clear()
+
+    async def on_search_query_changed(self, message: SearchQueryChanged) -> None:
+        """Handle search query change.
+
+        Updates the log widget with the new search results and updates
+        the match count display.
+
+        Parameters
+        ----------
+        message : SearchQueryChanged
+            Message containing the new search query
+        """
+        log_widget = self.query_one(SelectableLog)
+        log_widget.start_search(message.query)
+
+        search_input = self.query_one(SearchInput)
+        search_input.update_match_count(
+            log_widget.current_match_index, len(log_widget.search_matches)
+        )
+
+    async def on_search_closed(self, message: SearchClosed) -> None:
+        """Handle search input closed.
+
+        Clears search if keep_matches is False, otherwise preserves matches
+        for continued navigation. Returns focus to the log widget.
+
+        Parameters
+        ----------
+        message : SearchClosed
+            Message indicating whether to keep matches
+        """
+        log_widget = self.query_one(SelectableLog)
+
+        if not message.keep_matches:
+            log_widget.clear_search()
+
+        log_widget.focus()
 
     def check_for_updates(self) -> None:
         """Check queue for updates and update widgets accordingly.

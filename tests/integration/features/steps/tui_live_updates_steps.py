@@ -253,6 +253,47 @@ def step_user_presses_key(context: Context, key: str) -> None:
     """
     context.key_pressed = key
 
+    if key == "/":
+        if not hasattr(context, "search_input"):
+            from tests.integration.features.steps.tui_vim_search_steps import MockSearchInput
+            context.search_input = MockSearchInput()
+        context.search_input.visible = True
+        context.search_input.has_focus = True
+    elif key == "n" and hasattr(context, "selectable_log"):
+        context.selectable_log.next_match()
+    elif key == "N" and hasattr(context, "selectable_log"):
+        context.selectable_log.previous_match()
+    elif key == "F3" and hasattr(context, "selectable_log"):
+        context.selectable_log.next_match()
+    elif key == "Shift+F3" and hasattr(context, "selectable_log"):
+        context.selectable_log.previous_match()
+    elif key == "Escape":
+        if hasattr(context, "search_input"):
+            context.search_input.visible = False
+        if hasattr(context, "selectable_log"):
+            context.selectable_log.highlighting_cleared = True
+            context.selectable_log.search_matches = []
+        if hasattr(context, "context_menu"):
+            context.context_menu.hide()
+            context.escape_pressed = True
+    elif key == "Enter":
+        if hasattr(context, "search_input"):
+            context.search_input.visible = False
+        if hasattr(context, "context_menu"):
+            item_index = context.context_menu.highlighted_index
+            item_name = context.context_menu.items[item_index]
+            if item_name not in context.context_menu.disabled_items:
+                if item_name == "Clear" and hasattr(context, "selectable_log"):
+                    context.selectable_log.clear()
+                elif item_name == "Copy" and hasattr(context, "selectable_log"):
+                    context.selectable_log.copy_to_clipboard()
+    elif key == "Ctrl+F":
+        if not hasattr(context, "search_input"):
+            from tests.integration.features.steps.tui_vim_search_steps import MockSearchInput
+            context.search_input = MockSearchInput()
+        context.search_input.visible = True
+        context.search_input.has_focus = True
+
 
 @then("graceful shutdown is initiated")
 def step_graceful_shutdown_initiated(context: Context) -> None:

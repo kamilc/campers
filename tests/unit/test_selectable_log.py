@@ -234,3 +234,107 @@ class TestSelectableLogEmptyOperations:
         start, end = selection.normalized
         assert start == (0, 0)
         assert end == (1, 5)
+
+
+class TestSelectableLogSearch:
+    """Tests for search functionality in SelectableLog."""
+
+    def test_find_matches_empty_query(self) -> None:
+        """Test find_matches returns empty list for empty query."""
+        log = SelectableLog()
+        log.write("error line")
+        matches = log.find_matches("")
+        assert matches == []
+
+    def test_find_matches_no_matches(self) -> None:
+        """Test find_matches returns empty list when query not found."""
+        log = SelectableLog()
+        log.write("warning line")
+        matches = log.find_matches("error")
+        assert matches == []
+
+    def test_find_matches_single_match(self) -> None:
+        """Test find_matches finds one occurrence."""
+        log = SelectableLog()
+        log.write("error line")
+        matches = log.find_matches("error")
+        assert len(matches) == 1
+        assert matches[0].line == 0
+        assert matches[0].start == 0
+        assert matches[0].end == 5
+
+    def test_find_matches_multiple_matches(self) -> None:
+        """Test find_matches finds all occurrences."""
+        log = SelectableLog()
+        log.write("error\nerror\nerror")
+        matches = log.find_matches("error")
+        assert len(matches) == 3
+        assert all(m.line >= 0 for m in matches)
+        assert all(m.start == 0 for m in matches)
+        assert all(m.end == 5 for m in matches)
+
+    def test_find_matches_case_insensitive(self) -> None:
+        """Test find_matches is case-insensitive."""
+        log = SelectableLog()
+        log.write("error\nError\nERROR")
+        matches = log.find_matches("error")
+        assert len(matches) == 3
+
+    def test_find_matches_special_characters(self) -> None:
+        """Test find_matches treats special characters literally."""
+        log = SelectableLog()
+        log.write("test [a-z]+ pattern")
+        matches = log.find_matches("[a-z]+")
+        assert len(matches) == 1
+        assert matches[0].start == 5
+        assert matches[0].end == 11
+
+    def test_start_search_initializes_state(self) -> None:
+        """Test start_search initializes search state."""
+        log = SelectableLog()
+        log.write("error\nerror\nerror")
+        log.start_search("error")
+        assert log.search_query == "error"
+        assert len(log.search_matches) == 3
+        assert log.current_match_index == 0
+
+    def test_start_search_empty_query(self) -> None:
+        """Test start_search handles empty query gracefully."""
+        log = SelectableLog()
+        log.write("error line")
+        log.start_search("")
+        assert log.search_query == ""
+        assert log.search_matches == []
+        assert log.current_match_index == -1
+
+    def test_action_next_match_wraps_around(self) -> None:
+        """Test action_next_match navigation wraps from last to first."""
+        log = SelectableLog()
+        log.write("error\nerror")
+        log.start_search("error")
+        assert log.current_match_index == 0
+        log.action_next_match()
+        assert log.current_match_index == 1
+        log.action_next_match()
+        assert log.current_match_index == 0
+
+    def test_action_previous_match_wraps_around(self) -> None:
+        """Test action_previous_match navigation wraps from first to last."""
+        log = SelectableLog()
+        log.write("error\nerror")
+        log.start_search("error")
+        assert log.current_match_index == 0
+        log.action_previous_match()
+        assert log.current_match_index == 1
+        log.action_previous_match()
+        assert log.current_match_index == 0
+
+    def test_clear_search_resets_state(self) -> None:
+        """Test clear_search resets all search state."""
+        log = SelectableLog()
+        log.write("error\nerror")
+        log.start_search("error")
+        log.clear_search()
+        assert log.search_query is None
+        assert log.search_matches == []
+        assert log.current_match_index == 0
