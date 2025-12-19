@@ -31,6 +31,7 @@ from campers.tui.exit_modal import ExitModal
 from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.tui.styling import TUI_CSS
 from campers.tui.terminal import detect_terminal_background
+from campers.tui.widgets.context_menu import ContextMenu
 from campers.tui.widgets.selectable_log import SelectableLog
 
 if TYPE_CHECKING:
@@ -117,6 +118,8 @@ class CampersTUI(App):
             Status panel container with static widgets
         Container
             Log panel container with log widget
+        ContextMenu
+            Context menu for SelectableLog actions
         """
         with Container(id="status-panel"):
             yield InstanceOverviewWidget(self.campers)
@@ -132,6 +135,7 @@ class CampersTUI(App):
             yield Static("", id=widgets.WidgetID.PUBLIC_PORTS, classes="hidden")
         with Container(id="log-panel"):
             yield SelectableLog()
+        yield ContextMenu()
 
     def on_mount(self) -> None:
         """Handle mount event - setup logging, start worker, and timer."""
@@ -176,6 +180,24 @@ class CampersTUI(App):
             return
 
         self.log_widget.write(message.text)
+
+    async def on_context_menu_item_selected(self, message: ContextMenu.ItemSelected) -> None:
+        """Handle context menu item selection.
+
+        Parameters
+        ----------
+        message : ContextMenu.ItemSelected
+            Message containing the selected action
+        """
+        menu = self.query_one(ContextMenu)
+        target = menu._target_widget
+
+        if message.action == "copy" and hasattr(target, "action_copy"):
+            target.action_copy()
+        elif message.action == "search":
+            pass
+        elif message.action == "clear" and hasattr(target, "clear"):
+            target.clear()
 
     def check_for_updates(self) -> None:
         """Check queue for updates and update widgets accordingly.

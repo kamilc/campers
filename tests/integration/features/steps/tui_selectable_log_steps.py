@@ -83,7 +83,7 @@ def step_create_selectable_log(context: Context, max_lines: int) -> None:
     context.selectable_log = MockSelectableLog(max_lines=max_lines)
 
 
-@given("a SelectableLog widget with content \"{content}\" on line {line_num:d}")
+@given('a SelectableLog widget with content "{content}" on line {line_num:d}')
 def step_selectable_log_with_content(context: Context, content: str, line_num: int) -> None:
     """Create a SelectableLog widget with specific content.
 
@@ -103,7 +103,7 @@ def step_selectable_log_with_content(context: Context, content: str, line_num: i
     context.selectable_log.has_focus = True
 
 
-@given("a SelectableLog widget with content \"{content}\"")
+@given('a SelectableLog widget with content "{content}"')
 def step_selectable_log_with_content_simple(context: Context, content: str) -> None:
     """Create a SelectableLog widget with specific content (simple variant).
 
@@ -134,7 +134,7 @@ def step_widget_has_focus(context: Context) -> None:
         context.selectable_log.has_focus = True
 
 
-@given("a SelectableLog widget with selected text \"{text}\"")
+@given('a SelectableLog widget with selected text "{text}"')
 def step_selectable_log_with_selection(context: Context, text: str) -> None:
     """Create a SelectableLog with specific text selected.
 
@@ -195,7 +195,7 @@ def step_widget_scrolled_to_top(context: Context) -> None:
         context.selectable_log.scroll_position = 0
 
 
-@when("text content \"{content}\" is written")
+@when('text content "{content}" is written')
 def step_write_text_content(context: Context, content: str) -> None:
     """Write text content to SelectableLog.
 
@@ -209,7 +209,7 @@ def step_write_text_content(context: Context, content: str) -> None:
     context.selectable_log.write(content)
 
 
-@when("ANSI colored text \"{content}\" is written")
+@when('ANSI colored text "{content}" is written')
 def step_write_ansi_colored_text(context: Context, content: str) -> None:
     """Write ANSI colored text to SelectableLog.
 
@@ -225,7 +225,7 @@ def step_write_ansi_colored_text(context: Context, content: str) -> None:
     context.last_written_content = decoded_content
 
 
-@when("ANSI control sequence \"{sequence}\" is written")
+@when('ANSI control sequence "{sequence}" is written')
 def step_write_ansi_control_sequence(context: Context, sequence: str) -> None:
     """Write ANSI control sequence to SelectableLog.
 
@@ -330,7 +330,7 @@ def step_new_content_written(context: Context) -> None:
     context.selectable_log.write("New log line")
 
 
-@when("log message \"{message}\" is emitted")
+@when('log message "{message}" is emitted')
 def step_log_message_emitted(context: Context, message: str) -> None:
     """Emit a log message to be captured by TUI.
 
@@ -346,7 +346,7 @@ def step_log_message_emitted(context: Context, message: str) -> None:
         context.tui_log_widget.write(message)
 
 
-@then("the widget displays \"{content}\"")
+@then('the widget displays "{content}"')
 def step_widget_displays_content(context: Context, content: str) -> None:
     """Verify widget displays expected content.
 
@@ -538,7 +538,7 @@ def step_text_copied_to_clipboard(context: Context) -> None:
     assert context.selectable_log.clipboard_content is not None, "Clipboard is empty"
 
 
-@then("notification \"{notification}\" is shown")
+@then('notification "{notification}" is shown')
 def step_notification_shown(context: Context, notification: str) -> None:
     """Verify notification is displayed.
 

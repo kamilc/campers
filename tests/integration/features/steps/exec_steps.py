@@ -179,7 +179,7 @@ def step_multiple_instances_for_camp(context: Context, camp_name_quoted: str) ->
             "camp_config": camp_name,
             "state": "running",
             "region": "us-east-1",
-            "public_ip": f"54.23.45.{67+i}",
+            "public_ip": f"54.23.45.{67 + i}",
             "key_file": "/home/user/.campers/keys/id_rsa",
             "owner": get_test_user_identity(),
             "unique_id": str(uuid.uuid4())[:12],
@@ -250,8 +250,8 @@ def step_run_exec_command_with_region(
         logger.error(f"Exec command failed: {e}")
 
 
-@when('I run campers exec {camp_or_id_quoted} with command {command_quoted}')
-@when('I run campers exec {camp_or_id_quoted} {flags} with command {command_quoted}')
+@when("I run campers exec {camp_or_id_quoted} with command {command_quoted}")
+@when("I run campers exec {camp_or_id_quoted} {flags} with command {command_quoted}")
 def step_run_exec_command(
     context: Context, camp_or_id_quoted: str, command_quoted: str, flags: str = None
 ) -> None:
@@ -288,9 +288,9 @@ def step_run_exec_command(
 @then("the command should execute successfully")
 def step_command_executes_successfully(context: Context) -> None:
     """Verify the exec command executed successfully."""
-    assert (
-        context.exit_code == 0
-    ), f"Expected exit code 0, got {context.exit_code}. stderr: {context.stderr}"
+    assert context.exit_code == 0, (
+        f"Expected exit code 0, got {context.exit_code}. stderr: {context.stderr}"
+    )
 
 
 @then("the command should fail")
@@ -302,9 +302,9 @@ def step_command_fails(context: Context) -> None:
 @then("the exit code should be {exit_code:d}")
 def step_exit_code_is_exact(context: Context, exit_code: int) -> None:
     """Verify the exit code matches expected value."""
-    assert (
-        context.exit_code == exit_code
-    ), f"Expected exit code {exit_code}, got {context.exit_code}"
+    assert context.exit_code == exit_code, (
+        f"Expected exit code {exit_code}, got {context.exit_code}"
+    )
 
 
 @then("exec output contains {expected_text_quoted}")
@@ -313,9 +313,7 @@ def step_output_contains(context: Context, expected_text_quoted: str) -> None:
     expected_text = expected_text_quoted.strip('"')
     output = context.stdout + context.stderr
 
-    assert (
-        expected_text in output
-    ), f"Expected '{expected_text}' in output, got: {output}"
+    assert expected_text in output, f"Expected '{expected_text}' in output, got: {output}"
 
 
 @then("exec error message includes {expected_msg_quoted}")
@@ -324,9 +322,7 @@ def step_error_includes(context: Context, expected_msg_quoted: str) -> None:
     expected_msg = expected_msg_quoted.strip('"')
     error_output = context.stderr + getattr(context, "command_error", "")
 
-    assert (
-        expected_msg in error_output
-    ), f"Expected '{expected_msg}' in error, got: {error_output}"
+    assert expected_msg in error_output, f"Expected '{expected_msg}' in error, got: {error_output}"
 
 
 @then("error message indicates instance is not running")
@@ -334,9 +330,9 @@ def step_error_not_running(context: Context) -> None:
     """Verify error message indicates instance is not in running state."""
     error_output = context.stderr + getattr(context, "command_error", "")
 
-    assert (
-        "not running" in error_output or "stopped" in error_output
-    ), f"Expected 'not running' or 'stopped' in error, got: {error_output}"
+    assert "not running" in error_output or "stopped" in error_output, (
+        f"Expected 'not running' or 'stopped' in error, got: {error_output}"
+    )
 
 
 @then("the command should execute successfully on the {region} instance")
@@ -377,6 +373,4 @@ def step_warning_was_logged(context: Context, expected_msg_quoted: str) -> None:
 
     output = context.stdout + context.stderr
 
-    assert (
-        expected_msg in output
-    ), f"Expected warning '{expected_msg}' in output, got: {output}"
+    assert expected_msg in output, f"Expected warning '{expected_msg}' in output, got: {output}"

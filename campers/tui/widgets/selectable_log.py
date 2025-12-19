@@ -81,7 +81,7 @@ class SelectableLog(ScrollView, can_focus=True):
             self.lines.append(line)
 
         if len(self.lines) > self.max_lines:
-            self.lines = self.lines[-self.max_lines:]
+            self.lines = self.lines[-self.max_lines :]
             self.selection = None
 
         max_width = max((len(line.plain) for line in self.lines), default=0)
@@ -151,6 +151,17 @@ class SelectableLog(ScrollView, can_focus=True):
         event
             Mouse event from Textual
         """
+        if event.button == 3:
+            from campers.tui.widgets.context_menu import ContextMenu
+
+            menu = self.app.query_one(ContextMenu)
+            disabled = []
+            if not self.get_selected_text():
+                disabled.append("Copy")
+            menu.show_at(event.screen_x, event.screen_y, self, disabled_items=disabled)
+            event.stop()
+            return
+
         if event.button != 1:
             return
         self.capture_mouse()
@@ -269,4 +280,14 @@ class SelectableLog(ScrollView, can_focus=True):
         last_line = len(self.lines) - 1
         last_col = len(self.lines[last_line].plain)
         self.selection = Selection(start=(0, 0), end=(last_line, last_col))
+        self.refresh()
+
+    def clear(self) -> None:
+        """Clear all lines from the log widget.
+
+        Removes all content, resets selection, updates virtual size, and refreshes display.
+        """
+        self.lines = []
+        self.selection = None
+        self.virtual_size = Size(0, 0)
         self.refresh()
