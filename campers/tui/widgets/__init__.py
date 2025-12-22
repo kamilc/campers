@@ -1,6 +1,7 @@
 """TUI widgets module for campers."""
 
 from campers.tui.widgets.context_menu import ContextMenu
+from campers.tui.widgets.labeled_value import LabeledValue
 from campers.tui.widgets.search_input import SearchInput
 from campers.tui.widgets.selectable_log import SelectableLog
 from campers.tui.widgets.selection import Selection
@@ -21,4 +22,4 @@ class WidgetID:
     PUBLIC_PORTS = "public-ports-widget"
 
 
-__all__ = ["ContextMenu", "SearchInput", "SelectableLog", "Selection", "WidgetID"]
+__all__ = ["ContextMenu", "LabeledValue", "SearchInput", "SelectableLog", "Selection", "WidgetID"]

@@ -1,6 +1,6 @@
 """Unit tests for CampersTUI."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
@@ -30,13 +30,15 @@ def test_update_mutagen_status_with_status_text_idle(tui_app):
     tui_app : CampersTUI
         TUI app instance
     """
-    mock_widget = Mock()
+    from campers.tui.widgets.labeled_value import LabeledValue
+
+    mock_widget = Mock(spec=LabeledValue)
     tui_app.query_one = Mock(return_value=mock_widget)
 
     tui_app.update_mutagen_status({"status_text": "idle"})
 
-    tui_app.query_one.assert_called_once_with("#mutagen-widget")
-    mock_widget.update.assert_called_once_with("File sync: idle")
+    tui_app.query_one.assert_called_once_with("#mutagen-widget", LabeledValue)
+    assert mock_widget.value == "idle"
 
 
 def test_update_mutagen_status_with_status_text_message(tui_app):
@@ -47,13 +49,15 @@ def test_update_mutagen_status_with_status_text_message(tui_app):
     tui_app : CampersTUI
         TUI app instance
     """
-    mock_widget = Mock()
+    from campers.tui.widgets.labeled_value import LabeledValue
+
+    mock_widget = Mock(spec=LabeledValue)
     tui_app.query_one = Mock(return_value=mock_widget)
 
     status_msg = "Syncing: 42 files"
     tui_app.update_mutagen_status({"status_text": status_msg})
 
-    mock_widget.update.assert_called_once_with(f"File sync: {status_msg}")
+    assert mock_widget.value == status_msg
 
 
 def test_update_mutagen_status_legacy_not_configured(tui_app):
@@ -64,12 +68,14 @@ def test_update_mutagen_status_legacy_not_configured(tui_app):
     tui_app : CampersTUI
         TUI app instance
     """
-    mock_widget = Mock()
+    from campers.tui.widgets.labeled_value import LabeledValue
+
+    mock_widget = Mock(spec=LabeledValue)
     tui_app.query_one = Mock(return_value=mock_widget)
 
     tui_app.update_mutagen_status({"state": "not_configured"})
 
-    mock_widget.update.assert_called_once_with("File sync: Not syncing")
+    assert mock_widget.value == "Not syncing"
 
 
 def test_update_mutagen_status_legacy_with_files_synced(tui_app):
@@ -80,12 +86,14 @@ def test_update_mutagen_status_legacy_with_files_synced(tui_app):
     tui_app : CampersTUI
         TUI app instance
     """
-    mock_widget = Mock()
+    from campers.tui.widgets.labeled_value import LabeledValue
+
+    mock_widget = Mock(spec=LabeledValue)
     tui_app.query_one = Mock(return_value=mock_widget)
 
     tui_app.update_mutagen_status({"state": "synced", "files_synced": 42})
 
-    mock_widget.update.assert_called_once_with("File sync: synced (42 files)")
+    assert mock_widget.value == "synced (42 files)"
 
 
 def test_update_mutagen_status_legacy_without_files_synced(tui_app):
@@ -96,12 +104,14 @@ def test_update_mutagen_status_legacy_without_files_synced(tui_app):
     tui_app : CampersTUI
         TUI app instance
     """
-    mock_widget = Mock()
+    from campers.tui.widgets.labeled_value import LabeledValue
+
+    mock_widget = Mock(spec=LabeledValue)
     tui_app.query_one = Mock(return_value=mock_widget)
 
     tui_app.update_mutagen_status({"state": "syncing"})
 
-    mock_widget.update.assert_called_once_with("File sync: syncing")
+    assert mock_widget.value == "syncing"
 
 
 def test_update_mutagen_status_legacy_unknown_state(tui_app):
@@ -112,12 +122,14 @@ def test_update_mutagen_status_legacy_unknown_state(tui_app):
     tui_app : CampersTUI
         TUI app instance
     """
-    mock_widget = Mock()
+    from campers.tui.widgets.labeled_value import LabeledValue
+
+    mock_widget = Mock(spec=LabeledValue)
     tui_app.query_one = Mock(return_value=mock_widget)
 
     tui_app.update_mutagen_status({})
 
-    mock_widget.update.assert_called_once_with("File sync: unknown")
+    assert mock_widget.value == "unknown"
 
 
 def test_update_mutagen_status_widget_not_found(tui_app):
@@ -136,14 +148,17 @@ def test_update_mutagen_status_widget_not_found(tui_app):
 
 
 def test_update_mutagen_status_attribute_error(tui_app):
-    """Test error handling when widget has no update method.
+    """Test error handling when setting value raises AttributeError.
 
     Parameters
     ----------
     tui_app : CampersTUI
         TUI app instance
     """
-    mock_widget = Mock(spec=[])
+    from campers.tui.widgets.labeled_value import LabeledValue
+
+    mock_widget = Mock(spec=LabeledValue)
+    type(mock_widget).value = PropertyMock(side_effect=AttributeError("value property error"))
     tui_app.query_one = Mock(return_value=mock_widget)
 
     with patch("campers.tui.app.logging") as mock_logging:
@@ -161,6 +176,7 @@ def tui_app_for_public_ports():
         Mock CampersTUI instance for testing
     """
     from campers.tui.app import CampersTUI
+    from campers.tui.widgets.labeled_value import LabeledValue
 
     app = Mock(spec=CampersTUI)
     app.update_from_config = CampersTUI.update_from_config.__get__(app)
@@ -234,7 +250,7 @@ def test_public_ports_widget_not_shown_without_public_ip(tui_app_for_public_port
     public_ports_widget = Mock()
     other_widget = Mock()
 
-    def query_one_side_effect(selector):
+    def query_one_side_effect(selector, *args):
         if "public-ports" in selector:
             return public_ports_widget
         return other_widget
@@ -280,7 +296,7 @@ def test_public_ports_widget_shown_on_instance_details_with_public_ip(
     public_ports_widget = Mock()
     other_widget = Mock()
 
-    def query_one_side_effect(selector):
+    def query_one_side_effect(selector, *args):
         if "public-ports" in selector:
             return public_ports_widget
         return other_widget

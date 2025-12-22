@@ -32,6 +32,7 @@ from campers.tui.instance_overview_widget import InstanceOverviewWidget
 from campers.tui.styling import TUI_CSS
 from campers.tui.terminal import detect_terminal_background
 from campers.tui.widgets.context_menu import ContextMenu
+from campers.tui.widgets.labeled_value import LabeledValue
 from campers.tui.widgets.search_input import SearchClosed, SearchInput, SearchQueryChanged
 from campers.tui.widgets.selectable_log import SelectableLog
 
@@ -124,15 +125,15 @@ class CampersTUI(App):
         """
         with Container(id="status-panel"):
             yield InstanceOverviewWidget(self.campers)
-            yield Static("SSH: loading...", id=widgets.WidgetID.SSH)
-            yield Static("Status: launching...", id=widgets.WidgetID.STATUS)
-            yield Static("Uptime: 0s", id=widgets.WidgetID.UPTIME)
-            yield Static("Instance Type: loading...", id=widgets.WidgetID.INSTANCE_TYPE)
-            yield Static("Region: loading...", id=widgets.WidgetID.REGION)
-            yield Static("Camp Name: loading...", id=widgets.WidgetID.CAMP_NAME)
-            yield Static("Command: loading...", id=widgets.WidgetID.COMMAND)
-            yield Static("File sync: Not syncing", id=widgets.WidgetID.MUTAGEN)
-            yield Static("Port forwarding: none", id=widgets.WidgetID.PORTFORWARD)
+            yield LabeledValue("SSH", "loading...", id=widgets.WidgetID.SSH)
+            yield LabeledValue("Status", "launching...", id=widgets.WidgetID.STATUS)
+            yield LabeledValue("Uptime", "0s", id=widgets.WidgetID.UPTIME)
+            yield LabeledValue("Instance Type", "loading...", id=widgets.WidgetID.INSTANCE_TYPE)
+            yield LabeledValue("Region", "loading...", id=widgets.WidgetID.REGION)
+            yield LabeledValue("Camp Name", "loading...", id=widgets.WidgetID.CAMP_NAME)
+            yield LabeledValue("Command", "loading...", id=widgets.WidgetID.COMMAND)
+            yield LabeledValue("File sync", "Not syncing", id=widgets.WidgetID.MUTAGEN)
+            yield LabeledValue("Port forwarding", "none", id=widgets.WidgetID.PORTFORWARD)
             yield Static("", id=widgets.WidgetID.PUBLIC_PORTS, classes="hidden")
         with Container(id="log-panel"):
             yield SelectableLog()
@@ -294,7 +295,7 @@ class CampersTUI(App):
             uptime_str = f"{seconds}s"
 
         try:
-            self.query_one(f"#{widgets.WidgetID.UPTIME}").update(f"Uptime: {uptime_str}")
+            self.query_one(f"#{widgets.WidgetID.UPTIME}", LabeledValue).value = uptime_str
         except (ValueError, AttributeError) as e:
             logging.error("Failed to update uptime widget: %s", e)
 
@@ -310,7 +311,7 @@ class CampersTUI(App):
             status = payload["status"]
 
             try:
-                self.query_one(f"#{widgets.WidgetID.STATUS}").update(f"Status: {status}")
+                self.query_one(f"#{widgets.WidgetID.STATUS}", LabeledValue).value = status
             except (ValueError, AttributeError) as e:
                 logging.error("Failed to update status widget: %s", e)
 
@@ -325,23 +326,20 @@ class CampersTUI(App):
         status_text = payload.get("status_text")
 
         if status_text is not None:
-            if status_text == "idle":
-                display_text = "File sync: idle"
-            else:
-                display_text = f"File sync: {status_text}"
+            value = status_text
         else:
             state = payload.get("state", "unknown")
             files_synced = payload.get("files_synced")
 
             if state == "not_configured":
-                display_text = "File sync: Not syncing"
+                value = "Not syncing"
             elif files_synced is not None:
-                display_text = f"File sync: {state} ({files_synced} files)"
+                value = f"{state} ({files_synced} files)"
             else:
-                display_text = f"File sync: {state}"
+                value = state
 
         try:
-            self.query_one(f"#{widgets.WidgetID.MUTAGEN}").update(display_text)
+            self.query_one(f"#{widgets.WidgetID.MUTAGEN}", LabeledValue).value = value
         except (ValueError, AttributeError) as e:
             logging.error("Failed to update mutagen widget: %s", e)
 
@@ -396,29 +394,39 @@ class CampersTUI(App):
 
         if "instance_type" in config:
             try:
-                self.query_one(f"#{widgets.WidgetID.INSTANCE_TYPE}").update(
-                    f"Instance Type: {config['instance_type']}"
+                widget = self.query_one(
+                    f"#{widgets.WidgetID.INSTANCE_TYPE}", LabeledValue
                 )
+                widget.value = config['instance_type']
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update instance type widget: %s", e)
 
         if "region" in config:
             try:
-                self.query_one(f"#{widgets.WidgetID.REGION}").update(f"Region: {config['region']}")
+                widget = self.query_one(
+                    f"#{widgets.WidgetID.REGION}", LabeledValue
+                )
+                widget.value = config['region']
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update region widget: %s", e)
 
         camp_name = config.get("camp_name", "ad-hoc")
 
         try:
-            self.query_one(f"#{widgets.WidgetID.CAMP_NAME}").update(f"Camp Name: {camp_name}")
+            widget = self.query_one(
+                f"#{widgets.WidgetID.CAMP_NAME}", LabeledValue
+            )
+            widget.value = camp_name
         except (ValueError, AttributeError, RuntimeError) as e:
             logging.error("Failed to update camp name widget: %s", e)
 
         if "command" in config:
             try:
                 cmd = config["command"]
-                self.query_one(f"#{widgets.WidgetID.COMMAND}").update(f"Command: {cmd}")
+                widget = self.query_one(
+                    f"#{widgets.WidgetID.COMMAND}", LabeledValue
+                )
+                widget.value = cmd
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update command widget: %s", e)
 
@@ -451,7 +459,7 @@ class CampersTUI(App):
         """
         if "state" in details:
             try:
-                self.query_one(f"#{widgets.WidgetID.STATUS}").update(f"Status: {details['state']}")
+                self.query_one(f"#{widgets.WidgetID.STATUS}", LabeledValue).value = details['state']
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update status widget: %s", e)
 
@@ -467,7 +475,7 @@ class CampersTUI(App):
                 ssh_username = details.get("ssh_username", DEFAULT_SSH_USERNAME)
                 key_file = details.get("key_file", "key.pem")
                 ssh_string = f"ssh -o IdentitiesOnly=yes -i {key_file} {ssh_username}@{public_ip}"
-                self.query_one(f"#{widgets.WidgetID.SSH}").update(f"SSH: {ssh_string}")
+                self.query_one(f"#{widgets.WidgetID.SSH}", LabeledValue).value = ssh_string
             except (ValueError, AttributeError, RuntimeError) as e:
                 logging.error("Failed to update SSH widget: %s", e)
 
@@ -710,7 +718,7 @@ class CampersTUI(App):
             self._selected_exit_action = action
 
             try:
-                self.query_one(f"#{widgets.WidgetID.STATUS}").update("Status: shutting down")
+                self.query_one(f"#{widgets.WidgetID.STATUS}", LabeledValue).value = "shutting down"
             except (ValueError, AttributeError, RuntimeError) as e:
                 logger.debug("Failed to update status widget during quit: %s", e)
 

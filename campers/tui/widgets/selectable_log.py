@@ -79,7 +79,7 @@ class SelectableLog(ScrollView, can_focus=True):
         ("shift+f3", "previous_match", "Previous Match"),
     ]
 
-    SELECTION_STYLE: ClassVar = Style(bgcolor="blue", color="white")
+    SELECTION_STYLE: ClassVar = Style(bgcolor="#3465a4", color="white")
     MATCH_STYLE: ClassVar = Style(bgcolor="yellow", color="black")
     CURRENT_MATCH_STYLE: ClassVar = Style(bgcolor="#ff8c00", color="black", bold=True)
 
