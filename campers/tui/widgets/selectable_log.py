@@ -171,8 +171,26 @@ class SelectableLog(ScrollView, can_focus=True):
                 end_col = end[1] if line_index == end[0] else len(line.plain)
                 line.stylize(self.SELECTION_STYLE, start_col, end_col)
 
-        bg_style = Style(bgcolor="#1e1e1e")
-        return Strip([Segment(line.plain, bg_style)])
+        segments = list(line.render(self.app.console))
+        bg_color = "#1e1e1e"
+        cleaned_segments = []
+
+        for seg in segments:
+            if seg.style:
+                new_style = Style(
+                    color=seg.style.color,
+                    bgcolor=seg.style.bgcolor or bg_color,
+                    bold=seg.style.bold,
+                    dim=seg.style.dim,
+                    italic=seg.style.italic,
+                    underline=seg.style.underline,
+                    strike=seg.style.strike,
+                )
+            else:
+                new_style = Style(bgcolor=bg_color)
+            cleaned_segments.append(Segment(seg.text, new_style, seg.control))
+
+        return Strip(cleaned_segments)
 
     def _screen_to_content(self, offset: Offset) -> tuple[int, int]:
         """Convert screen coordinates to content coordinates.
