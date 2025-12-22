@@ -137,7 +137,7 @@ class CampersTUI(App):
         with Container(id="log-panel"):
             yield SelectableLog()
             yield SearchInput()
-        yield ContextMenu()
+        yield ContextMenu(items=["Copy"])
 
     def on_mount(self) -> None:
         """Handle mount event - setup logging, start worker, and timer."""
