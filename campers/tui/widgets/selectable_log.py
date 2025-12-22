@@ -70,7 +70,6 @@ class SelectableLog(ScrollView, can_focus=True):
     """
 
     BINDINGS: ClassVar = [
-        ("ctrl+c", "copy", "Copy"),
         ("ctrl+a", "select_all", "Select All"),
         ("slash", "open_search", "Search"),
         ("ctrl+f", "open_search", "Search"),
@@ -221,7 +220,7 @@ class SelectableLog(ScrollView, can_focus=True):
         event
             Mouse event from Textual
         """
-        if event.button == 3:
+        if event.button == 2:
             from campers.tui.widgets.context_menu import ContextMenu
 
             menu = self.app.query_one(ContextMenu)
@@ -322,22 +321,6 @@ class SelectableLog(ScrollView, can_focus=True):
             except Exception:
                 self.app.notify("Clipboard unavailable", severity="warning")
 
-    def on_key(self, event) -> None:
-        """Handle key press events.
-
-        Intercepts Ctrl+C when text is selected to prevent event bubbling.
-        Allows Ctrl+C to bubble when no text is selected (for quit handler).
-
-        Parameters
-        ----------
-        event
-            Key event from Textual
-        """
-        if event.key == "ctrl+c" and not self.get_selected_text():
-            return
-        if event.key == "ctrl+c":
-            self.action_copy()
-            event.stop()
 
     def action_select_all(self) -> None:
         """Select all text in the log.

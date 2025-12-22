@@ -1,6 +1,9 @@
 """CSS styling for TUI application."""
 
 TUI_CSS = """
+Screen {
+    layers: base overlay;
+}
 #status-panel {
     height: auto;
     background: #383838;
