@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import ClassVar
 
+from rich.segment import Segment
 from rich.style import Style
 from rich.text import Text
 from textual.geometry import Offset, Region, Size, Spacing
@@ -170,7 +171,8 @@ class SelectableLog(ScrollView, can_focus=True):
                 end_col = end[1] if line_index == end[0] else len(line.plain)
                 line.stylize(self.SELECTION_STYLE, start_col, end_col)
 
-        return Strip(line.render(self.app.console))
+        bg_style = Style(bgcolor="#1e1e1e")
+        return Strip([Segment(line.plain, bg_style)])
 
     def _screen_to_content(self, offset: Offset) -> tuple[int, int]:
         """Convert screen coordinates to content coordinates.

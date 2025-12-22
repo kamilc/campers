@@ -23,6 +23,9 @@ RichLog {
     scrollbar-background-active: #383838;
     scrollbar-color-active: #606060;
 }
+SelectableLog {
+    background: #1e1e1e;
+}
 .hidden {
     display: none;
 }
