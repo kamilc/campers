@@ -82,10 +82,13 @@ class ContextMenu(Container):
         ----------
         action : str
             Name of the selected action (lowercase item name)
+        target_widget
+            Reference to the widget that triggered the context menu
         """
 
-        def __init__(self, action: str) -> None:
+        def __init__(self, action: str, target_widget) -> None:
             self.action = action
+            self.target_widget = target_widget
             super().__init__()
 
     def __init__(self, items: list[str] | None = None, **kwargs) -> None:
@@ -240,7 +243,8 @@ class ContextMenu(Container):
             return
 
         action = item_name.lower()
-        self.post_message(self.ItemSelected(action))
+        target = self._target_widget
+        self.post_message(self.ItemSelected(action, target))
         self.hide()
 
     @property

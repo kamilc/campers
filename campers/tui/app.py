@@ -191,8 +191,7 @@ class CampersTUI(App):
         message : ContextMenu.ItemSelected
             Message containing the selected action
         """
-        menu = self.query_one(ContextMenu)
-        target = menu._target_widget
+        target = message.target_widget
 
         if message.action == "copy" and hasattr(target, "action_copy"):
             target.action_copy()

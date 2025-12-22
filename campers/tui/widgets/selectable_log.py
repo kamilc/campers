@@ -306,6 +306,7 @@ class SelectableLog(ScrollView, can_focus=True):
         OSC 52 clipboard method if pyperclip fails.
         """
         text = self.get_selected_text()
+
         if not text:
             return
 
