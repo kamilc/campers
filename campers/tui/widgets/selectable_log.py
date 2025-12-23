@@ -70,6 +70,7 @@ class SelectableLog(ScrollView, can_focus=True):
     """
 
     BINDINGS: ClassVar = [
+        ("cmd+c", "copy", "Copy"),
         ("ctrl+a", "select_all", "Select All"),
         ("slash", "open_search", "Search"),
         ("ctrl+f", "open_search", "Search"),

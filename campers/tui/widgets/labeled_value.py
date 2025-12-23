@@ -11,7 +11,7 @@ from textual.widgets import Static
 LABEL_WIDTH = 18
 
 
-class LabeledValue(Static):
+class LabeledValue(Static, can_focus=True):
     """A widget that displays a label and value with alignment, supporting value copy.
 
     The label is left-aligned with fixed width, and the value follows.
@@ -26,6 +26,10 @@ class LabeledValue(Static):
     **kwargs
         Additional keyword arguments passed to Static
     """
+
+    BINDINGS: ClassVar = [
+        ("cmd+c", "copy", "Copy"),
+    ]
 
     SELECTION_STYLE: ClassVar = Style(bgcolor="#3465a4", color="white")
 
