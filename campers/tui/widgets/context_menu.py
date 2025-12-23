@@ -227,6 +227,16 @@ class ContextMenu(Container):
                 self._activate_item(i)
                 return
 
+    def on_blur(self, event) -> None:
+        """Handle blur event to close menu when clicking outside.
+
+        Parameters
+        ----------
+        event
+            Blur event from Textual
+        """
+        self.hide()
+
     def _activate_item(self, index: int) -> None:
         """Activate a menu item by index.
 

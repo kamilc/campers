@@ -233,6 +233,15 @@ class SelectableLog(ScrollView, can_focus=True):
 
         if event.button != 1:
             return
+
+        from campers.tui.widgets.context_menu import ContextMenu
+
+        try:
+            menu = self.app.query_one(ContextMenu)
+            menu.hide()
+        except Exception:
+            pass
+
         self.capture_mouse()
         self._selecting = True
         pos = self._screen_to_content(event.offset)

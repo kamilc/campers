@@ -29,6 +29,15 @@ RichLog {
 SelectableLog {
     background: #1e1e1e;
 }
+LabeledValue {
+    background: transparent;
+}
+LabeledValue:hover {
+    background: transparent;
+}
+LabeledValue:focus {
+    background: transparent;
+}
 .hidden {
     display: none;
 }
