@@ -175,18 +175,20 @@ class LabeledValue(Static):
         self.release_mouse()
 
     def action_copy(self) -> None:
-        """Copy the value to clipboard (not the label)."""
-        if not self._value:
+        """Copy the selected text to clipboard."""
+        text = self.get_selected_text()
+
+        if not text:
             return
 
         try:
             import pyperclip
 
-            pyperclip.copy(self._value)
+            pyperclip.copy(text)
             self.app.notify("Copied to clipboard")
         except Exception:
             try:
-                self.app.copy_to_clipboard(self._value)
+                self.app.copy_to_clipboard(text)
                 self.app.notify("Copied to clipboard")
             except Exception:
                 self.app.notify("Clipboard unavailable", severity="warning")
