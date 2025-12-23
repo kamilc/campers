@@ -28,6 +28,7 @@ class LabeledValue(Static, can_focus=True):
     """
 
     BINDINGS: ClassVar = [
+        ("ctrl+c", "copy", "Copy"),
         ("cmd+c", "copy", "Copy"),
     ]
 
