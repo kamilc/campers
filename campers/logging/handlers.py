@@ -2,15 +2,31 @@
 
 import logging
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from textual.message import Message
-from textual.widgets import RichLog
 
 if TYPE_CHECKING:
     from campers.tui import CampersTUI
 
 logger = logging.getLogger(__name__)
+
+
+class LogWidget(Protocol):
+    """Protocol for log widget objects.
+
+    Defines the interface required for widgets to work with TuiLogHandler.
+    """
+
+    def write(self, content: str) -> None:
+        """Write content to the log widget.
+
+        Parameters
+        ----------
+        content : str
+            Content to write to the log
+        """
+        ...
 
 
 class TuiLogMessage(Message):
@@ -22,32 +38,32 @@ class TuiLogMessage(Message):
 
 
 class TuiLogHandler(logging.Handler):
-    """Logging handler that writes to a Textual RichLog widget.
+    """Logging handler that writes to a Textual log widget.
 
     Parameters
     ----------
     app : CampersTUI
         Textual app instance
-    log_widget : RichLog
-        RichLog widget to write to
+    log_widget : LogWidget
+        Log widget to write to (RichLog or SelectableLog)
 
     Attributes
     ----------
     app : CampersTUI
         Textual app instance
-    log_widget : RichLog
-        RichLog widget to write to
+    log_widget : LogWidget
+        Log widget to write to (RichLog or SelectableLog)
     """
 
-    def __init__(self, app: "CampersTUI", log_widget: RichLog) -> None:
+    def __init__(self, app: "CampersTUI", log_widget: LogWidget) -> None:
         """Initialize TuiLogHandler.
 
         Parameters
         ----------
         app : CampersTUI
             Textual app instance
-        log_widget : RichLog
-            RichLog widget to write to
+        log_widget : LogWidget
+            Log widget to write to (RichLog or SelectableLog)
         """
         super().__init__()
         self.app = app

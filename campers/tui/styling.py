@@ -1,6 +1,9 @@
 """CSS styling for TUI application."""
 
 TUI_CSS = """
+Screen {
+    layers: base overlay;
+}
 #status-panel {
     height: auto;
     background: #383838;
@@ -22,6 +25,18 @@ RichLog {
     scrollbar-color-hover: #707070;
     scrollbar-background-active: #383838;
     scrollbar-color-active: #606060;
+}
+SelectableLog {
+    background: #1e1e1e;
+}
+LabeledValue {
+    background: transparent;
+}
+LabeledValue:hover {
+    background: transparent;
+}
+LabeledValue:focus {
+    background: transparent;
 }
 .hidden {
     display: none;

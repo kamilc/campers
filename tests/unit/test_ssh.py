@@ -746,9 +746,7 @@ class TestInteractiveSession:
         mock_setcbreak.assert_called_once()
 
     @patch("campers.services.ssh.termios.tcsetattr")
-    def test_restore_terminal_restores_attributes(
-        self, mock_tcsetattr: MagicMock
-    ) -> None:
+    def test_restore_terminal_restores_attributes(self, mock_tcsetattr: MagicMock) -> None:
         """Test _restore_terminal restores original attributes."""
         mock_channel = MagicMock()
         session = InteractiveSession(mock_channel)
@@ -791,9 +789,7 @@ class TestInteractiveSession:
         mock_channel.resize_pty.assert_called_once_with(width=80, height=24)
 
     @patch("campers.services.ssh.signal.signal")
-    def test_restore_sigwinch_restores_handler(
-        self, mock_signal: MagicMock
-    ) -> None:
+    def test_restore_sigwinch_restores_handler(self, mock_signal: MagicMock) -> None:
         """Test _restore_sigwinch restores original SIGWINCH handler."""
         mock_channel = MagicMock()
         session = InteractiveSession(mock_channel)
@@ -814,9 +810,7 @@ class TestInteractiveSession:
             mock_signal.assert_not_called()
 
     @patch("campers.services.ssh.get_terminal_size")
-    def test_resize_pty_sends_size_to_channel(
-        self, mock_get_terminal_size: MagicMock
-    ) -> None:
+    def test_resize_pty_sends_size_to_channel(self, mock_get_terminal_size: MagicMock) -> None:
         """Test _resize_pty sends terminal size to channel."""
         mock_channel = MagicMock()
         session = InteractiveSession(mock_channel)
@@ -827,9 +821,7 @@ class TestInteractiveSession:
         mock_channel.resize_pty.assert_called_once_with(width=100, height=30)
 
     @patch("campers.services.ssh.get_terminal_size")
-    def test_resize_pty_handles_exception(
-        self, mock_get_terminal_size: MagicMock
-    ) -> None:
+    def test_resize_pty_handles_exception(self, mock_get_terminal_size: MagicMock) -> None:
         """Test _resize_pty handles exceptions silently."""
         mock_channel = MagicMock()
         session = InteractiveSession(mock_channel)

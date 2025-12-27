@@ -717,14 +717,15 @@ class TestUptimeCalculation:
         campers_tui : CampersTUI
             CampersTUI instance
         """
+        from campers.tui.widgets.labeled_value import LabeledValue
+
         future_time = datetime.now(UTC) + timedelta(hours=1)
         campers_tui.instance_start_time = future_time.replace(tzinfo=None)
 
         campers_tui.update_uptime()
 
-        queried_widget = campers_tui.query_one("#uptime-widget")
-        call_args = queried_widget.update.call_args
-        assert "0s" in str(call_args)
+        queried_widget = campers_tui.query_one("#uptime-widget", LabeledValue)
+        assert "0s" in queried_widget.value
 
     def test_update_uptime_formats_correctly_with_hours(self, campers_tui):
         """Verify uptime formats correctly as HH:MM:SS with 1+ hours.
@@ -734,14 +735,16 @@ class TestUptimeCalculation:
         campers_tui : CampersTUI
             CampersTUI instance
         """
+        from campers.tui.widgets.labeled_value import LabeledValue
+
         past_time = datetime.now(UTC) - timedelta(hours=3, minutes=45, seconds=30)
         campers_tui.instance_start_time = past_time.replace(tzinfo=None)
 
         campers_tui.update_uptime()
 
-        queried_widget = campers_tui.query_one("#uptime-widget")
-        call_args = queried_widget.update.call_args
-        assert "03:" in str(call_args) and "45:" in str(call_args)
+        queried_widget = campers_tui.query_one("#uptime-widget", LabeledValue)
+        value = queried_widget.value
+        assert "03:" in value and "45:" in value
 
     def test_update_uptime_handles_none_instance_start_time(self, campers_tui):
         """Verify update_uptime returns early when instance_start_time is None.

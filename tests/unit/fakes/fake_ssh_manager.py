@@ -87,7 +87,7 @@ class FakeSSHManager:
 
         logger.info("Fake SSH: executing command: %s", command)
 
-        exit_match = re.search(r'\bexit\s+(\d+)', command)
+        exit_match = re.search(r"\bexit\s+(\d+)", command)
         if exit_match:
             return int(exit_match.group(1))
         return 0
@@ -110,7 +110,7 @@ class FakeSSHManager:
 
         logger.info("Fake SSH: executing raw command: %s", command)
 
-        exit_match = re.search(r'\bexit\s+(\d+)', command)
+        exit_match = re.search(r"\bexit\s+(\d+)", command)
         if exit_match:
             return int(exit_match.group(1))
         return 0
@@ -246,7 +246,7 @@ class FakeSSHManager:
             if command.strip() == "tty":
                 logger.info("/dev/pts/1")
 
-            exit_match = re.search(r'\bexit\s+(\d+)', command)
+            exit_match = re.search(r"\bexit\s+(\d+)", command)
             if exit_match:
                 return int(exit_match.group(1))
         return 0
